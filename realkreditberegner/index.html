@@ -1,0 +1,1959 @@
+<!doctype html>
+<html lang="da">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Realkreditberegner</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/prop-types/prop-types.min.js"></script>
+    <script src="https://unpkg.com/recharts@2.15.0/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        background: #0c1117;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="text/babel">
+      const { useState, useMemo } = React;
+      const {
+        AreaChart,
+        Area,
+        XAxis,
+        YAxis,
+        CartesianGrid,
+        Tooltip,
+        ResponsiveContainer,
+        ReferenceLine,
+        ComposedChart,
+        Line,
+      } = Recharts;
+
+      const LOAN_TYPES = [
+        {
+          id: "fast",
+          label: "Fast rente",
+          rate: 4.0,
+          rateLabel: "4,0%",
+          color: "#c9a87c",
+        },
+        {
+          id: "f5",
+          label: "F5",
+          rate: 2.6,
+          rateLabel: "2,6%",
+          color: "#6db3e8",
+        },
+        {
+          id: "f3",
+          label: "F3",
+          rate: 2.4,
+          rateLabel: "2,4%",
+          color: "#a78bfa",
+        },
+        {
+          id: "kort",
+          label: "Kort Rente",
+          rate: 2.3,
+          rateLabel: "2,3%",
+          color: "#34d399",
+        },
+      ];
+
+      const BASE_BIDRAG = {
+        fast: { "0-40": 0.225, "40-60": 0.675, "60-80": 1.025 },
+        f5: { "0-40": 0.4, "40-60": 0.925, "60-80": 1.275 },
+        f3: { "0-40": 0.6, "40-60": 1.125, "60-80": 1.475 },
+        kort: { "0-40": 0.4, "40-60": 0.925, "60-80": 1.275 },
+      };
+      const AF_TILLAEG = {
+        fast: { "0-40": 0.0, "40-60": 0.05, "60-80": 0.65 },
+        f5: { "0-40": 0.02, "40-60": 0.075, "60-80": 0.65 },
+        f3: { "0-40": 0.02, "40-60": 0.075, "60-80": 0.65 },
+        kort: { "0-40": 0.02, "40-60": 0.075, "60-80": 0.65 },
+      };
+
+      const TAX = 0.337;
+      const LOAN_YEARS = 30;
+
+      const fmt = (n) =>
+        new Intl.NumberFormat("da-DK", { maximumFractionDigits: 0 }).format(n);
+      const fmtPct = (n) => n.toFixed(3).replace(".", ",") + "%";
+      const fmtPct2 = (n) => n.toFixed(2).replace(".", ",") + "%";
+      const fmtPct1 = (n) => n.toFixed(1).replace(".", ",") + "%";
+
+      function getBidrag(tid, band, af) {
+        return BASE_BIDRAG[tid][band] + (af ? AF_TILLAEG[tid][band] : 0);
+      }
+
+      function annuityYearly(principal, annualRate) {
+        if (annualRate === 0) return principal / LOAN_YEARS;
+        const r = annualRate / 100;
+        return principal * (r / (1 - Math.pow(1 + r, -LOAN_YEARS)));
+      }
+
+      function breakdown(tid, rate, band, af, amt) {
+        const bidragPct = getBidrag(tid, band, af);
+        const renteKrB = (rate / 100) * amt;
+        const bidragKrB = (bidragPct / 100) * amt;
+        let afdragKr = 0;
+        if (!af) {
+          afdragKr = annuityYearly(amt, rate) - renteKrB;
+        }
+        const renteKrN = renteKrB * (1 - TAX);
+        const bidragKrN = bidragKrB * (1 - TAX);
+        return {
+          bidragPct,
+          rentePct: rate,
+          afdragsfri: af,
+          renteKrB,
+          renteKrN,
+          bidragKrB,
+          bidragKrN,
+          afdragKr,
+          ydelseB: renteKrB + bidragKrB,
+          ydelseN: renteKrN + bidragKrN,
+          totalB: renteKrB + bidragKrB + afdragKr,
+          totalN: renteKrN + bidragKrN + afdragKr,
+        };
+      }
+
+      function fairComparison(tid, rate, loanAmt, investReturnPct, years) {
+        const propValue = loanAmt / 0.6;
+        const annuity = annuityYearly(loanAmt, rate);
+        const bidragPctAf = getBidrag(tid, "40-60", true);
+        const mRet = Math.pow(1 + investReturnPct / 100, 1 / 12) - 1;
+
+        let principalA = loanAmt;
+        let cumCostA = 0,
+          cumCostB = 0;
+        let portfolio = 0,
+          totalInvested = 0;
+
+        const pts = [
+          {
+            year: 0,
+            afkast: 0,
+            extraCost: 0,
+            nettoAfkast: 0,
+            invested: 0,
+            equityBuilt: 0,
+          },
+        ];
+
+        for (let y = 1; y <= years; y++) {
+          const ltvA = principalA / propValue;
+          let bandA;
+          if (ltvA > 0.6) bandA = "60-80";
+          else if (ltvA > 0.4) bandA = "40-60";
+          else bandA = "0-40";
+          const bidragPctA = getBidrag(tid, bandA, false);
+          const renteA = (rate / 100) * principalA;
+          const bidragA = (bidragPctA / 100) * principalA;
+          const afdragA = annuity - renteA;
+          principalA = Math.max(0, principalA - afdragA);
+          const costA = (renteA + bidragA) * (1 - TAX);
+          cumCostA += costA;
+
+          const renteB = (rate / 100) * loanAmt;
+          const bidragB = (bidragPctAf / 100) * loanAmt;
+          const costB = (renteB + bidragB) * (1 - TAX);
+          cumCostB += costB;
+
+          const cashA = costA + afdragA;
+          const cashB = costB;
+          const monthlyFreed = Math.max(0, (cashA - cashB) / 12);
+
+          for (let m = 0; m < 12; m++) {
+            portfolio += monthlyFreed;
+            totalInvested += monthlyFreed;
+            portfolio *= 1 + mRet;
+          }
+
+          const prevAfkast = pts[y - 1].afkast;
+          const currentAfkast = portfolio - totalInvested;
+          const taxableGain = Math.max(0, currentAfkast - prevAfkast);
+          const low = 61000;
+          let taxDue = 0;
+          if (taxableGain > 0) {
+            taxDue =
+              taxableGain <= low
+                ? taxableGain * 0.27
+                : low * 0.27 + (taxableGain - low) * 0.42;
+          }
+          portfolio -= taxDue;
+
+          const afkast = portfolio - totalInvested;
+          const extraCost = cumCostB - cumCostA;
+          const nettoAfkast = afkast - extraCost;
+
+          pts.push({
+            year: y,
+            afkast: Math.round(afkast),
+            extraCost: Math.round(extraCost),
+            nettoAfkast: Math.round(nettoAfkast),
+            invested: Math.round(totalInvested),
+            equityBuilt: Math.round(loanAmt - principalA),
+            portfolio: Math.round(portfolio),
+            freedYearly: Math.round(cashA - cashB),
+          });
+        }
+        return pts;
+      }
+
+      function buildChartData(amt) {
+        const pts = [];
+        for (let ltv = 80; ltv >= 10; ltv--) {
+          const p = { ltv };
+          LOAN_TYPES.forEach((t) => {
+            let band, af;
+            if (ltv > 60) {
+              band = "60-80";
+              af = false;
+            } else if (ltv > 40) {
+              band = "40-60";
+              af = true;
+            } else {
+              band = "0-40";
+              af = true;
+            }
+            const b = breakdown(t.id, t.rate, band, af, amt);
+            p[t.id + "_netto"] = Math.round(b.totalN);
+            p[t.id + "_brutto"] = Math.round(b.totalB);
+            p[t.id + "_yn"] = Math.round(b.ydelseN);
+            p[t.id + "_yb"] = Math.round(b.ydelseB);
+          });
+          pts.push(p);
+        }
+        return pts.reverse();
+      }
+
+      const MILESTONES = [
+        {
+          ltv: 80,
+          band: "60-80",
+          af: false,
+          tag: "Med afdrag",
+          tc: "#e07a5f",
+          desc: "Maks. belåning · Afdragsfrihed ikke muligt",
+        },
+        {
+          ltv: 60,
+          band: "40-60",
+          af: true,
+          tag: "Afdragsfri",
+          tc: "#6db3e8",
+          desc: "Afdragsfrihed muligt · Lavere bidrag",
+        },
+        {
+          ltv: 40,
+          band: "0-40",
+          af: true,
+          tag: "Lavest bidrag",
+          tc: "#34d399",
+          desc: "Laveste bidragsinterval",
+        },
+      ];
+
+      const CTip = ({ active, payload, label }) => {
+        if (!active || !payload?.length) return null;
+        return (
+          <div
+            style={{
+              background: "#141b24ee",
+              border: "1px solid #1e2a3a",
+              borderRadius: 10,
+              padding: "10px 14px",
+              fontSize: 12,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 6, color: "#8fa8c4" }}>
+              {label}% belåning
+            </div>
+            {payload.map((p) => {
+              const tid = p.dataKey.replace(/_.*/, "");
+              const t = LOAN_TYPES.find((x) => x.id === tid);
+              return (
+                <div
+                  key={p.dataKey}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 20,
+                    marginBottom: 2,
+                  }}
+                >
+                  <span style={{ color: t?.color }}>{t?.label}</span>
+                  <span className="mono" style={{ color: "#e8ecf1" }}>
+                    {fmt(p.value)} kr.
+                  </span>
+                </div>
+              );
+            })}
+            {label > 60 && (
+              <div style={{ fontSize: 10, color: "#e07a5f", marginTop: 4 }}>
+                Inkl. afdrag
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      const INV_LABELS = {
+        afkast: { label: "Afkast (efter inv.skat)", color: "#c9a87c" },
+        extraCost: { label: "Ekstra rente+bidrag", color: "#e07a5f" },
+        nettoAfkast: { label: "Netto afkast", color: "#34d399" },
+      };
+      const InvTip = ({ active, payload, label }) => {
+        if (!active || !payload?.length) return null;
+        return (
+          <div
+            style={{
+              background: "#141b24ee",
+              border: "1px solid #1e2a3a",
+              borderRadius: 10,
+              padding: "10px 14px",
+              fontSize: 12,
+              boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+            }}
+          >
+            <div style={{ fontWeight: 600, marginBottom: 6, color: "#8fa8c4" }}>
+              År {label}
+            </div>
+            {payload.map((p) => {
+              const info = INV_LABELS[p.dataKey] || {};
+              return (
+                <div
+                  key={p.dataKey}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 20,
+                    marginBottom: 2,
+                  }}
+                >
+                  <span style={{ color: info.color || p.color }}>
+                    {info.label || p.dataKey}
+                  </span>
+                  <span className="mono" style={{ color: "#e8ecf1" }}>
+                    {fmt(p.value)} kr.
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        );
+      };
+
+      function CostBar({ b, maxVal, showN }) {
+        const rente = showN ? b.renteKrN : b.renteKrB;
+        const bidrag = showN ? b.bidragKrN : b.bidragKrB;
+        const afdrag = b.afdragKr;
+        const sc = maxVal * 1.08;
+        return (
+          <div
+            style={{
+              display: "flex",
+              height: 20,
+              borderRadius: 5,
+              overflow: "hidden",
+              background: "#0a0f16",
+            }}
+          >
+            <div
+              style={{
+                width: `${(rente / sc) * 100}%`,
+                background: "#e07a5f",
+                transition: "width 0.4s",
+              }}
+            />
+            <div
+              style={{
+                width: `${(bidrag / sc) * 100}%`,
+                background: "#c75f45",
+                transition: "width 0.4s",
+              }}
+            />
+            {afdrag > 0 && (
+              <div
+                style={{
+                  width: `${(afdrag / sc) * 100}%`,
+                  background: "#475569",
+                  transition: "width 0.4s",
+                }}
+              />
+            )}
+          </div>
+        );
+      }
+
+      function App() {
+        const [loanAmount, setLoanAmount] = useState(3000000);
+        const [selectedType, setSelectedType] = useState(null);
+        const [showN, setShowN] = useState(false);
+        const [chartMode, setChartMode] = useState("total");
+        const [investReturn, setInvestReturn] = useState(7);
+        const [investYears, setInvestYears] = useState(15);
+
+        const chartData = useMemo(
+          () => buildChartData(loanAmount),
+          [loanAmount],
+        );
+        const active = selectedType
+          ? LOAN_TYPES.filter((t) => t.id === selectedType)
+          : LOAN_TYPES;
+
+        const maxBarVal = useMemo(
+          () =>
+            Math.max(
+              ...MILESTONES.map((ms) =>
+                Math.max(
+                  ...LOAN_TYPES.map((t) => {
+                    const b = breakdown(
+                      t.id,
+                      t.rate,
+                      ms.band,
+                      ms.af,
+                      loanAmount,
+                    );
+                    return showN ? b.totalN : b.totalB;
+                  }),
+                ),
+              ),
+            ),
+          [loanAmount, showN],
+        );
+
+        const cSuffix =
+          chartMode === "total"
+            ? showN
+              ? "_netto"
+              : "_brutto"
+            : showN
+              ? "_yn"
+              : "_yb";
+
+        const investData = useMemo(() => {
+          const res = {};
+          active.forEach((t) => {
+            res[t.id] = fairComparison(
+              t.id,
+              t.rate,
+              loanAmount,
+              investReturn,
+              investYears,
+            );
+          });
+          return res;
+        }, [
+          active.map((t) => t.id).join(),
+          loanAmount,
+          investReturn,
+          investYears,
+        ]);
+
+        const investChartType = active[0]?.id;
+        const investChartData = investData[investChartType] || [];
+
+        return (
+          <div
+            style={{
+              minHeight: "100vh",
+              background: "#0c1117",
+              color: "#e8ecf1",
+              fontFamily: "'DM Sans','Segoe UI',sans-serif",
+              padding: "20px 16px",
+            }}
+          >
+            <style>{`
+            @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,500;0,9..40,700;1,9..40,300&family=JetBrains+Mono:wght@400;600&display=swap');
+            *{box-sizing:border-box;margin:0;padding:0}
+            .mono{font-family:'JetBrains Mono',monospace}
+            .card{background:linear-gradient(135deg,#141b24,#1a2332);border:1px solid #1e2a3a;border-radius:16px;padding:20px;margin-bottom:14px}
+            .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:100px;font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;border:1.5px solid transparent;user-select:none}
+            .pill:hover{transform:translateY(-1px)}.pill.active{border-color:currentColor}
+            .sb{display:inline-flex;align-items:center;gap:3px;background:#0d2a1a;color:#34d399;border:1px solid #166534;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600}
+            .tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+            input[type="range"]{-webkit-appearance:none;width:100%;height:6px;border-radius:3px;outline:none}
+            input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;border:3px solid #0c1117;cursor:pointer}
+            .sl-blue{background:linear-gradient(90deg,#1e2a3a,#2d6a9f)}.sl-blue::-webkit-slider-thumb{background:#6db3e8;box-shadow:0 0 12px rgba(109,179,232,.4)}
+            .sl-amber{background:linear-gradient(90deg,#1e2a3a,#92400e)}.sl-amber::-webkit-slider-thumb{background:#c9a87c;box-shadow:0 0 12px rgba(201,168,124,.4)}
+            .glow{background:linear-gradient(135deg,#34d399,#6db3e8);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+            .glow-gold{background:linear-gradient(135deg,#c9a87c,#f0d68a);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+            .msc{background:#0e1520;border-radius:12px;padding:16px;border:1px solid #1e2a3a;position:relative;overflow:hidden}
+            .tb{padding:5px 12px;border-radius:6px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid #1e2a3a;transition:all .2s;background:transparent;color:#4a5e75}
+            .tb.on{background:#1e2a3a;color:#e8ecf1}
+            .row{display:grid;gap:6px;align-items:center;padding:4px 0;font-size:11px}
+            .sep{border-top:1px solid #1a2332;margin:4px 0}
+            .lbl{color:#4a5e75;font-size:10px;white-space:nowrap}
+          `}</style>
+
+            <div style={{ maxWidth: 640, margin: "0 auto" }}>
+              {/* Header */}
+              <div style={{ marginBottom: 18 }}>
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: "#4a90c4",
+                    letterSpacing: 2,
+                    textTransform: "uppercase",
+                    marginBottom: 6,
+                  }}
+                >
+                  Nordea Kredit · Helårsbolig · Feb 2026
+                </div>
+                <h1
+                  style={{
+                    fontSize: 20,
+                    fontWeight: 700,
+                    lineHeight: 1.25,
+                    marginBottom: 6,
+                  }}
+                >
+                  Belåningsmilepæle:{" "}
+                  <span className="glow">80% → 60% → 40%</span>
+                </h1>
+                <p style={{ fontSize: 12, color: "#6b7f99", lineHeight: 1.5 }}>
+                  Fra tvunget afdrag til afdragsfrihed — og hvad det reelt
+                  koster og giver at investere i stedet for at afdrage.
+                </p>
+              </div>
+
+              {/* 60/4 rule */}
+              <div
+                className="card"
+                style={{
+                  borderColor: "#2d4a6a",
+                  background: "linear-gradient(135deg,#0f1a28,#162030)",
+                }}
+              >
+                <div
+                  style={{ display: "flex", gap: 10, alignItems: "flex-start" }}
+                >
+                  <div style={{ fontSize: 20 }}>⚖️</div>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        marginBottom: 4,
+                        color: "#8fc9e8",
+                      }}
+                    >
+                      60/4-reglen
+                    </div>
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "#7a99b8",
+                        lineHeight: 1.7,
+                      }}
+                    >
+                      Hvis belåningsgraden er over{" "}
+                      <strong style={{ color: "#e8ecf1" }}>60%</strong>{" "}
+                      <em>og</em> den samlede gæld er mere end{" "}
+                      <strong style={{ color: "#e8ecf1" }}>
+                        4 gange husstandens bruttoindkomst
+                      </strong>
+                      , kan du ikke vælge et "risikabelt lån" (variabel rente
+                      uden renteloft eller afdragsfrihed).
+                    </p>
+                    <p
+                      style={{
+                        fontSize: 11,
+                        color: "#5a7a9a",
+                        lineHeight: 1.6,
+                        marginTop: 6,
+                      }}
+                    >
+                      Begge betingelser skal være opfyldt. Har du lav
+                      gældsfaktor ({"<"} 4× indkomst) kan du godt vælge flekslån
+                      over 60% — men afdragsfrihed kræver stadig belåning under
+                      60%.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Slider */}
+              <div className="card" style={{ padding: 16 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    marginBottom: 10,
+                  }}
+                >
+                  <span style={{ fontSize: 11, color: "#6b7f99" }}>
+                    Restgæld
+                  </span>
+                  <span
+                    className="mono"
+                    style={{ fontSize: 20, fontWeight: 600 }}
+                  >
+                    {fmt(loanAmount)} kr.
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  className="sl-blue"
+                  min={500000}
+                  max={6000000}
+                  step={100000}
+                  value={loanAmount}
+                  onChange={(e) => setLoanAmount(+e.target.value)}
+                />
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    marginTop: 4,
+                    fontSize: 10,
+                    color: "#3d5068",
+                  }}
+                >
+                  <span>500.000</span>
+                  <span>6.000.000</span>
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 6,
+                  marginBottom: 14,
+                  alignItems: "center",
+                }}
+              >
+                <div
+                  className={`pill ${!selectedType ? "active" : ""}`}
+                  style={{
+                    background: !selectedType ? "#1a2332" : "transparent",
+                    color: "#6b7f99",
+                  }}
+                  onClick={() => setSelectedType(null)}
+                >
+                  Alle
+                </div>
+                {LOAN_TYPES.map((t) => (
+                  <div
+                    key={t.id}
+                    className={`pill ${selectedType === t.id ? "active" : ""}`}
+                    style={{
+                      background:
+                        selectedType === t.id ? t.color + "22" : "transparent",
+                      color: t.color,
+                    }}
+                    onClick={() =>
+                      setSelectedType(selectedType === t.id ? null : t.id)
+                    }
+                  >
+                    <span
+                      style={{
+                        width: 7,
+                        height: 7,
+                        borderRadius: "50%",
+                        background: t.color,
+                      }}
+                    />
+                    {t.label}
+                  </div>
+                ))}
+                <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                  <button
+                    className={`tb ${showN ? "on" : ""}`}
+                    onClick={() => setShowN(true)}
+                  >
+                    Netto
+                  </button>
+                  <button
+                    className={`tb ${!showN ? "on" : ""}`}
+                    onClick={() => setShowN(false)}
+                  >
+                    Brutto
+                  </button>
+                </div>
+              </div>
+
+              {/* CHART */}
+              <div className="card">
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    marginBottom: 12,
+                    flexWrap: "wrap",
+                    gap: 8,
+                  }}
+                >
+                  <div>
+                    <h2
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: "#8fa8c4",
+                      }}
+                    >
+                      Samlet ud af lommen pr. år
+                    </h2>
+                    <p style={{ fontSize: 10, color: "#4a5e75", marginTop: 2 }}>
+                      {showN ? "Netto efter skat" : "Brutto"} · Belåning høj →
+                      lav
+                    </p>
+                  </div>
+                  <div style={{ display: "flex", gap: 4 }}>
+                    <button
+                      className={`tb ${chartMode === "total" ? "on" : ""}`}
+                      onClick={() => setChartMode("total")}
+                    >
+                      Inkl. afdrag
+                    </button>
+                    <button
+                      className={`tb ${chartMode === "ydelse" ? "on" : ""}`}
+                      onClick={() => setChartMode("ydelse")}
+                    >
+                      Kun rente+bidrag
+                    </button>
+                  </div>
+                </div>
+                <div style={{ width: "100%", height: 260 }}>
+                  <ResponsiveContainer>
+                    <AreaChart
+                      data={chartData}
+                      margin={{ top: 10, right: 8, left: -10, bottom: 0 }}
+                    >
+                      <defs>
+                        {LOAN_TYPES.map((t) => (
+                          <linearGradient
+                            key={t.id}
+                            id={`g-${t.id}`}
+                            x1="0"
+                            y1="0"
+                            x2="0"
+                            y2="1"
+                          >
+                            <stop
+                              offset="0%"
+                              stopColor={t.color}
+                              stopOpacity={0.25}
+                            />
+                            <stop
+                              offset="100%"
+                              stopColor={t.color}
+                              stopOpacity={0.02}
+                            />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#1a2332" />
+                      <XAxis
+                        dataKey="ltv"
+                        type="number"
+                        domain={[10, 80]}
+                        ticks={[10, 20, 30, 40, 50, 60, 70, 80]}
+                        tickFormatter={(v) => `${v}%`}
+                        tick={{ fill: "#4a5e75", fontSize: 10 }}
+                        axisLine={{ stroke: "#1e2a3a" }}
+                        reversed
+                      />
+                      <YAxis
+                        tickFormatter={(v) => `${Math.round(v / 1000)}k`}
+                        tick={{ fill: "#4a5e75", fontSize: 10 }}
+                        axisLine={{ stroke: "#1e2a3a" }}
+                        width={45}
+                      />
+                      <Tooltip content={<CTip />} />
+                      <ReferenceLine
+                        x={80}
+                        stroke="#e07a5f"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                      />
+                      <ReferenceLine
+                        x={60}
+                        stroke="#6db3e8"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                      />
+                      <ReferenceLine
+                        x={40}
+                        stroke="#34d399"
+                        strokeDasharray="4 4"
+                        strokeWidth={1.5}
+                      />
+                      {active.map((t) => (
+                        <Area
+                          key={t.id}
+                          type="stepAfter"
+                          dataKey={t.id + cSuffix}
+                          stroke={t.color}
+                          fill={`url(#g-${t.id})`}
+                          strokeWidth={2.5}
+                          dot={false}
+                          activeDot={{
+                            r: 4,
+                            stroke: t.color,
+                            fill: "#0c1117",
+                            strokeWidth: 2,
+                          }}
+                        />
+                      ))}
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginTop: 6,
+                    justifyContent: "center",
+                  }}
+                >
+                  {active.map((t) => (
+                    <span
+                      key={t.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                        fontSize: 11,
+                        color: t.color,
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 14,
+                          height: 3,
+                          borderRadius: 2,
+                          background: t.color,
+                        }}
+                      />
+                      {t.label} ({t.rateLabel})
+                    </span>
+                  ))}
+                </div>
+                <div
+                  style={{
+                    display: "flex",
+                    marginTop: 12,
+                    fontSize: 10,
+                    borderRadius: 8,
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      flex: 2,
+                      background: "#e07a5f18",
+                      padding: "6px 8px",
+                      borderRight: "1px solid #1e2a3a",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ color: "#e07a5f", fontWeight: 600 }}>
+                      60–80%
+                    </div>
+                    <div style={{ color: "#6b7f99" }}>Tvunget afdrag</div>
+                  </div>
+                  <div
+                    style={{
+                      flex: 2,
+                      background: "#6db3e818",
+                      padding: "6px 8px",
+                      borderRight: "1px solid #1e2a3a",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ color: "#6db3e8", fontWeight: 600 }}>
+                      40–60%
+                    </div>
+                    <div style={{ color: "#6b7f99" }}>Afdragsfri mulig</div>
+                  </div>
+                  <div
+                    style={{
+                      flex: 3,
+                      background: "#34d39918",
+                      padding: "6px 8px",
+                      textAlign: "center",
+                    }}
+                  >
+                    <div style={{ color: "#34d399", fontWeight: 600 }}>
+                      Under 40%
+                    </div>
+                    <div style={{ color: "#6b7f99" }}>Laveste bidrag</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* MILESTONES */}
+              <div className="card">
+                <h2
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: "#8fa8c4",
+                    marginBottom: 14,
+                  }}
+                >
+                  Milepæle — rente, bidrag og afdrag
+                </h2>
+                {MILESTONES.map((ms, mi) => {
+                  const next = MILESTONES[mi + 1];
+                  const cols = active.length;
+                  const gc = `72px repeat(${cols}, 1fr)`;
+                  return (
+                    <div key={ms.ltv}>
+                      <div
+                        className="msc"
+                        style={{ borderColor: ms.tc + "33" }}
+                      >
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            height: 3,
+                            background: ms.tc,
+                          }}
+                        />
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 8,
+                            marginBottom: 6,
+                          }}
+                        >
+                          <span
+                            className="mono"
+                            style={{
+                              fontSize: 20,
+                              fontWeight: 700,
+                              color: ms.tc,
+                            }}
+                          >
+                            {ms.ltv}%
+                          </span>
+                          <span
+                            className="tag"
+                            style={{ background: ms.tc + "22", color: ms.tc }}
+                          >
+                            {ms.tag}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            color: "#6b7f99",
+                            marginBottom: 12,
+                          }}
+                        >
+                          {ms.desc}
+                        </div>
+                        <div
+                          className="row"
+                          style={{ gridTemplateColumns: gc }}
+                        >
+                          <div />
+                          {active.map((t) => (
+                            <div
+                              key={t.id}
+                              style={{
+                                textAlign: "center",
+                                color: t.color,
+                                fontWeight: 600,
+                                fontSize: 10,
+                              }}
+                            >
+                              {t.label}
+                            </div>
+                          ))}
+                        </div>
+                        <div
+                          className="row"
+                          style={{ gridTemplateColumns: gc }}
+                        >
+                          <div className="lbl">Rente</div>
+                          {active.map((t) => {
+                            const b = breakdown(
+                              t.id,
+                              t.rate,
+                              ms.band,
+                              ms.af,
+                              loanAmount,
+                            );
+                            return (
+                              <div
+                                key={t.id}
+                                className="mono"
+                                style={{
+                                  textAlign: "center",
+                                  fontSize: 11,
+                                  color: "#e07a5f",
+                                }}
+                              >
+                                {fmtPct2(b.rentePct)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div
+                          className="row"
+                          style={{ gridTemplateColumns: gc }}
+                        >
+                          <div className="lbl">Bidrag</div>
+                          {active.map((t) => {
+                            const b = breakdown(
+                              t.id,
+                              t.rate,
+                              ms.band,
+                              ms.af,
+                              loanAmount,
+                            );
+                            return (
+                              <div
+                                key={t.id}
+                                className="mono"
+                                style={{ textAlign: "center", fontSize: 11 }}
+                              >
+                                {fmtPct(b.bidragPct)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div
+                          className="row"
+                          style={{
+                            gridTemplateColumns: gc,
+                            borderTop: "1px solid #1a2332",
+                            paddingTop: 6,
+                          }}
+                        >
+                          <div className="lbl">Samlet sats</div>
+                          {active.map((t) => {
+                            const b = breakdown(
+                              t.id,
+                              t.rate,
+                              ms.band,
+                              ms.af,
+                              loanAmount,
+                            );
+                            return (
+                              <div
+                                key={t.id}
+                                className="mono"
+                                style={{
+                                  textAlign: "center",
+                                  fontSize: 11,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {fmtPct2(b.rentePct + b.bidragPct)}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="sep" />
+                        <div
+                          className="row"
+                          style={{ gridTemplateColumns: gc }}
+                        >
+                          <div className="lbl">Rente kr./år</div>
+                          {active.map((t) => {
+                            const b = breakdown(
+                              t.id,
+                              t.rate,
+                              ms.band,
+                              ms.af,
+                              loanAmount,
+                            );
+                            return (
+                              <div
+                                key={t.id}
+                                className="mono"
+                                style={{
+                                  textAlign: "center",
+                                  fontSize: 11,
+                                  color: "#e07a5f",
+                                }}
+                              >
+                                {fmt(
+                                  Math.round(showN ? b.renteKrN : b.renteKrB),
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div
+                          className="row"
+                          style={{ gridTemplateColumns: gc }}
+                        >
+                          <div className="lbl">Bidrag kr./år</div>
+                          {active.map((t) => {
+                            const b = breakdown(
+                              t.id,
+                              t.rate,
+                              ms.band,
+                              ms.af,
+                              loanAmount,
+                            );
+                            return (
+                              <div
+                                key={t.id}
+                                className="mono"
+                                style={{ textAlign: "center", fontSize: 11 }}
+                              >
+                                {fmt(
+                                  Math.round(showN ? b.bidragKrN : b.bidragKrB),
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {!ms.af && (
+                          <div
+                            className="row"
+                            style={{ gridTemplateColumns: gc }}
+                          >
+                            <div className="lbl">Afdrag kr./år</div>
+                            {active.map((t) => {
+                              const b = breakdown(
+                                t.id,
+                                t.rate,
+                                ms.band,
+                                ms.af,
+                                loanAmount,
+                              );
+                              return (
+                                <div
+                                  key={t.id}
+                                  className="mono"
+                                  style={{
+                                    textAlign: "center",
+                                    fontSize: 11,
+                                    color: "#94a3b8",
+                                  }}
+                                >
+                                  {fmt(Math.round(b.afdragKr))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div style={{ marginTop: 8 }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              gap: 10,
+                              marginBottom: 4,
+                              fontSize: 10,
+                            }}
+                          >
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 3,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 10,
+                                  height: 8,
+                                  borderRadius: 2,
+                                  background: "#e07a5f",
+                                  display: "inline-block",
+                                }}
+                              />
+                              Rente
+                            </span>
+                            <span
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 3,
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: 10,
+                                  height: 8,
+                                  borderRadius: 2,
+                                  background: "#c75f45",
+                                  display: "inline-block",
+                                }}
+                              />
+                              Bidrag
+                            </span>
+                            {!ms.af && (
+                              <span
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 3,
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    width: 10,
+                                    height: 8,
+                                    borderRadius: 2,
+                                    background: "#475569",
+                                    display: "inline-block",
+                                  }}
+                                />
+                                Afdrag
+                              </span>
+                            )}
+                          </div>
+                          {active.map((t) => (
+                            <div key={t.id} style={{ marginBottom: 4 }}>
+                              <CostBar
+                                b={breakdown(
+                                  t.id,
+                                  t.rate,
+                                  ms.band,
+                                  ms.af,
+                                  loanAmount,
+                                )}
+                                maxVal={maxBarVal}
+                                showN={showN}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="sep" />
+                        <div
+                          className="row"
+                          style={{ gridTemplateColumns: gc }}
+                        >
+                          <div
+                            className="lbl"
+                            style={{ color: "#8fa8c4", fontWeight: 500 }}
+                          >
+                            Ydelse/år
+                          </div>
+                          {active.map((t) => {
+                            const b = breakdown(
+                              t.id,
+                              t.rate,
+                              ms.band,
+                              ms.af,
+                              loanAmount,
+                            );
+                            return (
+                              <div
+                                key={t.id}
+                                className="mono"
+                                style={{
+                                  textAlign: "center",
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                }}
+                              >
+                                {fmt(Math.round(showN ? b.ydelseN : b.ydelseB))}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {!ms.af && (
+                          <div
+                            className="row"
+                            style={{ gridTemplateColumns: gc }}
+                          >
+                            <div
+                              className="lbl"
+                              style={{ color: "#8fa8c4", fontWeight: 500 }}
+                            >
+                              + Afdrag
+                            </div>
+                            {active.map((t) => {
+                              const b = breakdown(
+                                t.id,
+                                t.rate,
+                                ms.band,
+                                ms.af,
+                                loanAmount,
+                              );
+                              return (
+                                <div
+                                  key={t.id}
+                                  className="mono"
+                                  style={{
+                                    textAlign: "center",
+                                    fontSize: 12,
+                                    fontWeight: 600,
+                                    color: "#94a3b8",
+                                  }}
+                                >
+                                  {fmt(Math.round(b.afdragKr))}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div
+                          className="row"
+                          style={{
+                            gridTemplateColumns: gc,
+                            background: "#0a0f16",
+                            borderRadius: 8,
+                            padding: "8px 6px",
+                            marginTop: 6,
+                          }}
+                        >
+                          <div
+                            className="lbl"
+                            style={{ color: "#e8ecf1", fontWeight: 600 }}
+                          >
+                            Mdl. total
+                          </div>
+                          {active.map((t) => {
+                            const b = breakdown(
+                              t.id,
+                              t.rate,
+                              ms.band,
+                              ms.af,
+                              loanAmount,
+                            );
+                            return (
+                              <div
+                                key={t.id}
+                                className="mono"
+                                style={{
+                                  textAlign: "center",
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  color: ms.tc,
+                                }}
+                              >
+                                {fmt(
+                                  Math.round(
+                                    (showN ? b.totalN : b.totalB) / 12,
+                                  ),
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {!ms.af && (
+                          <div
+                            style={{
+                              fontSize: 10,
+                              color: "#3d5068",
+                              marginTop: 4,
+                            }}
+                          >
+                            Afdrag er opsparing i boligen — du får pengene igen
+                            ved salg/omlægning
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* INVESTMENT SECTION */}
+              <div
+                className="card"
+                style={{
+                  borderColor: "#92400e55",
+                  background: "linear-gradient(135deg,#1a1710,#1f1c14)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "flex-start",
+                    marginBottom: 14,
+                  }}
+                >
+                  <div style={{ fontSize: 22 }}>📈</div>
+                  <div>
+                    <h2
+                      style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}
+                    >
+                      <span className="glow-gold">
+                        Afdragsfri + investér vs. fortsæt afdrag
+                      </span>
+                    </h2>
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: "#9a8a6e",
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      Udgangspunkt: 60% LTV. Pengene er de samme i begge
+                      scenarier — enten som egenkapital i boligen (afdrag) eller
+                      som indskud i en portefølje (investering). Forskellen er
+                      udelukkende:
+                    </p>
+                    <div
+                      style={{
+                        marginTop: 8,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          fontSize: 12,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 3,
+                            background: "#c9a87c",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span style={{ color: "#c9a87c" }}>
+                          <strong>Afkast</strong>
+                        </span>
+                        <span style={{ color: "#7a6a4e" }}>
+                          — hvad investeringen kaster af sig (efter
+                          lagerbeskatning)
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          fontSize: 12,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 3,
+                            background: "#e07a5f",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span style={{ color: "#e07a5f" }}>
+                          <strong>Ekstra rente+bidrag</strong>
+                        </span>
+                        <span style={{ color: "#7a6a4e" }}>
+                          — prisen for at holde højere gæld
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          alignItems: "center",
+                          fontSize: 12,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 10,
+                            height: 10,
+                            borderRadius: 3,
+                            background: "#34d399",
+                            flexShrink: 0,
+                          }}
+                        />
+                        <span style={{ color: "#34d399" }}>
+                          <strong>Netto afkast</strong>
+                        </span>
+                        <span style={{ color: "#7a6a4e" }}>
+                          — afkast minus meromkostning = den reelle gevinst/tab
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sliders */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: 12,
+                    marginBottom: 16,
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <span style={{ fontSize: 11, color: "#9a8a6e" }}>
+                        Forventet afkast
+                      </span>
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#c9a87c",
+                        }}
+                      >
+                        {fmtPct1(investReturn)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      className="sl-amber"
+                      min={0}
+                      max={12}
+                      step={0.5}
+                      value={investReturn}
+                      onChange={(e) => setInvestReturn(+e.target.value)}
+                    />
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginTop: 3,
+                        fontSize: 9,
+                        color: "#3d4028",
+                      }}
+                    >
+                      <span>0%</span>
+                      <span>12%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginBottom: 6,
+                      }}
+                    >
+                      <span style={{ fontSize: 11, color: "#9a8a6e" }}>
+                        Tidshorisont
+                      </span>
+                      <span
+                        className="mono"
+                        style={{
+                          fontSize: 14,
+                          fontWeight: 600,
+                          color: "#c9a87c",
+                        }}
+                      >
+                        {investYears} år
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      className="sl-amber"
+                      min={5}
+                      max={30}
+                      step={1}
+                      value={investYears}
+                      onChange={(e) => setInvestYears(+e.target.value)}
+                    />
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        marginTop: 3,
+                        fontSize: 9,
+                        color: "#3d4028",
+                      }}
+                    >
+                      <span>5 år</span>
+                      <span>30 år</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Chart */}
+                {investChartType && (
+                  <>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: "#6b7f99",
+                        marginBottom: 8,
+                      }}
+                    >
+                      Viser:{" "}
+                      <strong style={{ color: active[0]?.color }}>
+                        {active[0]?.label}
+                      </strong>{" "}
+                      ({active[0]?.rateLabel}) · {fmt(loanAmount)} kr.
+                    </div>
+                    <div
+                      style={{ width: "100%", height: 260, marginBottom: 8 }}
+                    >
+                      <ResponsiveContainer>
+                        <ComposedChart
+                          data={investChartData}
+                          margin={{ top: 10, right: 8, left: -10, bottom: 0 }}
+                        >
+                          <defs>
+                            <linearGradient
+                              id="gAfk"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="#c9a87c"
+                                stopOpacity={0.3}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#c9a87c"
+                                stopOpacity={0.02}
+                              />
+                            </linearGradient>
+                            <linearGradient
+                              id="gNet"
+                              x1="0"
+                              y1="0"
+                              x2="0"
+                              y2="1"
+                            >
+                              <stop
+                                offset="0%"
+                                stopColor="#34d399"
+                                stopOpacity={0.25}
+                              />
+                              <stop
+                                offset="100%"
+                                stopColor="#34d399"
+                                stopOpacity={0.02}
+                              />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid
+                            strokeDasharray="3 3"
+                            stroke="#1a2332"
+                          />
+                          <XAxis
+                            dataKey="year"
+                            tick={{ fill: "#4a5e75", fontSize: 10 }}
+                            axisLine={{ stroke: "#1e2a3a" }}
+                            label={{
+                              value: "År",
+                              position: "insideBottomRight",
+                              offset: -5,
+                              fill: "#3d5068",
+                              fontSize: 10,
+                            }}
+                          />
+                          <YAxis
+                            tickFormatter={(v) =>
+                              v >= 1000000
+                                ? `${(v / 1000000).toFixed(1)}m`
+                                : v <= -100000
+                                  ? `-${Math.round(Math.abs(v) / 1000)}k`
+                                  : `${Math.round(v / 1000)}k`
+                            }
+                            tick={{ fill: "#4a5e75", fontSize: 10 }}
+                            axisLine={{ stroke: "#1e2a3a" }}
+                            width={48}
+                          />
+                          <Tooltip content={<InvTip />} />
+                          <ReferenceLine
+                            y={0}
+                            stroke="#3d5068"
+                            strokeWidth={1}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="afkast"
+                            stroke="#c9a87c"
+                            fill="url(#gAfk)"
+                            strokeWidth={2}
+                            dot={false}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="extraCost"
+                            stroke="#e07a5f"
+                            strokeWidth={2}
+                            strokeDasharray="6 3"
+                            dot={false}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="nettoAfkast"
+                            stroke="#34d399"
+                            fill="url(#gNet)"
+                            strokeWidth={2.5}
+                            dot={false}
+                            activeDot={{
+                              r: 4,
+                              stroke: "#34d399",
+                              fill: "#0c1117",
+                              strokeWidth: 2,
+                            }}
+                          />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 12,
+                        justifyContent: "center",
+                        fontSize: 11,
+                        marginBottom: 14,
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 14,
+                            height: 3,
+                            borderRadius: 2,
+                            background: "#c9a87c",
+                          }}
+                        />
+                        Afkast (efter inv.skat)
+                      </span>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 14,
+                            height: 3,
+                            borderRadius: 2,
+                            background: "#e07a5f",
+                            opacity: 0.7,
+                          }}
+                        />
+                        Ekstra rente+bidrag (kum.)
+                      </span>
+                      <span
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 4,
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 14,
+                            height: 3,
+                            borderRadius: 2,
+                            background: "#34d399",
+                          }}
+                        />
+                        Netto afkast
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                {/* Result cards */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${active.length}, 1fr)`,
+                    gap: 10,
+                  }}
+                >
+                  {active.map((t) => {
+                    const d = investData[t.id];
+                    if (!d) return null;
+                    const f = d[d.length - 1];
+                    const pos = f.nettoAfkast > 0;
+                    return (
+                      <div
+                        key={t.id}
+                        style={{
+                          background: "#0e1117",
+                          borderRadius: 12,
+                          padding: 14,
+                          border: `1px solid ${t.color}22`,
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 10,
+                            color: t.color,
+                            fontWeight: 600,
+                            marginBottom: 8,
+                            textAlign: "center",
+                          }}
+                        >
+                          {t.label} · {investYears} år
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontSize: 10,
+                            color: "#6b7f99",
+                            marginBottom: 2,
+                          }}
+                        >
+                          <span>Afkast</span>
+                          <span className="mono" style={{ color: "#c9a87c" }}>
+                            +{fmt(f.afkast)}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontSize: 10,
+                            color: "#6b7f99",
+                            marginBottom: 2,
+                          }}
+                        >
+                          <span>Ekstra rente+bidrag</span>
+                          <span className="mono" style={{ color: "#e07a5f" }}>
+                            −{fmt(f.extraCost)}
+                          </span>
+                        </div>
+                        <div className="sep" style={{ margin: "6px 0" }} />
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            fontSize: 12,
+                            fontWeight: 700,
+                          }}
+                        >
+                          <span style={{ color: pos ? "#34d399" : "#e07a5f" }}>
+                            Netto afkast
+                          </span>
+                          <span
+                            className="mono"
+                            style={{ color: pos ? "#34d399" : "#e07a5f" }}
+                          >
+                            {pos ? "+" : ""}
+                            {fmt(f.nettoAfkast)}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 9,
+                            color: pos ? "#3d4a28" : "#4a2828",
+                            marginTop: 6,
+                            lineHeight: 1.4,
+                            textAlign: "center",
+                          }}
+                        >
+                          {pos
+                            ? `Investering slår afdrag med ${fmt(f.nettoAfkast)} kr.`
+                            : `Afdrag vinder ved ${fmtPct1(investReturn)} over ${investYears} år`}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#3d3520",
+                    marginTop: 14,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  <strong style={{ color: "#6b5a3a" }}>
+                    Sådan læses grafen:
+                  </strong>{" "}
+                  Hovedstolen (indskud vs. egenkapital) holdes ude — den er ens
+                  i begge scenarier. "Afkast" er ren merværdi fra investering
+                  efter lagerbeskatning. "Ekstra rente+bidrag" er den
+                  akkumulerede meromkostning ved at holde konstant gæld i stedet
+                  for at afdrage. Når den grønne linje er over nul, tjener du på
+                  at investere.
+                </div>
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: "#2d2a1a",
+                    marginTop: 6,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Lagerbeskatning: 27% op til 61.000 kr., 42% derover. Ved
+                  afdrag krydser lånet evt. 40%-grænsen → lavere bidragssats.
+                  Inkluderet i beregningen.
+                </div>
+              </div>
+
+              <div
+                style={{
+                  fontSize: 10,
+                  color: "#3d5068",
+                  lineHeight: 1.6,
+                  padding: "0 4px",
+                }}
+              >
+                <p>
+                  <strong style={{ color: "#4a5e75" }}>Bidragssatser:</strong>{" "}
+                  Nordea Kredit, nye lån fra 23. feb. 2026, helårsbolig. Inkl.
+                  afdragsfrihedstillæg ved ≤60%.
+                </p>
+                <p>
+                  <strong style={{ color: "#4a5e75" }}>Renter:</strong> Fast
+                  rente ~4%, F5 ~2,6%, F3 ~2,4%, Kort Rente ~2,3% (marts 2026).
+                </p>
+                <p>
+                  <strong style={{ color: "#4a5e75" }}>60/4-reglen:</strong> Ved
+                  belåning {">"} 60% og gæld {">"} 4× bruttoindkomst kan man
+                  ikke vælge risikable lån (variabel rente uden renteloft,
+                  afdragsfrihed).
+                </p>
+                <p>
+                  <strong style={{ color: "#4a5e75" }}>Investering:</strong>{" "}
+                  Lagerbeskatning 27%/42%. Afdragsscenariet inkl. faldende
+                  rente+bidrag og evt. lavere bidragsinterval ved LTV {"<"} 40%.
+                </p>
+                <p>
+                  <strong style={{ color: "#4a5e75" }}>Skat:</strong> 33,7%
+                  fradragssats på rente+bidrag. Afdrag ikke fradragsberettiget.
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<App />);
+    </script>
+  </body>
+</html>
