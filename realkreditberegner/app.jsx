@@ -535,22 +535,33 @@ function MilestoneCard({ milestone, showNet, maxBarVal }) {
 
 function App() {
   const [loanAmount, setLoanAmount] = useState(3000000);
-  const [selectedType, setSelectedType] = useState(null);
+  const [selectedTypes, setSelectedTypes] = useState(() =>
+    LOAN_TYPES.map((loanType) => loanType.id),
+  );
   const [showNet, setShowNet] = useState(false);
   const [chartMode, setChartMode] = useState("total");
   const [investReturn, setInvestReturn] = useState(7);
   const [investYears, setInvestYears] = useState(15);
   const [taxHousehold, setTaxHousehold] = useState("single");
 
-  const activeLoanTypes = selectedType
-    ? LOAN_TYPES.filter((loanType) => loanType.id === selectedType)
-    : LOAN_TYPES;
+  const activeLoanTypes = LOAN_TYPES.filter((loanType) => selectedTypes.includes(loanType.id));
   const activeTypeKey = activeLoanTypes.map((loanType) => loanType.id).join(",");
   const taxHouseholdLabel =
     TAX_MODEL.households.find((household) => household.id === taxHousehold)?.label || "Enlig";
   const taxThreshold = TAX_MODEL.thresholds[taxHousehold] || TAX_MODEL.thresholds.single;
   const cycleTaxHousehold = () => {
     setTaxHousehold((current) => (current === "single" ? "couple" : "single"));
+  };
+  const toggleLoanType = (loanTypeId) => {
+    setSelectedTypes((current) => {
+      const isSelected = current.includes(loanTypeId);
+
+      if (isSelected) {
+        return current.filter((id) => id !== loanTypeId);
+      }
+
+      return [...current, loanTypeId];
+    });
   };
 
   const chartData = useMemo(
@@ -680,25 +691,17 @@ function App() {
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, alignItems: "center" }}>
-          <div
-            className={`pill ${!selectedType ? "active" : ""}`}
-            style={{
-              background: !selectedType ? "#1a2332" : "transparent",
-              color: "#6b7f99",
-            }}
-            onClick={() => setSelectedType(null)}
-          >
-            Alle
-          </div>
+          <span style={{ fontSize: 11, color: "#6b7f99", marginRight: 2 }}>Vælg lån:</span>
           {LOAN_TYPES.map((loanType) => (
-            <div
+            <button
               key={loanType.id}
-              className={`pill ${selectedType === loanType.id ? "active" : ""}`}
+              type="button"
+              className={`pill ${selectedTypes.includes(loanType.id) ? "active" : ""}`}
               style={{
-                background: selectedType === loanType.id ? `${loanType.color}22` : "transparent",
+                background: selectedTypes.includes(loanType.id) ? `${loanType.color}22` : "transparent",
                 color: loanType.color,
               }}
-              onClick={() => setSelectedType(selectedType === loanType.id ? null : loanType.id)}
+              onClick={() => toggleLoanType(loanType.id)}
             >
               <span
                 style={{
@@ -709,7 +712,7 @@ function App() {
                 }}
               />
               {loanType.label}
-            </div>
+            </button>
           ))}
           <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
             <div
@@ -957,14 +960,14 @@ function App() {
                 type="range"
                 className="sl-amber"
                 min={0}
-                max={12}
+                max={20}
                 step={0.5}
                 value={investReturn}
                 onChange={(event) => setInvestReturn(+event.target.value)}
               />
               <div style={{ display: "flex", justifyContent: "space-between", marginTop: 3, fontSize: 9, color: "#3d4028" }}>
                 <span>0%</span>
-                <span>12%</span>
+                <span>20%</span>
               </div>
             </div>
             <div>
@@ -1132,19 +1135,6 @@ function App() {
                       {positive ? "+" : ""}
                       {fmt(finalPoint.nettoAfkast)}
                     </span>
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 9,
-                      color: positive ? "#3d4a28" : "#4a2828",
-                      marginTop: 6,
-                      lineHeight: 1.4,
-                      textAlign: "center",
-                    }}
-                  >
-                    {positive
-                      ? `Investering slår afdrag med ${fmt(finalPoint.nettoAfkast)} kr.`
-                      : `Afdrag vinder ved ${fmtPct1(investReturn)} over ${investYears} år`}
                   </div>
                 </div>
               );
