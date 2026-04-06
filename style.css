@@ -10,17 +10,8 @@
   --accent-hover: #1d4ed8;
   --border: #e5e5e0;
   --max-width: 640px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141414;
-    --fg: #e8e8e4;
-    --muted: #909090;
-    --accent: #60a5fa;
-    --accent-hover: #93c5fd;
-    --border: #2a2a2a;
-  }
+  --nav-active-underline: #d4611a;
+  --nav-hover-underline: #d4611a;
 }
 
 html {
@@ -33,7 +24,7 @@ body {
   padding: 2rem 1.25rem 4rem;
   background: var(--bg);
   color: var(--fg);
-  font-family: Optima, sans-serif;
+  font-family: Optima, Candara, Cantarell, sans-serif;
   line-height: 1.65;
   max-width: var(--max-width);
   margin-inline: auto;
@@ -63,14 +54,14 @@ body.blog nav a[href="/blog/"],
 body.photos nav a[href="/photos/"] {
   color: var(--fg);
   text-decoration: underline;
-  text-decoration-color: #d4611a;
+  text-decoration-color: var(--nav-active-underline);
   text-decoration-thickness: 2px;
 }
 
 nav a:hover {
   color: var(--fg);
   text-decoration: underline;
-  text-decoration-color: #8b3f10;
+  text-decoration-color: var(--nav-hover-underline);
   text-decoration-thickness: 2px;
 }
 

@@ -11,7 +11,10 @@ build-blog:
 
 build-realkredit: realkreditberegner/app.js
 
-realkreditberegner/app.js: realkreditberegner/app.jsx realkreditberegner/data.js realkreditberegner/calculations.js
+realkreditberegner/app.js: \
+	realkreditberegner/app.jsx \
+	realkreditberegner/data.js \
+	realkreditberegner/calculations.js
 	$(ESBUILD) realkreditberegner/app.jsx \
 		--bundle \
 		--format=iife \
