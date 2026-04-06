@@ -302,7 +302,8 @@
     const averages = msciQ.map((_, index) => {
       const start = Math.max(0, index - rollingWindow + 1);
       const slice = msciQ.slice(start, index + 1);
-      return +(slice.reduce((sum, value) => sum + value, 0) / slice.length).toFixed(1);
+      const growth = slice.reduce((total, value) => total * (1 + value / 100), 1);
+      return +((Math.pow(growth, 4 / slice.length) - 1) * 100).toFixed(1);
     });
     const startIndex = (startYear - 1999) * 4;
 

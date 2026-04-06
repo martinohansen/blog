@@ -117,6 +117,22 @@ input[type="range"]::-webkit-slider-thumb {
   background-clip: text;
 }
 
+.glow-afdrag {
+  background: linear-gradient(135deg, #6db3e8, #d4e9ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(109, 179, 232, 0.28));
+}
+
+.glow-aktier {
+  background: linear-gradient(135deg, #34d399, #d9f99d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(52, 211, 153, 0.28));
+}
+
 .msc {
   background: #0e1520;
   border-radius: 12px;

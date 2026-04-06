@@ -8,6 +8,7 @@ const {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  ReferenceDot,
   ComposedChart,
   Line,
 } = Recharts;
@@ -23,7 +24,19 @@ const {
   getMaxBarValue,
   buildInvestmentData,
   buildEcbMsciChartData,
+  breakdown,
+  getLoanBandForLtv,
 } = window.RealkreditCalculations;
+
+function roundDownToStep(value, step) {
+  return Math.floor(value / step) * step;
+}
+
+const MIN_HOME_PRICE = 500000;
+const MAX_HOME_PRICE = 30000000;
+const HOME_PRICE_STEP = 100000;
+const MIN_LOAN_AMOUNT = 0;
+const LOAN_AMOUNT_STEP = 100000;
 
 function TooltipShell({ title, children }) {
   return (
@@ -165,7 +178,7 @@ function EcbMsciTip({ active, payload, label, avgLabel }) {
   const colors = { ecb: "#3b82f6", msci: "#34d399", avg: "#c9a87c" };
   const names = {
     ecb: "ECB MRO-rente",
-    msci: "MSCI World (ann.)",
+    msci: "MSCI World (kv.)",
     avg: avgLabel,
   };
 
@@ -193,7 +206,7 @@ function EcbMsciChart() {
     [startYear, rollYears],
   );
 
-  const avgLabel = `${rollYears}-års gns.`;
+  const avgLabel = `${rollYears}-års annualiseret`;
 
   return (
     <div
@@ -210,7 +223,7 @@ function EcbMsciChart() {
             <span className="glow">ECB-rente vs. MSCI World afkast</span>
           </h2>
           <p style={{ fontSize: 12, color: "#6b7f99", lineHeight: 1.5 }}>
-            Kvartalsafkast annualiseret med rullende gennemsnit
+            Kvartalsafkast med rullende annualiseret afkast
           </p>
         </div>
       </div>
@@ -247,7 +260,7 @@ function EcbMsciChart() {
         </div>
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-            <span style={{ fontSize: 11, color: "#6b7f99" }}>Rullende gennemsnit</span>
+            <span style={{ fontSize: 11, color: "#6b7f99" }}>Rullende annualiseret</span>
             <span className="mono" style={{ fontSize: 14, fontWeight: 600, color: "#6db3e8" }}>
               {rollYears} år
             </span>
@@ -277,7 +290,7 @@ function EcbMsciChart() {
       </div>
 
       <div style={{ fontSize: 11, color: "#6b7f99", marginBottom: 8 }}>
-        {startYear}–2026 Q1 · Rullende gennemsnit:{" "}
+        {startYear}–2026 Q1 · Rullende annualiseret afkast:{" "}
         <strong style={{ color: "#c9a87c" }}>{rollYears} år</strong>
       </div>
 
@@ -319,7 +332,7 @@ function EcbMsciChart() {
               stroke="#34d399"
               strokeWidth={2}
               dot={false}
-              name="MSCI World (ann.)"
+              name="MSCI World (kv.)"
             />
             <Area
               type="monotone"
@@ -350,7 +363,7 @@ function EcbMsciChart() {
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#34d399" }}>
           <span style={{ width: 14, height: 3, borderRadius: 2, background: "#34d399" }} />
-          MSCI World (ann.)
+          MSCI World (kv.)
         </span>
         <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#c9a87c" }}>
           <span style={{ width: 14, height: 3, borderRadius: 2, background: "#c9a87c" }} />
@@ -358,7 +371,7 @@ function EcbMsciChart() {
         </span>
       </div>
       <p style={{ fontSize: 10, color: "#3d5068", marginTop: 10, lineHeight: 1.4, textAlign: "center" }}>
-        ECB Main Refinancing Rate · MSCI World gross total return USD · Kilder: ECB, MSCI factsheets, ycharts
+        ECB Main Refinancing Rate · MSCI World gross total return USD · Kilder: ECB, MSCI index data API
       </p>
     </div>
   );
@@ -535,6 +548,7 @@ function MilestoneCard({ milestone, showNet, maxBarVal }) {
 
 function App() {
   const [loanAmount, setLoanAmount] = useState(3000000);
+  const [homePrice, setHomePrice] = useState(5000000);
   const [selectedTypes, setSelectedTypes] = useState(() =>
     LOAN_TYPES.map((loanType) => loanType.id),
   );
@@ -546,6 +560,7 @@ function App() {
 
   const activeLoanTypes = LOAN_TYPES.filter((loanType) => selectedTypes.includes(loanType.id));
   const activeTypeKey = activeLoanTypes.map((loanType) => loanType.id).join(",");
+  const maxLoanAmount = roundDownToStep(homePrice * 0.8, LOAN_AMOUNT_STEP);
   const taxHouseholdLabel =
     TAX_MODEL.households.find((household) => household.id === taxHousehold)?.label || "Enlig";
   const taxThreshold = TAX_MODEL.thresholds[taxHousehold] || TAX_MODEL.thresholds.single;
@@ -593,6 +608,24 @@ function App() {
 
   const investChartType = activeLoanTypes[0]?.id;
   const investChartData = investData[investChartType] || [];
+  const hasValidInputs = homePrice > 0 && loanAmount >= 0;
+  const currentLtv = hasValidInputs ? (loanAmount / homePrice) * 100 : null;
+  const currentBand = getLoanBandForLtv(currentLtv ?? 0);
+  const selectedCaseData = activeLoanTypes.map((loanType) => ({
+    loanType,
+    breakdown: breakdown(
+      loanType.id,
+      loanType.rate,
+      currentLtv ?? 0,
+      currentBand.af,
+      loanAmount,
+      taxHousehold,
+    ),
+  }));
+  const selectedCaseByType = Object.fromEntries(
+    selectedCaseData.map(({ loanType, breakdown: result }) => [loanType.id, result]),
+  );
+  const selectedEquity = Math.max(0, homePrice - loanAmount);
 
   return (
     <div
@@ -616,14 +649,15 @@ function App() {
               marginBottom: 6,
             }}
           >
-            Nordea Kredit · Helårsbolig · Feb 2026
+            Realkredit · Afdrag · Investering · Feb 2026
           </div>
           <h1 style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.25, marginBottom: 6 }}>
-            Belåningsmilepæle: <span className="glow">80% → 60% → 40%</span>
+            Realkredit: <span className="glow-afdrag">afdrag</span> eller{" "}
+            <span className="glow-aktier">aktier</span>
           </h1>
           <p style={{ fontSize: 12, color: "#6b7f99", lineHeight: 1.5 }}>
-            Fra tvunget afdrag til afdragsfrihed — og hvad det reelt koster og giver at
-            investere i stedet for at afdrage.
+            Sammenlign lån, afdrag og skatteværdi på tværs af belåningsgrader, og hold
+            alternativet op mod historisk MSCI World-afkast og ECB-renten.
           </p>
         </div>
 
@@ -653,93 +687,170 @@ function App() {
           </div>
         </div>
 
-        <div className="card" style={{ padding: 16 }}>
+        <div
+          className="card"
+          style={{
+            padding: 16,
+            borderColor: "#2d4a6a55",
+            background: "linear-gradient(135deg,#0f1724,#101722)",
+          }}
+        >
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
-              alignItems: "baseline",
-              marginBottom: 10,
+              gap: 10,
+              alignItems: "flex-start",
+              marginBottom: 16,
             }}
           >
-            <span style={{ fontSize: 11, color: "#6b7f99" }}>Restgæld</span>
-            <span className="mono" style={{ fontSize: 20, fontWeight: 600 }}>
-              {fmt(loanAmount)} kr.
-            </span>
-          </div>
-          <input
-            type="range"
-            className="sl-blue"
-            min={500000}
-            max={6000000}
-            step={100000}
-            value={loanAmount}
-            onChange={(event) => setLoanAmount(+event.target.value)}
-          />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: 4,
-              fontSize: 10,
-              color: "#3d5068",
-            }}
-          >
-            <span>500.000</span>
-            <span>6.000.000</span>
-          </div>
-        </div>
-
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 14, alignItems: "center" }}>
-          <span style={{ fontSize: 11, color: "#6b7f99", marginRight: 2 }}>Vælg lån:</span>
-          {LOAN_TYPES.map((loanType) => (
-            <button
-              key={loanType.id}
-              type="button"
-              className={`pill ${selectedTypes.includes(loanType.id) ? "active" : ""}`}
-              style={{
-                background: selectedTypes.includes(loanType.id) ? `${loanType.color}22` : "transparent",
-                color: loanType.color,
-              }}
-              onClick={() => toggleLoanType(loanType.id)}
-            >
-              <span
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: "50%",
-                  background: loanType.color,
-                }}
-              />
-              {loanType.label}
-            </button>
-          ))}
-          <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
             <div
               style={{
-                width: showNet ? 78 : 0,
-                opacity: showNet ? 1 : 0,
-                overflow: "hidden",
-                transform: showNet ? "translateX(0)" : "translateX(12px)",
-                transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
-                pointerEvents: showNet ? "auto" : "none",
+                display: "flex",
+                gap: 6,
+                alignItems: "center",
+                flexWrap: "wrap",
+                minWidth: 0,
+                rowGap: 6,
+                flex: "1 1 auto",
               }}
             >
-              <button
-                className="tb on"
-                style={{ width: "100%", whiteSpace: "nowrap" }}
-                onClick={cycleTaxHousehold}
+              <span style={{ fontSize: 11, color: "#6b7f99", flex: "0 0 auto" }}>Vælg lån:</span>
+              {LOAN_TYPES.map((loanType) => (
+                <button
+                  key={loanType.id}
+                  type="button"
+                  title={loanType.label}
+                  className={`pill ${selectedTypes.includes(loanType.id) ? "active" : ""}`}
+                  style={{
+                    background: selectedTypes.includes(loanType.id) ? `${loanType.color}22` : "transparent",
+                    color: loanType.color,
+                    flex: "0 0 auto",
+                  }}
+                  onClick={() => toggleLoanType(loanType.id)}
+                >
+                  <span
+                    style={{
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: loanType.color,
+                      flex: "0 0 auto",
+                    }}
+                  />
+                  {loanType.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 4, flex: "0 0 auto" }}>
+              <div
+                style={{
+                  width: showNet ? 78 : 0,
+                  opacity: showNet ? 1 : 0,
+                  overflow: "hidden",
+                  transform: showNet ? "translateX(0)" : "translateX(12px)",
+                  transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
+                  pointerEvents: showNet ? "auto" : "none",
+                }}
               >
-                {taxHouseholdLabel}
+                <button
+                  className="tb on"
+                  style={{ width: "100%", whiteSpace: "nowrap" }}
+                  onClick={cycleTaxHousehold}
+                >
+                  {taxHouseholdLabel}
+                </button>
+              </div>
+              <button className={`tb ${showNet ? "on" : ""}`} onClick={() => setShowNet(true)}>
+                Netto
+              </button>
+              <button className={`tb ${!showNet ? "on" : ""}`} onClick={() => setShowNet(false)}>
+                Brutto
               </button>
             </div>
-            <button className={`tb ${showNet ? "on" : ""}`} onClick={() => setShowNet(true)}>
-              Netto
-            </button>
-            <button className={`tb ${!showNet ? "on" : ""}`} onClick={() => setShowNet(false)}>
-              Brutto
-            </button>
           </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  marginBottom: 10,
+                }}
+              >
+                <span style={{ fontSize: 11, color: "#6b7f99" }}>Boligpris</span>
+                <span className="mono" style={{ fontSize: 20, fontWeight: 600 }}>
+                  {fmt(homePrice)} kr.
+                </span>
+              </div>
+              <input
+                type="range"
+                className="sl-blue"
+                min={MIN_HOME_PRICE}
+                max={MAX_HOME_PRICE}
+                step={HOME_PRICE_STEP}
+                value={homePrice}
+                onChange={(event) => {
+                  const nextHomePrice = +event.target.value;
+                  const nextMaxLoanAmount = roundDownToStep(nextHomePrice * 0.8, LOAN_AMOUNT_STEP);
+                  setHomePrice(nextHomePrice);
+                  setLoanAmount((current) => Math.min(current, nextMaxLoanAmount));
+                }}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: 4,
+                  fontSize: 10,
+                  color: "#3d5068",
+                }}
+              >
+                <span>{fmt(MIN_HOME_PRICE)}</span>
+                <span>{fmt(MAX_HOME_PRICE)}</span>
+              </div>
+            </div>
+
+            <div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  marginBottom: 10,
+                }}
+              >
+                <span style={{ fontSize: 11, color: "#6b7f99" }}>Restgæld</span>
+                <span className="mono" style={{ fontSize: 20, fontWeight: 600 }}>
+                  {fmt(loanAmount)} kr.
+                </span>
+              </div>
+              <input
+                type="range"
+                className="sl-blue"
+                min={MIN_LOAN_AMOUNT}
+                max={maxLoanAmount}
+                step={LOAN_AMOUNT_STEP}
+                value={loanAmount}
+                onChange={(event) => setLoanAmount(+event.target.value)}
+              />
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  marginTop: 4,
+                  fontSize: 10,
+                  color: "#3d5068",
+                }}
+              >
+                <span>{fmt(MIN_LOAN_AMOUNT)}</span>
+                <span>{fmt(maxLoanAmount)}</span>
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <div className="card">
@@ -802,25 +913,124 @@ function App() {
                 <ReferenceLine x={80} stroke="#e07a5f" strokeDasharray="4 4" strokeWidth={1.5} />
                 <ReferenceLine x={60} stroke="#6db3e8" strokeDasharray="4 4" strokeWidth={1.5} />
                 <ReferenceLine x={40} stroke="#34d399" strokeDasharray="4 4" strokeWidth={1.5} />
+                {currentLtv !== null && currentLtv <= 80 && (
+                  <ReferenceLine x={currentLtv} stroke="#c9a87c" strokeDasharray="6 3" strokeWidth={2} />
+                )}
                 {activeLoanTypes.map((loanType) => (
-                  <Area
-                    key={loanType.id}
-                    type="linear"
-                    dataKey={`${loanType.id}${cSuffix}`}
-                    stroke={loanType.color}
-                    fill={`url(#g-${loanType.id})`}
-                    strokeWidth={2.5}
-                    dot={false}
-                    activeDot={{
-                      r: 4,
-                      stroke: loanType.color,
-                      fill: "#0c1117",
-                      strokeWidth: 2,
-                    }}
-                  />
+                  <React.Fragment key={loanType.id}>
+                    <Area
+                      type="linear"
+                      dataKey={`${loanType.id}${cSuffix}`}
+                      stroke={loanType.color}
+                      fill={`url(#g-${loanType.id})`}
+                      strokeWidth={2.5}
+                      dot={false}
+                      activeDot={{
+                        r: 4,
+                        stroke: loanType.color,
+                        fill: "#0c1117",
+                        strokeWidth: 2,
+                      }}
+                    />
+                    {currentLtv !== null && currentLtv <= 80 && (
+                      <ReferenceDot
+                        x={currentLtv}
+                        y={
+                          chartMode === "total"
+                            ? showNet
+                              ? selectedCaseByType[loanType.id]?.totalN
+                              : selectedCaseByType[loanType.id]?.totalB
+                            : showNet
+                              ? selectedCaseByType[loanType.id]?.ydelseN
+                              : selectedCaseByType[loanType.id]?.ydelseB
+                        }
+                        r={4.5}
+                        fill="#0c1117"
+                        stroke={loanType.color}
+                        strokeWidth={2}
+                      />
+                    )}
+                  </React.Fragment>
                 ))}
               </AreaChart>
             </ResponsiveContainer>
+          </div>
+          <div
+            style={{
+              marginTop: 14,
+              padding: 12,
+              borderRadius: 10,
+              background: "#0a0f16",
+              border: "1px solid #1e2a3a",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 10,
+                flexWrap: "wrap",
+                marginBottom: 10,
+              }}
+            >
+              <div>
+                <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: "#c9a87c", lineHeight: 1.2 }}>
+                  {currentLtv === null ? "Ugyldig indtastning" : `${fmtPct2(currentLtv)} belåning`}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 11 }}>
+                <span style={{ color: "#8fa8c4" }}>
+                  Boligpris: <strong className="mono" style={{ color: "#e8ecf1" }}>{fmt(homePrice)}</strong>
+                </span>
+                <span style={{ color: "#8fa8c4" }}>
+                  Egenkapital: <strong className="mono" style={{ color: "#e8ecf1" }}>{fmt(selectedEquity)}</strong>
+                </span>
+                <span style={{ color: currentBand.af ? "#6db3e8" : "#e07a5f" }}>
+                  {currentBand.af ? "Afdragsfri mulig" : "Tvunget afdrag"}
+                </span>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
+              {selectedCaseData.map(({ loanType, breakdown: result }) => (
+                <div
+                  key={loanType.id}
+                  style={{
+                    borderRadius: 8,
+                    border: `1px solid ${loanType.color}33`,
+                    padding: 8,
+                    background: `${loanType.color}0f`,
+                    minWidth: 0,
+                  }}
+                >
+                  <div style={{ fontSize: 11, fontWeight: 700, color: loanType.color, marginBottom: 6, whiteSpace: "nowrap" }}>
+                    {loanType.label}
+                  </div>
+                  <div style={{ display: "grid", gap: 4, fontSize: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                      <span style={{ color: "#6b7f99" }}>Rente + bidrag</span>
+                      <span className="mono">{fmt(Math.round(showNet ? result.ydelseN : result.ydelseB))}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                      <span style={{ color: "#6b7f99" }}>Afdrag</span>
+                      <span className="mono">{fmt(Math.round(result.afdragKr))}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                      <span style={{ color: "#6b7f99" }}>Samlet pr. år</span>
+                      <span className="mono" style={{ fontWeight: 700 }}>
+                        {fmt(Math.round(showNet ? result.totalN : result.totalB))}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                      <span style={{ color: "#6b7f99" }}>Pr. måned</span>
+                      <span className="mono" style={{ fontWeight: 700, color: loanType.color }}>
+                        {fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6, justifyContent: "center" }}>
             {activeLoanTypes.map((loanType) => (
@@ -1085,7 +1295,7 @@ function App() {
             </>
           )}
 
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${activeLoanTypes.length}, 1fr)`, gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 8 }}>
             {activeLoanTypes.map((loanType) => {
               const series = investData[loanType.id];
               if (!series) {
@@ -1101,8 +1311,9 @@ function App() {
                   style={{
                     background: "#0e1117",
                     borderRadius: 12,
-                    padding: 14,
+                    padding: 10,
                     border: `1px solid ${loanType.color}22`,
+                    minWidth: 0,
                   }}
                 >
                   <div
