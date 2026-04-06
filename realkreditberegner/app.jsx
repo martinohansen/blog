@@ -184,7 +184,7 @@ function EcbMsciTip({ active, payload, label, avgLabel }) {
 
   return (
     <TooltipShell title={label}>
-      {payload.map((entry) => (
+      {payload.filter((entry) => entry.value != null).map((entry) => (
         <ValueTooltipRow
           key={entry.dataKey}
           color={colors[entry.dataKey] || entry.color}
@@ -378,7 +378,9 @@ function EcbMsciChart() {
 }
 
 function MilestoneCard({ milestone, showNet, maxBarVal }) {
+  const [isOpen, setIsOpen] = useState(false);
   const gridColumns = `72px repeat(${milestone.rows.length}, 1fr)`;
+  const contentId = `milestone-${milestone.ltv}-content`;
 
   const renderMetricRow = (label, renderValue, extraStyle) => (
     <div className="row" style={{ gridTemplateColumns: gridColumns, ...extraStyle }}>
@@ -408,136 +410,172 @@ function MilestoneCard({ milestone, showNet, maxBarVal }) {
             background: milestone.tc,
           }}
         />
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <span className="mono" style={{ fontSize: 20, fontWeight: 700, color: milestone.tc }}>
-            {milestone.ltv}%
-          </span>
-          <span className="tag" style={{ background: `${milestone.tc}22`, color: milestone.tc }}>
-            {milestone.tag}
-          </span>
-        </div>
-        <div style={{ fontSize: 11, color: "#6b7f99", marginBottom: 12 }}>
-          {milestone.desc}
-        </div>
-
-        <div className="row" style={{ gridTemplateColumns: gridColumns }}>
-          <div />
-          {milestone.rows.map(({ loanType }) => (
-            <div
-              key={loanType.id}
+        <button
+          type="button"
+          aria-expanded={isOpen}
+          aria-controls={contentId}
+          onClick={() => setIsOpen((open) => !open)}
+          style={{
+            width: "100%",
+            background: "transparent",
+            border: 0,
+            color: "inherit",
+            cursor: "pointer",
+            fontFamily: "inherit",
+            padding: 0,
+            textAlign: "left",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span className="mono" style={{ fontSize: 20, fontWeight: 700, color: milestone.tc }}>
+                  {milestone.ltv}%
+                </span>
+                <span className="tag" style={{ background: `${milestone.tc}22`, color: milestone.tc }}>
+                  {milestone.tag}
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: "#6b7f99", lineHeight: 1.4 }}>
+                {milestone.desc}
+              </div>
+            </div>
+            <span
+              className="tag"
               style={{
-                textAlign: "center",
-                color: loanType.color,
-                fontWeight: 600,
-                fontSize: 10,
+                background: `${milestone.tc}18`,
+                color: milestone.tc,
+                flex: "0 0 auto",
+                marginTop: 2,
               }}
             >
-              {loanType.label}
-            </div>
-          ))}
-        </div>
-
-        {renderMetricRow("Rente", (result) => (
-          <span style={{ color: "#e07a5f" }}>{fmtPct2(result.rentePct)}</span>
-        ))}
-        {renderMetricRow("Bidrag", (result) => fmtPct(result.bidragPct))}
-        {renderMetricRow(
-          "Samlet sats",
-          (result) => <strong>{fmtPct2(result.rentePct + result.bidragPct)}</strong>,
-          { borderTop: "1px solid #1a2332", paddingTop: 6 },
-        )}
-
-        <div className="sep" />
-
-        {renderMetricRow("Rente kr./år", (result) => (
-          <span style={{ color: "#e07a5f" }}>
-            {fmt(Math.round(showNet ? result.renteKrN : result.renteKrB))}
-          </span>
-        ))}
-        {renderMetricRow("Bidrag kr./år", (result) =>
-          fmt(Math.round(showNet ? result.bidragKrN : result.bidragKrB)),
-        )}
-        {!milestone.af &&
-          renderMetricRow("Afdrag kr./år", (result) => (
-            <span style={{ color: "#94a3b8" }}>{fmt(Math.round(result.afdragKr))}</span>
-          ))}
-
-        <div style={{ marginTop: 8 }}>
-          <div style={{ display: "flex", gap: 10, marginBottom: 4, fontSize: 10 }}>
-            <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 8,
-                  borderRadius: 2,
-                  background: "#e07a5f",
-                  display: "inline-block",
-                }}
-              />
-              Rente
+              {isOpen ? "Skjul" : "Vis"}
             </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-              <span
-                style={{
-                  width: 10,
-                  height: 8,
-                  borderRadius: 2,
-                  background: "#c75f45",
-                  display: "inline-block",
-                }}
-              />
-              Bidrag
-            </span>
-            {!milestone.af && (
-              <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 8,
-                    borderRadius: 2,
-                    background: "#475569",
-                    display: "inline-block",
-                  }}
-                />
-                Afdrag
-              </span>
-            )}
           </div>
-          {milestone.rows.map(({ loanType, breakdown }) => (
-            <div key={loanType.id} style={{ marginBottom: 4 }}>
-              <CostBar breakdown={breakdown} maxVal={maxBarVal} showNet={showNet} />
+        </button>
+
+        {isOpen && (
+          <div id={contentId} style={{ marginTop: 12 }}>
+            <div className="row" style={{ gridTemplateColumns: gridColumns }}>
+              <div />
+              {milestone.rows.map(({ loanType }) => (
+                <div
+                  key={loanType.id}
+                  style={{
+                    textAlign: "center",
+                    color: loanType.color,
+                    fontWeight: 600,
+                    fontSize: 10,
+                  }}
+                >
+                  {loanType.label}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        <div className="sep" />
+            {renderMetricRow("Rente", (result) => (
+              <span style={{ color: "#e07a5f" }}>{fmtPct2(result.rentePct)}</span>
+            ))}
+            {renderMetricRow("Bidrag", (result) => fmtPct(result.bidragPct))}
+            {renderMetricRow(
+              "Samlet sats",
+              (result) => <strong>{fmtPct2(result.rentePct + result.bidragPct)}</strong>,
+              { borderTop: "1px solid #1a2332", paddingTop: 6 },
+            )}
 
-        {renderMetricRow(
-          "Ydelse/år",
-          (result) => <strong>{fmt(Math.round(showNet ? result.ydelseN : result.ydelseB))}</strong>,
-        )}
-        {!milestone.af &&
-          renderMetricRow("+ Afdrag", (result) => (
-            <strong style={{ color: "#94a3b8" }}>{fmt(Math.round(result.afdragKr))}</strong>
-          ))}
-        {renderMetricRow(
-          "Mdl. total",
-          (result) => (
-            <span style={{ fontSize: 13, fontWeight: 700, color: milestone.tc }}>
-              {fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
-            </span>
-          ),
-          {
-            background: "#0a0f16",
-            borderRadius: 8,
-            padding: "8px 6px",
-            marginTop: 6,
-          },
-        )}
+            <div className="sep" />
 
-        {!milestone.af && (
-          <div style={{ fontSize: 10, color: "#3d5068", marginTop: 4 }}>
-            Afdrag er opsparing i boligen — du får pengene igen ved salg/omlægning
+            {renderMetricRow("Rente kr./år", (result) => (
+              <span style={{ color: "#e07a5f" }}>
+                {fmt(Math.round(showNet ? result.renteKrN : result.renteKrB))}
+              </span>
+            ))}
+            {renderMetricRow("Bidrag kr./år", (result) =>
+              fmt(Math.round(showNet ? result.bidragKrN : result.bidragKrB)),
+            )}
+            {!milestone.af &&
+              renderMetricRow("Afdrag kr./år", (result) => (
+                <span style={{ color: "#94a3b8" }}>{fmt(Math.round(result.afdragKr))}</span>
+              ))}
+
+            <div style={{ marginTop: 8 }}>
+              <div style={{ display: "flex", gap: 10, marginBottom: 4, fontSize: 10 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 8,
+                      borderRadius: 2,
+                      background: "#e07a5f",
+                      display: "inline-block",
+                    }}
+                  />
+                  Rente
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 8,
+                      borderRadius: 2,
+                      background: "#c75f45",
+                      display: "inline-block",
+                    }}
+                  />
+                  Bidrag
+                </span>
+                {!milestone.af && (
+                  <span style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                    <span
+                      style={{
+                        width: 10,
+                        height: 8,
+                        borderRadius: 2,
+                        background: "#475569",
+                        display: "inline-block",
+                      }}
+                    />
+                    Afdrag
+                  </span>
+                )}
+              </div>
+              {milestone.rows.map(({ loanType, breakdown }) => (
+                <div key={loanType.id} style={{ marginBottom: 4 }}>
+                  <CostBar breakdown={breakdown} maxVal={maxBarVal} showNet={showNet} />
+                </div>
+              ))}
+            </div>
+
+            <div className="sep" />
+
+            {renderMetricRow(
+              "Ydelse/år",
+              (result) => <strong>{fmt(Math.round(showNet ? result.ydelseN : result.ydelseB))}</strong>,
+            )}
+            {!milestone.af &&
+              renderMetricRow("+ Afdrag", (result) => (
+                <strong style={{ color: "#94a3b8" }}>{fmt(Math.round(result.afdragKr))}</strong>
+              ))}
+            {renderMetricRow(
+              "Mdl. total",
+              (result) => (
+                <span style={{ fontSize: 13, fontWeight: 700, color: milestone.tc }}>
+                  {fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
+                </span>
+              ),
+              {
+                background: "#0a0f16",
+                borderRadius: 8,
+                padding: "8px 6px",
+                marginTop: 6,
+              },
+            )}
+
+            {!milestone.af && (
+              <div style={{ fontSize: 10, color: "#3d5068", marginTop: 4 }}>
+                Afdrag er opsparing i boligen — du får pengene igen ved salg/omlægning
+              </div>
+            )}
           </div>
         )}
       </div>
