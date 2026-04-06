@@ -29,11 +29,34 @@
     return `${value.toFixed(1).replace(".", ",")}%`;
   }
 
+  const BIDRAG_INTERVALS = [
+    { band: "0-40", from: 0, to: 40 },
+    { band: "40-60", from: 40, to: 60 },
+    { band: "60-80", from: 60, to: 80 },
+  ];
+
   function getBidrag(loanTypeId, band, isInterestOnly) {
     return (
       BASE_BIDRAG[loanTypeId][band] +
       (isInterestOnly ? AF_TILLAEG[loanTypeId][band] : 0)
     );
+  }
+
+  function getEffectiveBidragPct(loanTypeId, ltv, isInterestOnly) {
+    if (ltv <= 0) {
+      return 0;
+    }
+
+    const weightedBidrag = BIDRAG_INTERVALS.reduce((sum, interval) => {
+      const coveredSpan = Math.max(0, Math.min(ltv, interval.to) - interval.from);
+      if (coveredSpan === 0) {
+        return sum;
+      }
+
+      return sum + coveredSpan * getBidrag(loanTypeId, interval.band, isInterestOnly);
+    }, 0);
+
+    return weightedBidrag / ltv;
   }
 
   function annuityYearly(principal, annualRate) {
@@ -45,8 +68,8 @@
     return principal * (rate / (1 - Math.pow(1 + rate, -LOAN_YEARS)));
   }
 
-  function breakdown(loanTypeId, rate, band, isInterestOnly, amount) {
-    const bidragPct = getBidrag(loanTypeId, band, isInterestOnly);
+  function breakdown(loanTypeId, rate, ltv, isInterestOnly, amount) {
+    const bidragPct = getEffectiveBidragPct(loanTypeId, ltv, isInterestOnly);
     const renteKrB = (rate / 100) * amount;
     const bidragKrB = (bidragPct / 100) * amount;
     const afdragKr = isInterestOnly
@@ -92,7 +115,7 @@
         const result = breakdown(
           loanType.id,
           loanType.rate,
-          config.band,
+          ltv,
           config.af,
           amount,
         );
@@ -116,7 +139,7 @@
         breakdown: breakdown(
           loanType.id,
           loanType.rate,
-          milestone.band,
+          milestone.ltv,
           milestone.af,
           loanAmount,
         ),
@@ -145,7 +168,7 @@
   ) {
     const propertyValue = loanAmount / 0.6;
     const annuity = annuityYearly(loanAmount, rate);
-    const bidragPctAfdragsfri = getBidrag(loanTypeId, "40-60", true);
+    const bidragPctAfdragsfri = getEffectiveBidragPct(loanTypeId, 60, true);
     const monthlyReturn = Math.pow(1 + investReturnPct / 100, 1 / 12) - 1;
 
     let principalA = loanAmount;
@@ -166,10 +189,8 @@
     ];
 
     for (let year = 1; year <= years; year += 1) {
-      const ltvA = principalA / propertyValue;
-      const bandA =
-        ltvA > 0.6 ? "60-80" : ltvA > 0.4 ? "40-60" : "0-40";
-      const bidragPctA = getBidrag(loanTypeId, bandA, false);
+      const ltvA = (principalA / propertyValue) * 100;
+      const bidragPctA = getEffectiveBidragPct(loanTypeId, ltvA, false);
       const renteA = (rate / 100) * principalA;
       const bidragA = (bidragPctA / 100) * principalA;
       const afdragA = annuity - renteA;
@@ -267,6 +288,7 @@
     fmtPct1,
     fmtPct2,
     getBidrag,
+    getEffectiveBidragPct,
     annuityYearly,
     breakdown,
     getLoanBandForLtv,

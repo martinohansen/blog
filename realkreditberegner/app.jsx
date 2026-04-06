@@ -767,7 +767,7 @@ function App() {
                 {activeLoanTypes.map((loanType) => (
                   <Area
                     key={loanType.id}
-                    type="stepAfter"
+                    type="linear"
                     dataKey={`${loanType.id}${cSuffix}`}
                     stroke={loanType.color}
                     fill={`url(#g-${loanType.id})`}
@@ -1124,8 +1124,8 @@ function App() {
             grønne linje er over nul, tjener du på at investere.
           </div>
           <div style={{ fontSize: 10, color: "#2d2a1a", marginTop: 6, lineHeight: 1.5 }}>
-            Lagerbeskatning: 27% op til 61.000 kr., 42% derover. Ved afdrag krydser lånet evt.
-            40%-grænsen → lavere bidragssats. Inkluderet i beregningen.
+            Lagerbeskatning: 27% op til 61.000 kr., 42% derover. Ved afdrag falder den vægtede
+            bidragssats løbende, efterhånden som LTV falder. Inkluderet i beregningen.
           </div>
         </div>
 
@@ -1134,7 +1134,8 @@ function App() {
         <div style={{ fontSize: 10, color: "#3d5068", lineHeight: 1.6, padding: "0 4px" }}>
           <p>
             <strong style={{ color: "#4a5e75" }}>Bidragssatser:</strong> Nordea Kredit, nye lån fra
-            23. feb. 2026, helårsbolig. Inkl. afdragsfrihedstillæg ved ≤60%.
+            23. feb. 2026, helårsbolig. Beregnet som vægtet sats over belåningsintervallerne,
+            inkl. afdragsfrihedstillæg ved ≤60%.
           </p>
           <p>
             <strong style={{ color: "#4a5e75" }}>Renter:</strong> Fast rente ~4%, F5 ~2,6%, F3 ~2,4%,
@@ -1147,8 +1148,8 @@ function App() {
           </p>
           <p>
             <strong style={{ color: "#4a5e75" }}>Investering:</strong> Lagerbeskatning 27%/42%.
-            Afdragsscenariet inkl. faldende rente+bidrag og evt. lavere bidragsinterval ved LTV{" "}
-            {"<"} 40%.
+            Afdragsscenariet inkl. faldende rente+bidrag og løbende lavere vægtet bidragssats, når
+            LTV falder.
           </p>
           <p>
             <strong style={{ color: "#4a5e75" }}>Skat:</strong> 33,7% fradragssats på rente+bidrag.
