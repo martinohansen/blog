@@ -1,1 +1,7 @@
 .claude/**
+
+# Generated files
+/index.html
+blog/**/*.html
+photos/index.html
+realkreditberegner/app.js
