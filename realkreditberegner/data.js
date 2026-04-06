@@ -110,6 +110,38 @@
       7.876829, 7.003951, -3.362323, 11.531969, 9.005899, 2.779004, 6.463105, -0.068512,
       -1.684904, 11.63123, 7.361411, 3.199428, -3.474716,
     ];
+    // Hidden lookback for rolling annualized lines. MSCI's public monthly API
+    // starts at 1998-12-31, so pre-1999 values use published annual gross
+    // returns split evenly across quarters. They are not plotted as quarter data.
+    const msciAnnualLookback = {
+      1984: 5.77,
+      1985: 41.77,
+      1986: 42.8,
+      1987: 16.76,
+      1988: 23.95,
+      1989: 17.19,
+      1990: -16.52,
+      1991: 18.97,
+      1992: -4.66,
+      1993: 23.13,
+      1994: 5.58,
+      1995: 21.32,
+      1996: 14.0,
+      1997: 16.23,
+      1998: 24.8,
+    };
+    const msciLookbackQ = [];
+    Object.keys(msciAnnualLookback).forEach((yearValue) => {
+      const year = +yearValue;
+      const quarterlyReturn = (Math.pow(1 + msciAnnualLookback[year] / 100, 1 / 4) - 1) * 100;
+      const firstQuarter = year === 1984 ? 2 : 1;
+
+      for (let quarter = firstQuarter; quarter <= 4; quarter += 1) {
+        msciLookbackQ.push(+quarterlyReturn.toFixed(6));
+      }
+    });
+    const msciHistoryQ = msciLookbackQ.concat(msciQ);
+    const msciVisibleStartIndex = msciLookbackQ.length;
     const labels = [];
 
     for (let year = 1999; year <= 2025; year += 1) {
@@ -169,7 +201,7 @@
     overrideQuarter(2025, 3, 2.15);
     ecb.push(2.15);
 
-    return { labels, msciQ, ecb };
+    return { labels, msciQ, msciHistoryQ, msciVisibleStartIndex, ecb };
   }
 
   window.RealkreditData = {

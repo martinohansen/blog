@@ -371,7 +371,8 @@ function EcbMsciChart() {
         </span>
       </div>
       <p style={{ fontSize: 10, color: "#3d5068", marginTop: 10, lineHeight: 1.4, textAlign: "center" }}>
-        ECB Main Refinancing Rate · MSCI World gross total return USD · Kilder: ECB, MSCI index data API
+        ECB Main Refinancing Rate · MSCI World gross total return USD · Kilder: ECB, MSCI index data API og
+        MSCI annual gross returns før 1999, fordelt pr. kvartal
       </p>
     </div>
   );
