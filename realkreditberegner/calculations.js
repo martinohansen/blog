@@ -3,7 +3,7 @@
     LOAN_TYPES,
     BASE_BIDRAG,
     AF_TILLAEG,
-    TAX,
+    TAX_MODEL,
     LOAN_YEARS,
     MILESTONES,
     ECB_MSCI_RAW,
@@ -68,15 +68,41 @@
     return principal * (rate / (1 - Math.pow(1 + rate, -LOAN_YEARS)));
   }
 
-  function breakdown(loanTypeId, rate, ltv, isInterestOnly, amount) {
+  function getTaxThreshold(taxHousehold) {
+    return TAX_MODEL.thresholds[taxHousehold] || TAX_MODEL.thresholds.single;
+  }
+
+  function getTaxRelief(deductibleAmount, taxHousehold) {
+    if (deductibleAmount <= 0) {
+      return 0;
+    }
+
+    const threshold = getTaxThreshold(taxHousehold);
+    const lowBandAmount = Math.min(deductibleAmount, threshold);
+    const highBandAmount = Math.max(0, deductibleAmount - threshold);
+
+    return (
+      lowBandAmount * TAX_MODEL.lowRate +
+      highBandAmount * TAX_MODEL.highRate
+    );
+  }
+
+  function getNetDeductibleCost(deductibleAmount, taxHousehold) {
+    return Math.max(0, deductibleAmount - getTaxRelief(deductibleAmount, taxHousehold));
+  }
+
+  function breakdown(loanTypeId, rate, ltv, isInterestOnly, amount, taxHousehold = "single") {
     const bidragPct = getEffectiveBidragPct(loanTypeId, ltv, isInterestOnly);
     const renteKrB = (rate / 100) * amount;
     const bidragKrB = (bidragPct / 100) * amount;
     const afdragKr = isInterestOnly
       ? 0
       : annuityYearly(amount, rate) - renteKrB;
-    const renteKrN = renteKrB * (1 - TAX);
-    const bidragKrN = bidragKrB * (1 - TAX);
+    const deductibleCost = renteKrB + bidragKrB;
+    const taxRelief = getTaxRelief(deductibleCost, taxHousehold);
+    const effectiveReliefRate = deductibleCost === 0 ? 0 : taxRelief / deductibleCost;
+    const renteKrN = renteKrB * (1 - effectiveReliefRate);
+    const bidragKrN = bidragKrB * (1 - effectiveReliefRate);
 
     return {
       bidragPct,
@@ -86,6 +112,7 @@
       renteKrN,
       bidragKrB,
       bidragKrN,
+      taxRelief,
       afdragKr,
       ydelseB: renteKrB + bidragKrB,
       ydelseN: renteKrN + bidragKrN,
@@ -104,7 +131,7 @@
     return { band: "0-40", af: true };
   }
 
-  function buildChartData(amount) {
+  function buildChartData(amount, taxHousehold = "single") {
     const points = [];
 
     for (let ltv = 80; ltv >= 10; ltv -= 1) {
@@ -118,6 +145,7 @@
           ltv,
           config.af,
           amount,
+          taxHousehold,
         );
         point[`${loanType.id}_netto`] = Math.round(result.totalN);
         point[`${loanType.id}_brutto`] = Math.round(result.totalB);
@@ -131,7 +159,7 @@
     return points.reverse();
   }
 
-  function buildMilestoneData(activeLoanTypes, loanAmount) {
+  function buildMilestoneData(activeLoanTypes, loanAmount, taxHousehold = "single") {
     return MILESTONES.map((milestone) => ({
       ...milestone,
       rows: activeLoanTypes.map((loanType) => ({
@@ -142,6 +170,7 @@
           milestone.ltv,
           milestone.af,
           loanAmount,
+          taxHousehold,
         ),
       })),
     }));
@@ -165,6 +194,7 @@
     loanAmount,
     investReturnPct,
     years,
+    taxHousehold = "single",
   ) {
     const propertyValue = loanAmount / 0.6;
     const annuity = annuityYearly(loanAmount, rate);
@@ -196,12 +226,12 @@
       const afdragA = annuity - renteA;
       principalA = Math.max(0, principalA - afdragA);
 
-      const costA = (renteA + bidragA) * (1 - TAX);
+      const costA = getNetDeductibleCost(renteA + bidragA, taxHousehold);
       cumulativeCostA += costA;
 
       const renteB = (rate / 100) * loanAmount;
       const bidragB = (bidragPctAfdragsfri / 100) * loanAmount;
-      const costB = (renteB + bidragB) * (1 - TAX);
+      const costB = getNetDeductibleCost(renteB + bidragB, taxHousehold);
       cumulativeCostB += costB;
 
       const monthlyFreed = Math.max(0, (costA + afdragA - costB) / 12);
@@ -248,6 +278,7 @@
     loanAmount,
     investReturn,
     investYears,
+    taxHousehold = "single",
   ) {
     const data = {};
 
@@ -258,6 +289,7 @@
         loanAmount,
         investReturn,
         investYears,
+        taxHousehold,
       );
     });
 
@@ -289,6 +321,9 @@
     fmtPct2,
     getBidrag,
     getEffectiveBidragPct,
+    getTaxThreshold,
+    getTaxRelief,
+    getNetDeductibleCost,
     annuityYearly,
     breakdown,
     getLoanBandForLtv,

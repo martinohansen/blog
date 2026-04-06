@@ -12,7 +12,7 @@ const {
   Line,
 } = Recharts;
 
-const { LOAN_TYPES, INV_LABELS } = window.RealkreditData;
+const { LOAN_TYPES, INV_LABELS, TAX_MODEL } = window.RealkreditData;
 const {
   fmt,
   fmtPct,
@@ -540,16 +540,26 @@ function App() {
   const [chartMode, setChartMode] = useState("total");
   const [investReturn, setInvestReturn] = useState(7);
   const [investYears, setInvestYears] = useState(15);
+  const [taxHousehold, setTaxHousehold] = useState("single");
 
   const activeLoanTypes = selectedType
     ? LOAN_TYPES.filter((loanType) => loanType.id === selectedType)
     : LOAN_TYPES;
   const activeTypeKey = activeLoanTypes.map((loanType) => loanType.id).join(",");
+  const taxHouseholdLabel =
+    TAX_MODEL.households.find((household) => household.id === taxHousehold)?.label || "Enlig";
+  const taxThreshold = TAX_MODEL.thresholds[taxHousehold] || TAX_MODEL.thresholds.single;
+  const cycleTaxHousehold = () => {
+    setTaxHousehold((current) => (current === "single" ? "couple" : "single"));
+  };
 
-  const chartData = useMemo(() => buildChartData(loanAmount), [loanAmount]);
+  const chartData = useMemo(
+    () => buildChartData(loanAmount, taxHousehold),
+    [loanAmount, taxHousehold],
+  );
   const milestoneData = useMemo(
-    () => buildMilestoneData(activeLoanTypes, loanAmount),
-    [activeTypeKey, loanAmount],
+    () => buildMilestoneData(activeLoanTypes, loanAmount, taxHousehold),
+    [activeTypeKey, loanAmount, taxHousehold],
   );
   const maxBarVal = useMemo(
     () => getMaxBarValue(milestoneData, showNet),
@@ -559,8 +569,15 @@ function App() {
     chartMode === "total" ? (showNet ? "_netto" : "_brutto") : showNet ? "_yn" : "_yb";
 
   const investData = useMemo(
-    () => buildInvestmentData(activeLoanTypes, loanAmount, investReturn, investYears),
-    [activeTypeKey, loanAmount, investReturn, investYears],
+    () =>
+      buildInvestmentData(
+        activeLoanTypes,
+        loanAmount,
+        investReturn,
+        investYears,
+        taxHousehold,
+      ),
+    [activeTypeKey, loanAmount, investReturn, investYears, taxHousehold],
   );
 
   const investChartType = activeLoanTypes[0]?.id;
@@ -695,6 +712,24 @@ function App() {
             </div>
           ))}
           <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+            <div
+              style={{
+                width: showNet ? 78 : 0,
+                opacity: showNet ? 1 : 0,
+                overflow: "hidden",
+                transform: showNet ? "translateX(0)" : "translateX(12px)",
+                transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
+                pointerEvents: showNet ? "auto" : "none",
+              }}
+            >
+              <button
+                className="tb on"
+                style={{ width: "100%", whiteSpace: "nowrap" }}
+                onClick={cycleTaxHousehold}
+              >
+                {taxHouseholdLabel}
+              </button>
+            </div>
             <button className={`tb ${showNet ? "on" : ""}`} onClick={() => setShowNet(true)}>
               Netto
             </button>
@@ -720,7 +755,7 @@ function App() {
                 Samlet ud af lommen pr. år
               </h2>
               <p style={{ fontSize: 10, color: "#4a5e75", marginTop: 2 }}>
-                {showNet ? "Netto efter skat" : "Brutto"} · Belåning høj → lav
+                {showNet ? `Netto efter skat · ${taxHouseholdLabel}` : "Brutto"} · Belåning høj → lav
               </p>
             </div>
             <div style={{ display: "flex", gap: 4 }}>
@@ -1152,8 +1187,10 @@ function App() {
             LTV falder.
           </p>
           <p>
-            <strong style={{ color: "#4a5e75" }}>Skat:</strong> 33,7% fradragssats på rente+bidrag.
-            Afdrag ikke fradragsberettiget.
+            <strong style={{ color: "#4a5e75" }}>Skat:</strong> Netto bruger 33,7% fradragsværdi
+            på de første {fmt(taxThreshold)} kr. af rente+bidrag pr. år og 25,7% derefter.
+            Når Netto er valgt, kan du skifte mellem Enlig/Ægtepar for 50.000/100.000 kr.-grænsen.
+            Afdrag er ikke fradragsberettiget.
           </p>
         </div>
       </div>

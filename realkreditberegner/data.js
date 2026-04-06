@@ -44,7 +44,18 @@
     kort: { "0-40": 0.02, "40-60": 0.075, "60-80": 0.65 },
   };
 
-  const TAX = 0.337;
+  const TAX_MODEL = {
+    lowRate: 0.337,
+    highRate: 0.257,
+    thresholds: {
+      single: 50000,
+      couple: 100000,
+    },
+    households: [
+      { id: "single", label: "Enlig" },
+      { id: "couple", label: "Ægtepar" },
+    ],
+  };
   const LOAN_YEARS = 30;
 
   const MILESTONES = [
@@ -161,7 +172,7 @@
     LOAN_TYPES,
     BASE_BIDRAG,
     AF_TILLAEG,
-    TAX,
+    TAX_MODEL,
     LOAN_YEARS,
     MILESTONES,
     INV_LABELS,
