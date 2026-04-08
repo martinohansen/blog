@@ -187,6 +187,7 @@ function EcbMsciTip({ active, payload, label, avgLabel }) {
 function EcbMsciChart() {
   const [startYear, setStartYear] = useState(1999);
   const [rollYears, setRollYears] = useState(5);
+  const [hiddenEcbKeys, setHiddenEcbKeys] = useState(() => new Set());
   const chartData = useMemo(
     () => buildEcbMsciChartData(startYear, rollYears),
     [startYear, rollYears],
@@ -284,23 +285,52 @@ function EcbMsciChart() {
             />
             <Tooltip content={<EcbMsciTip avgLabel={avgLabel} />} />
             <ReferenceLine y={0} stroke={C.text4} strokeWidth={1} />
-            <Line type="monotone" dataKey="msci" stroke={C.green} strokeWidth={2} dot={false} name="MSCI World (kv.)" />
-            <Area type="monotone" dataKey="avg" stroke={C.orange} fill="url(#gAvg)" strokeWidth={2} dot={false} name={avgLabel} />
-            <Area type="stepAfter" dataKey="ecb" stroke={C.blue} fill="url(#gEcb)" strokeWidth={2.5} dot={false} name="ECB MRO-rente" />
+            {!hiddenEcbKeys.has("msci") && (
+              <Line type="monotone" dataKey="msci" stroke={C.green} strokeWidth={2} dot={false} name="MSCI World (kv.)" />
+            )}
+            {!hiddenEcbKeys.has("avg") && (
+              <Area type="monotone" dataKey="avg" stroke={C.orange} fill="url(#gAvg)" strokeWidth={2} dot={false} name={avgLabel} />
+            )}
+            {!hiddenEcbKeys.has("ecb") && (
+              <Area type="stepAfter" dataKey="ecb" stroke={C.blue} fill="url(#gEcb)" strokeWidth={2.5} dot={false} name="ECB MRO-rente" />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 12, justifyContent: "center", fontSize: 12 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, color: C.blue }}>
-          <span style={{ width: 14, height: 3, borderRadius: 2, background: C.blue }} />ECB MRO-rente
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, color: C.green }}>
-          <span style={{ width: 14, height: 3, borderRadius: 2, background: C.green }} />MSCI World (kv.)
-        </span>
-        <span style={{ display: "flex", alignItems: "center", gap: 5, color: C.orange }}>
-          <span style={{ width: 14, height: 3, borderRadius: 2, background: C.orange }} />{avgLabel}
-        </span>
+        {[
+          { key: "ecb", color: C.blue, label: "ECB MRO-rente" },
+          { key: "msci", color: C.green, label: "MSCI World (kv.)" },
+          { key: "avg", color: C.orange, label: avgLabel },
+        ].map(({ key, color, label }) => {
+          const hidden = hiddenEcbKeys.has(key);
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setHiddenEcbKeys((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; })}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 5,
+                color: hidden ? C.text4 : color,
+                background: "none",
+                border: 0,
+                padding: 0,
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: "inherit",
+                opacity: hidden ? 0.45 : 1,
+                textDecoration: hidden ? "line-through" : "none",
+                transition: "opacity 0.2s, color 0.2s",
+              }}
+            >
+              <span style={{ width: 14, height: 3, borderRadius: 2, background: hidden ? C.text4 : color, transition: "background 0.2s" }} />
+              {label}
+            </button>
+          );
+        })}
       </div>
       <p style={{ fontSize: 12, color: C.text4, marginTop: 12, lineHeight: 1.5, textAlign: "center" }}>
         ECB Main Refinancing Rate · MSCI World gross total return USD
@@ -497,6 +527,8 @@ function App() {
   const [investReturn, setInvestReturn] = useState(7);
   const [investYears, setInvestYears] = useState(15);
   const [taxHousehold, setTaxHousehold] = useState("single");
+  const [hiddenCostKeys, setHiddenCostKeys] = useState(() => new Set());
+  const [hiddenInvKeys, setHiddenInvKeys] = useState(() => new Set());
 
   const activeLoanTypes = LOAN_TYPES.filter((loanType) => selectedTypes.includes(loanType.id));
   const activeTypeKey = activeLoanTypes.map((loanType) => loanType.id).join(",");
@@ -516,6 +548,16 @@ function App() {
       return [...current, loanTypeId];
     });
   };
+  const toggleHidden = (setter) => (key) => {
+    setter((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+  const toggleCostKey = toggleHidden(setHiddenCostKeys);
+  const toggleInvKey = toggleHidden(setHiddenInvKeys);
 
   const chartData = useMemo(
     () => buildChartData(loanAmount, taxHousehold),
@@ -857,21 +899,23 @@ function App() {
                 )}
                 {activeLoanTypes.map((loanType) => (
                   <React.Fragment key={loanType.id}>
-                    <Area
-                      type="linear"
-                      dataKey={`${loanType.id}${cSuffix}`}
-                      stroke={loanType.color}
-                      fill={`url(#g-${loanType.id})`}
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{
-                        r: 4,
-                        stroke: loanType.color,
-                        fill: C.card,
-                        strokeWidth: 2,
-                      }}
-                    />
-                    {currentLtv !== null && currentLtv <= 80 && (
+                    {!hiddenCostKeys.has(loanType.id) && (
+                      <Area
+                        type="linear"
+                        dataKey={`${loanType.id}${cSuffix}`}
+                        stroke={loanType.color}
+                        fill={`url(#g-${loanType.id})`}
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{
+                          r: 4,
+                          stroke: loanType.color,
+                          fill: C.card,
+                          strokeWidth: 2,
+                        }}
+                      />
+                    )}
+                    {!hiddenCostKeys.has(loanType.id) && currentLtv !== null && currentLtv <= 80 && (
                       <ReferenceDot
                         x={currentLtv}
                         y={
@@ -896,15 +940,34 @@ function App() {
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 10, justifyContent: "center", fontSize: 12 }}>
-            {activeLoanTypes.map((loanType) => (
-              <span
-                key={loanType.id}
-                style={{ display: "flex", alignItems: "center", gap: 5, color: loanType.color }}
-              >
-                <span style={{ width: 14, height: 3, borderRadius: 2, background: loanType.color }} />
-                {loanType.label} ({loanType.rateLabel})
-              </span>
-            ))}
+            {activeLoanTypes.map((loanType) => {
+              const hidden = hiddenCostKeys.has(loanType.id);
+              return (
+                <button
+                  key={loanType.id}
+                  type="button"
+                  onClick={() => toggleCostKey(loanType.id)}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 5,
+                    color: hidden ? C.text4 : loanType.color,
+                    background: "none",
+                    border: 0,
+                    padding: 0,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                    fontSize: "inherit",
+                    opacity: hidden ? 0.45 : 1,
+                    textDecoration: hidden ? "line-through" : "none",
+                    transition: "opacity 0.2s, color 0.2s",
+                  }}
+                >
+                  <span style={{ width: 14, height: 3, borderRadius: 2, background: hidden ? C.text4 : loanType.color, transition: "background 0.2s" }} />
+                  {loanType.label} ({loanType.rateLabel})
+                </button>
+              );
+            })}
           </div>
 
           <div
@@ -1228,64 +1291,89 @@ function App() {
                     />
                     <Tooltip content={<InvTip />} />
                     <ReferenceLine y={0} stroke={C.text4} strokeWidth={1} />
-                    <Area type="monotone" dataKey="afkast" stroke={C.orange} fill="url(#gAfk)" strokeWidth={2} dot={false} />
-                    <Line
-                      type="monotone"
-                      dataKey="extraCost"
-                      stroke={C.red}
-                      strokeWidth={2}
-                      strokeDasharray="6 3"
-                      dot={false}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="nettoAfkast"
-                      stroke={C.green}
-                      fill="url(#gNet)"
-                      strokeWidth={2}
-                      dot={false}
-                      activeDot={{
-                        r: 4,
-                        stroke: C.green,
-                        fill: C.card,
-                        strokeWidth: 2,
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="cumulativeFreed"
-                      stroke={C.blue}
-                      fill="url(#gLiq)"
-                      strokeWidth={2}
-                      strokeDasharray="4 3"
-                      dot={false}
-                      activeDot={{
-                        r: 4,
-                        stroke: C.blue,
-                        fill: C.card,
-                        strokeWidth: 2,
-                      }}
-                    />
+                    {!hiddenInvKeys.has("afkast") && (
+                      <Area type="monotone" dataKey="afkast" stroke={C.orange} fill="url(#gAfk)" strokeWidth={2} dot={false} />
+                    )}
+                    {!hiddenInvKeys.has("extraCost") && (
+                      <Line
+                        type="monotone"
+                        dataKey="extraCost"
+                        stroke={C.red}
+                        strokeWidth={2}
+                        strokeDasharray="6 3"
+                        dot={false}
+                      />
+                    )}
+                    {!hiddenInvKeys.has("nettoAfkast") && (
+                      <Area
+                        type="monotone"
+                        dataKey="nettoAfkast"
+                        stroke={C.green}
+                        fill="url(#gNet)"
+                        strokeWidth={2}
+                        dot={false}
+                        activeDot={{
+                          r: 4,
+                          stroke: C.green,
+                          fill: C.card,
+                          strokeWidth: 2,
+                        }}
+                      />
+                    )}
+                    {!hiddenInvKeys.has("cumulativeFreed") && (
+                      <Area
+                        type="monotone"
+                        dataKey="cumulativeFreed"
+                        stroke={C.blue}
+                        fill="url(#gLiq)"
+                        strokeWidth={2}
+                        strokeDasharray="4 3"
+                        dot={false}
+                        activeDot={{
+                          r: 4,
+                          stroke: C.blue,
+                          fill: C.card,
+                          strokeWidth: 2,
+                        }}
+                      />
+                    )}
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center", fontSize: 12, marginBottom: 16 }}>
-                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ width: 14, height: 3, borderRadius: 2, background: C.orange }} />
-                  Afkast (efter inv.skat)
-                </span>
-                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ width: 14, height: 3, borderRadius: 2, background: C.red, opacity: 0.7 }} />
-                  Ekstra rente+bidrag (kum.)
-                </span>
-                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ width: 14, height: 3, borderRadius: 2, background: C.green }} />
-                  Netto afkast
-                </span>
-                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ width: 14, height: 3, borderRadius: 2, background: C.blue, opacity: 0.7 }} />
-                  Akkumuleret likviditet
-                </span>
+                {[
+                  { key: "afkast", color: C.orange, label: "Afkast (efter inv.skat)" },
+                  { key: "extraCost", color: C.red, label: "Ekstra rente+bidrag (kum.)", opacity: 0.7 },
+                  { key: "nettoAfkast", color: C.green, label: "Netto afkast" },
+                  { key: "cumulativeFreed", color: C.blue, label: "Akkumuleret likviditet", opacity: 0.7 },
+                ].map(({ key, color, label, opacity }) => {
+                  const hidden = hiddenInvKeys.has(key);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleInvKey(key)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 5,
+                        color: hidden ? C.text4 : undefined,
+                        background: "none",
+                        border: 0,
+                        padding: 0,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        fontSize: "inherit",
+                        opacity: hidden ? 0.45 : 1,
+                        textDecoration: hidden ? "line-through" : "none",
+                        transition: "opacity 0.2s, color 0.2s",
+                      }}
+                    >
+                      <span style={{ width: 14, height: 3, borderRadius: 2, background: hidden ? C.text4 : color, opacity: !hidden && opacity ? opacity : 1, transition: "background 0.2s" }} />
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
             </>
           )}
