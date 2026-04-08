@@ -459,6 +459,12 @@ function MilestoneCard({ milestone, showNet, maxBarVal }) {
             renderMetricRow("+ Afdrag", (result) => (
               <strong style={{ color: C.text2 }}>{fmt(Math.round(result.afdragKr))}</strong>
             ))}
+          {milestone.af &&
+            renderMetricRow("Likviditet/md.", (result) => (
+              <span style={{ color: C.blue }}>+{fmt(result.likviditetMd)}</span>
+            ),
+            { marginTop: 6 },
+            )}
           {renderMetricRow(
             "Mdl. total",
             (result) => (
@@ -798,7 +804,7 @@ function App() {
           >
             <div>
               <h2 style={{ fontSize: 28, fontWeight: 600, color: C.text, letterSpacing: -0.5 }}>
-                Samlet ud af lommen pr. år
+                Årlig omkostning
               </h2>
               <p style={{ fontSize: 14, color: C.text3, marginTop: 2 }}>
                 {showNet ? `Netto efter skat · ${taxHouseholdLabel}` : "Brutto"} · Belåning høj → lav
@@ -981,6 +987,14 @@ function App() {
                         {fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
                       </span>
                     </div>
+                    {result.likviditetMd > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 6, marginTop: 4 }}>
+                        <span style={{ color: C.blue, fontSize: 12 }}>Likviditet/md.</span>
+                        <span className="mono" style={{ fontFamily: C.mono, color: C.blue, fontSize: 12 }}>
+                          +{fmt(result.likviditetMd)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1096,6 +1110,23 @@ function App() {
                   — afkast minus meromkostning = den reelle gevinst/tab
                 </span>
               </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 3,
+                    background: C.blue,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ color: C.blue }}>
+                  <strong>Likviditet</strong>
+                </span>
+                <span style={{ color: C.text3 }}>
+                  — månedlig frie midler når afdrag udgår af dit budget
+                </span>
+              </div>
             </div>
           </div>
 
@@ -1165,6 +1196,10 @@ function App() {
                         <stop offset="0%" stopColor={C.green} stopOpacity={0.15} />
                         <stop offset="100%" stopColor={C.green} stopOpacity={0.02} />
                       </linearGradient>
+                      <linearGradient id="gLiq" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={C.blue} stopOpacity={0.12} />
+                        <stop offset="100%" stopColor={C.blue} stopOpacity={0.02} />
+                      </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(60,60,67,0.08)" />
                     <XAxis
@@ -1216,6 +1251,21 @@ function App() {
                         strokeWidth: 2,
                       }}
                     />
+                    <Area
+                      type="monotone"
+                      dataKey="cumulativeFreed"
+                      stroke={C.blue}
+                      fill="url(#gLiq)"
+                      strokeWidth={2}
+                      strokeDasharray="4 3"
+                      dot={false}
+                      activeDot={{
+                        r: 4,
+                        stroke: C.blue,
+                        fill: C.card,
+                        strokeWidth: 2,
+                      }}
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
@@ -1231,6 +1281,10 @@ function App() {
                 <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                   <span style={{ width: 14, height: 3, borderRadius: 2, background: C.green }} />
                   Netto afkast
+                </span>
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ width: 14, height: 3, borderRadius: 2, background: C.blue, opacity: 0.7 }} />
+                  Akkumuleret likviditet
                 </span>
               </div>
             </>
@@ -1265,6 +1319,12 @@ function App() {
                     {loanType.label} · {investYears} år
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.text3, marginBottom: 2 }}>
+                    <span style={{ color: C.blue }}>Likviditet</span>
+                    <span className="mono" style={{ color: C.blue, fontFamily: C.mono }}>
+                      +{fmt(finalPoint.cumulativeFreed)}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.text3, marginBottom: 2 }}>
                     <span>Afkast</span>
                     <span className="mono" style={{ color: C.orange, fontFamily: C.mono }}>
                       +{fmt(finalPoint.afkast)}
@@ -1293,8 +1353,9 @@ function App() {
             <strong style={{ color: C.text2 }}>Sådan læses grafen:</strong> Hovedstolen
             (indskud vs. egenkapital) holdes ude — den er ens i begge scenarier. "Afkast" er ren
             merværdi fra investering efter lagerbeskatning. "Ekstra rente+bidrag" er den
-            akkumulerede meromkostning ved at holde konstant gæld i stedet for at afdrage. Når den
-            grønne linje er over nul, tjener du på at investere.
+            akkumulerede meromkostning ved at holde konstant gæld i stedet for at afdrage.
+            "Akkumuleret likviditet" er den samlede kontantstrøm frigjort af at droppe afdraget.
+            Når den grønne linje er over nul, tjener du på at investere.
           </div>
           <div style={{ fontSize: 14, color: C.text4, marginTop: 6, lineHeight: 1.5 }}>
             Lagerbeskatning: 27% op til 61.000 kr., 42% derover. Ved afdrag falder den vægtede

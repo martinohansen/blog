@@ -104,6 +104,16 @@
     const renteKrN = renteKrB * (1 - effectiveReliefRate);
     const bidragKrN = bidragKrB * (1 - effectiveReliefRate);
 
+    let likviditetMd = 0;
+    if (isInterestOnly) {
+      const bidragPctIfPaying = getEffectiveBidragPct(loanTypeId, ltv, false);
+      const bidragKrIfPayingB = (bidragPctIfPaying / 100) * amount;
+      const afdragKrIfPaying = annuityYearly(amount, rate) - renteKrB;
+      const totalIfPayingB = renteKrB + bidragKrIfPayingB + afdragKrIfPaying;
+      const totalAfdragsfriB = renteKrB + bidragKrB;
+      likviditetMd = Math.round((totalIfPayingB - totalAfdragsfriB) / 12);
+    }
+
     return {
       bidragPct,
       rentePct: rate,
@@ -114,6 +124,7 @@
       bidragKrN,
       taxRelief,
       afdragKr,
+      likviditetMd,
       ydelseB: renteKrB + bidragKrB,
       ydelseN: renteKrN + bidragKrN,
       totalB: renteKrB + bidragKrB + afdragKr,
@@ -204,6 +215,7 @@
     let principalA = loanAmount;
     let cumulativeCostA = 0;
     let cumulativeCostB = 0;
+    let cumulativeFreed = 0;
     let portfolio = 0;
     let totalInvested = 0;
 
@@ -215,6 +227,7 @@
         nettoAfkast: 0,
         invested: 0,
         equityBuilt: 0,
+        cumulativeFreed: 0,
       },
     ];
 
@@ -235,6 +248,8 @@
       cumulativeCostB += costB;
 
       const monthlyFreed = Math.max(0, (costA + afdragA - costB) / 12);
+      const yearlyFreed = Math.max(0, costA + afdragA - costB);
+      cumulativeFreed += yearlyFreed;
       for (let month = 0; month < 12; month += 1) {
         portfolio += monthlyFreed;
         totalInvested += monthlyFreed;
@@ -266,7 +281,8 @@
         invested: Math.round(totalInvested),
         equityBuilt: Math.round(loanAmount - principalA),
         portfolio: Math.round(portfolio),
-        freedYearly: Math.round(costA + afdragA - costB),
+        freedYearly: Math.round(yearlyFreed),
+        cumulativeFreed: Math.round(portfolio),
       });
     }
 
