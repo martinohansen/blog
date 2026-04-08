@@ -1,50 +1,50 @@
 (function () {
-  const LOAN_TYPES = [
+  var LOAN_TYPES = [
     {
       id: "fast",
       label: "Fast",
       rate: 4.0,
       rateLabel: "4,0%",
-      color: "#c9a87c",
+      color: "#c9a050",
     },
     {
       id: "f5",
       label: "F5",
       rate: 2.6,
       rateLabel: "2,6%",
-      color: "#6db3e8",
+      color: "#0071e3",
     },
     {
       id: "f3",
       label: "F3",
       rate: 2.4,
       rateLabel: "2,4%",
-      color: "#a78bfa",
+      color: "#8b5cf6",
     },
     {
       id: "kort",
       label: "Kort",
       rate: 2.3,
       rateLabel: "2,3%",
-      color: "#34d399",
+      color: "#059669",
     },
   ];
 
-  const BASE_BIDRAG = {
+  var BASE_BIDRAG = {
     fast: { "0-40": 0.225, "40-60": 0.675, "60-80": 1.025 },
     f5: { "0-40": 0.4, "40-60": 0.925, "60-80": 1.275 },
     f3: { "0-40": 0.6, "40-60": 1.125, "60-80": 1.475 },
     kort: { "0-40": 0.4, "40-60": 0.925, "60-80": 1.275 },
   };
 
-  const AF_TILLAEG = {
+  var AF_TILLAEG = {
     fast: { "0-40": 0.0, "40-60": 0.05, "60-80": 0.65 },
     f5: { "0-40": 0.02, "40-60": 0.075, "60-80": 0.65 },
     f3: { "0-40": 0.02, "40-60": 0.075, "60-80": 0.65 },
     kort: { "0-40": 0.02, "40-60": 0.075, "60-80": 0.65 },
   };
 
-  const TAX_MODEL = {
+  var TAX_MODEL = {
     lowRate: 0.337,
     highRate: 0.257,
     thresholds: {
@@ -56,15 +56,15 @@
       { id: "couple", label: "Ægtepar" },
     ],
   };
-  const LOAN_YEARS = 30;
+  var LOAN_YEARS = 30;
 
-  const MILESTONES = [
+  var MILESTONES = [
     {
       ltv: 80,
       band: "60-80",
       af: false,
       tag: "Med afdrag",
-      tc: "#e07a5f",
+      tc: "#D4775A",
       desc: "Maks. belåning · Afdragsfrihed ikke muligt",
     },
     {
@@ -72,7 +72,7 @@
       band: "40-60",
       af: true,
       tag: "Afdragsfri",
-      tc: "#6db3e8",
+      tc: "#0071e3",
       desc: "Afdragsfrihed muligt · Lavere bidrag",
     },
     {
@@ -80,21 +80,19 @@
       band: "0-40",
       af: true,
       tag: "Lavest bidrag",
-      tc: "#34d399",
+      tc: "#059669",
       desc: "Laveste bidragsinterval",
     },
   ];
 
-  const INV_LABELS = {
-    afkast: { label: "Afkast (efter inv.skat)", color: "#c9a87c" },
-    extraCost: { label: "Ekstra rente+bidrag", color: "#e07a5f" },
-    nettoAfkast: { label: "Netto afkast", color: "#34d399" },
+  var INV_LABELS = {
+    afkast: { label: "Afkast (efter inv.skat)", color: "#c9a050" },
+    extraCost: { label: "Ekstra rente+bidrag", color: "#D4775A" },
+    nettoAfkast: { label: "Netto afkast", color: "#059669" },
   };
 
   function buildEcbMsciRaw() {
-    // Derived from MSCI index 990100 monthly performance history
-    // (variant GRTR, currency USD) using quarter-end trading months.
-    const msciQ = [
+    var msciQ = [
       3.651352, 5.005966, -1.415415, 16.83152, 1.089812, -3.361388, -4.97421, -6.205243,
       -12.774722, 2.773747, -14.301854, 8.662773, 0.428082, -8.992685, -18.298782, 7.748987,
       -4.943904, 17.246555, 4.940171, 14.369372, 2.719295, 1.042509, -0.904183, 12.051267,
@@ -110,60 +108,43 @@
       7.876829, 7.003951, -3.362323, 11.531969, 9.005899, 2.779004, 6.463105, -0.068512,
       -1.684904, 11.63123, 7.361411, 3.199428, -3.474716,
     ];
-    // Hidden lookback for rolling annualized lines. MSCI's public monthly API
-    // starts at 1998-12-31, so pre-1999 values use published annual gross
-    // returns split evenly across quarters. They are not plotted as quarter data.
-    const msciAnnualLookback = {
-      1984: 5.77,
-      1985: 41.77,
-      1986: 42.8,
-      1987: 16.76,
-      1988: 23.95,
-      1989: 17.19,
-      1990: -16.52,
-      1991: 18.97,
-      1992: -4.66,
-      1993: 23.13,
-      1994: 5.58,
-      1995: 21.32,
-      1996: 14.0,
-      1997: 16.23,
-      1998: 24.8,
+    var msciAnnualLookback = {
+      1984: 5.77, 1985: 41.77, 1986: 42.8, 1987: 16.76, 1988: 23.95,
+      1989: 17.19, 1990: -16.52, 1991: 18.97, 1992: -4.66, 1993: 23.13,
+      1994: 5.58, 1995: 21.32, 1996: 14.0, 1997: 16.23, 1998: 24.8,
     };
-    const msciLookbackQ = [];
-    Object.keys(msciAnnualLookback).forEach((yearValue) => {
-      const year = +yearValue;
-      const quarterlyReturn = (Math.pow(1 + msciAnnualLookback[year] / 100, 1 / 4) - 1) * 100;
-      const firstQuarter = year === 1984 ? 2 : 1;
-
-      for (let quarter = firstQuarter; quarter <= 4; quarter += 1) {
+    var msciLookbackQ = [];
+    Object.keys(msciAnnualLookback).forEach(function (yearValue) {
+      var year = +yearValue;
+      var quarterlyReturn = (Math.pow(1 + msciAnnualLookback[year] / 100, 1 / 4) - 1) * 100;
+      var firstQuarter = year === 1984 ? 2 : 1;
+      for (var quarter = firstQuarter; quarter <= 4; quarter += 1) {
         msciLookbackQ.push(+quarterlyReturn.toFixed(6));
       }
     });
-    const msciHistoryQ = msciLookbackQ.concat(msciQ);
-    const msciVisibleStartIndex = msciLookbackQ.length;
-    const labels = [];
-
-    for (let year = 1999; year <= 2025; year += 1) {
-      for (let quarter = 1; quarter <= 4; quarter += 1) {
-        labels.push(`${year} Q${quarter}`);
+    var msciHistoryQ = msciLookbackQ.concat(msciQ);
+    var msciVisibleStartIndex = msciLookbackQ.length;
+    var labels = [];
+    for (var year = 1999; year <= 2025; year += 1) {
+      for (var quarter = 1; quarter <= 4; quarter += 1) {
+        labels.push(year + " Q" + quarter);
       }
     }
     labels.push("2026 Q1");
 
-    const ecbBase = [
+    var ecbBase = [
       2.5, 2.5, 3.75, 4.25, 3.25, 2.5, 2.0, 2.0, 2.75, 3.75, 3.75, 1.25, 1.0,
       1.25, 0.75, 0.5, 0.15, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.4, 4.0,
       3.65, 2.35,
     ];
-    const ecb = [];
-    for (let yearIndex = 0; yearIndex < ecbBase.length; yearIndex += 1) {
-      for (let quarter = 0; quarter < 4; quarter += 1) {
+    var ecb = [];
+    for (var yearIndex = 0; yearIndex < ecbBase.length; yearIndex += 1) {
+      for (var quarter = 0; quarter < 4; quarter += 1) {
         ecb.push(ecbBase[yearIndex]);
       }
     }
 
-    const overrideQuarter = (year, quarterIndex, value) => {
+    var overrideQuarter = function (year, quarterIndex, value) {
       ecb[(year - 1999) * 4 + quarterIndex] = value;
     };
 
@@ -201,17 +182,17 @@
     overrideQuarter(2025, 3, 2.15);
     ecb.push(2.15);
 
-    return { labels, msciQ, msciHistoryQ, msciVisibleStartIndex, ecb };
+    return { labels: labels, msciQ: msciQ, msciHistoryQ: msciHistoryQ, msciVisibleStartIndex: msciVisibleStartIndex, ecb: ecb };
   }
 
   window.RealkreditData = {
-    LOAN_TYPES,
-    BASE_BIDRAG,
-    AF_TILLAEG,
-    TAX_MODEL,
-    LOAN_YEARS,
-    MILESTONES,
-    INV_LABELS,
+    LOAN_TYPES: LOAN_TYPES,
+    BASE_BIDRAG: BASE_BIDRAG,
+    AF_TILLAEG: AF_TILLAEG,
+    TAX_MODEL: TAX_MODEL,
+    LOAN_YEARS: LOAN_YEARS,
+    MILESTONES: MILESTONES,
+    INV_LABELS: INV_LABELS,
     ECB_MSCI_RAW: buildEcbMsciRaw(),
   };
 })();
