@@ -29,6 +29,7 @@ body {
   background: #e8e8ed;
   border-radius: 9px;
   padding: 2px;
+  max-width: 100%;
 }
 
 .seg button {
@@ -66,6 +67,8 @@ body {
   background: #fff;
   color: #86868b;
   font-family: inherit;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .chip:hover {
@@ -78,11 +81,13 @@ body {
 
 input[type="range"] {
   -webkit-appearance: none;
+  appearance: none;
   width: 100%;
   height: 4px;
   border-radius: 2px;
   outline: none;
   cursor: pointer;
+  background: transparent;
 }
 
 input[type="range"]::-webkit-slider-thumb {
@@ -95,6 +100,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.08);
   transition: box-shadow 0.15s ease;
+  margin-top: -12px;
 }
 
 input[type="range"]::-webkit-slider-thumb:active {
@@ -102,8 +108,24 @@ input[type="range"]::-webkit-slider-thumb:active {
 }
 
 input[type="range"]::-webkit-slider-runnable-track {
+  -webkit-appearance: none;
   height: 4px;
   border-radius: 2px;
+}
+
+input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15), 0 1px 2px rgba(0,0,0,0.08);
 }
 
 .msc {
@@ -144,6 +166,29 @@ input[type="range"]::-webkit-slider-runnable-track {
   font-size: 12px;
 }
 
+.milestone-scroll {
+  overflow-x: auto;
+  margin-inline: -4px;
+  padding-inline: 4px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.milestone-grid {
+  min-width: 520px;
+}
+
+.loan-toolbar {
+  min-width: 0;
+}
+
+.loan-selector {
+  min-width: 0;
+}
+
+.loan-toolbar-actions {
+  flex-shrink: 0;
+}
+
 .sep {
   border-top: 0.5px solid rgba(60,60,67,0.1);
   margin: 6px 0;
@@ -152,7 +197,7 @@ input[type="range"]::-webkit-slider-runnable-track {
 .lbl {
   color: #86868b;
   font-size: 11px;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .tb {
@@ -171,4 +216,47 @@ input[type="range"]::-webkit-slider-runnable-track {
 .tb.on {
   background: #1d1d1f;
   color: #fff;
+}
+
+@media (max-width: 720px) {
+  .card {
+    border-radius: 22px;
+    padding: 24px 18px;
+  }
+
+  .msc {
+    padding: 16px;
+  }
+
+  .loan-selector {
+    flex-wrap: wrap;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .card {
+    border-radius: 20px;
+    padding: 20px 14px;
+  }
+
+  .chip {
+    padding: 6px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .tb {
+    padding-inline: 10px;
+  }
+
+  .msc {
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .milestone-grid {
+    min-width: 480px;
+  }
 }

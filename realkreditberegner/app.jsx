@@ -1,4 +1,4 @@
-const { useMemo, useState } = React;
+const { useEffect, useMemo, useState } = React;
 const {
   AreaChart,
   Area,
@@ -188,11 +188,19 @@ function EcbMsciChart() {
   const [startYear, setStartYear] = useState(1999);
   const [rollYears, setRollYears] = useState(5);
   const [hiddenEcbKeys, setHiddenEcbKeys] = useState(() => new Set());
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const chartData = useMemo(
     () => buildEcbMsciChartData(startYear, rollYears),
     [startYear, rollYears],
   );
   const avgLabel = `${rollYears}-års annualiseret`;
+  const isNarrow = viewportWidth <= 720;
+
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   return (
     <div className="card">
@@ -205,7 +213,14 @@ function EcbMsciChart() {
         </p>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isNarrow ? "1fr" : "1fr 1fr",
+          gap: 20,
+          marginBottom: 20,
+        }}
+      >
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
             <span style={{ fontSize: 14, color: C.text2 }}>Fra år</span>
@@ -414,99 +429,103 @@ function MilestoneCard({ milestone, showNet, maxBarVal }) {
 
       {isOpen && (
         <div id={contentId} style={{ marginTop: 14 }}>
-          <div className="row" style={{ gridTemplateColumns: gridColumns }}>
-            <div />
-            {milestone.rows.map(({ loanType }) => (
-              <div
-                key={loanType.id}
-                style={{ textAlign: "center", color: loanType.color, fontWeight: 600, fontSize: 12 }}
-              >
-                {loanType.label}
+          <div className="milestone-scroll">
+            <div className="milestone-grid">
+              <div className="row" style={{ gridTemplateColumns: gridColumns }}>
+                <div />
+                {milestone.rows.map(({ loanType }) => (
+                  <div
+                    key={loanType.id}
+                    style={{ textAlign: "center", color: loanType.color, fontWeight: 600, fontSize: 12 }}
+                  >
+                    {loanType.label}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
 
-          {renderMetricRow("Rente", (result) => (
-            <span style={{ color: "#8CA8D8" }}>{fmtPct2(result.rentePct)}</span>
-          ))}
-          {renderMetricRow("Bidrag", (result) => (
-            <span style={{ color: "#B8A8D0" }}>{fmtPct(result.bidragPct)}</span>
-          ))}
-          {renderMetricRow(
-            "Samlet sats",
-            (result) => <strong>{fmtPct2(result.rentePct + result.bidragPct)}</strong>,
-            { borderTop: `0.5px solid ${C.sep}`, paddingTop: 6 },
-          )}
+              {renderMetricRow("Rente", (result) => (
+                <span style={{ color: "#8CA8D8" }}>{fmtPct2(result.rentePct)}</span>
+              ))}
+              {renderMetricRow("Bidrag", (result) => (
+                <span style={{ color: "#B8A8D0" }}>{fmtPct(result.bidragPct)}</span>
+              ))}
+              {renderMetricRow(
+                "Samlet sats",
+                (result) => <strong>{fmtPct2(result.rentePct + result.bidragPct)}</strong>,
+                { borderTop: `0.5px solid ${C.sep}`, paddingTop: 6 },
+              )}
 
-          <div className="sep" />
+              <div className="sep" />
 
-          {renderMetricRow("Rente kr./år", (result) => (
-            <span style={{ color: "#8CA8D8" }}>
-              {fmt(Math.round(showNet ? result.renteKrN : result.renteKrB))}
-            </span>
-          ))}
-          {renderMetricRow("Bidrag kr./år", (result) => (
-            <span style={{ color: "#B8A8D0" }}>
-              {fmt(Math.round(showNet ? result.bidragKrN : result.bidragKrB))}
-            </span>
-          ))}
-          {!milestone.af &&
-            renderMetricRow("Afdrag kr./år", (result) => (
-              <span style={{ color: "#86868b" }}>{fmt(Math.round(result.afdragKr))}</span>
-            ))}
-
-          <div style={{ marginTop: 10 }}>
-            <div style={{ display: "flex", gap: 10, marginBottom: 4, fontSize: 12 }}>
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 10, height: 8, borderRadius: 2, background: "#8CA8D8", display: "inline-block" }} />
-                Rente
-              </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ width: 10, height: 8, borderRadius: 2, background: "#B8A8D0", display: "inline-block" }} />
-                Bidrag
-              </span>
-              {!milestone.af && (
-                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ width: 10, height: 8, borderRadius: 2, background: "#C8C8CC", display: "inline-block" }} />
-                  Afdrag
+              {renderMetricRow("Rente kr./år", (result) => (
+                <span style={{ color: "#8CA8D8" }}>
+                  {fmt(Math.round(showNet ? result.renteKrN : result.renteKrB))}
                 </span>
+              ))}
+              {renderMetricRow("Bidrag kr./år", (result) => (
+                <span style={{ color: "#B8A8D0" }}>
+                  {fmt(Math.round(showNet ? result.bidragKrN : result.bidragKrB))}
+                </span>
+              ))}
+              {!milestone.af &&
+                renderMetricRow("Afdrag kr./år", (result) => (
+                  <span style={{ color: "#86868b" }}>{fmt(Math.round(result.afdragKr))}</span>
+                ))}
+
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: "flex", gap: 10, marginBottom: 4, fontSize: 12, flexWrap: "wrap" }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 10, height: 8, borderRadius: 2, background: "#8CA8D8", display: "inline-block" }} />
+                    Rente
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ width: 10, height: 8, borderRadius: 2, background: "#B8A8D0", display: "inline-block" }} />
+                    Bidrag
+                  </span>
+                  {!milestone.af && (
+                    <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ width: 10, height: 8, borderRadius: 2, background: "#C8C8CC", display: "inline-block" }} />
+                      Afdrag
+                    </span>
+                  )}
+                </div>
+                {milestone.rows.map(({ loanType, breakdown }) => (
+                  <div key={loanType.id} style={{ marginBottom: 4 }}>
+                    <CostBar breakdown={breakdown} maxVal={maxBarVal} showNet={showNet} />
+                  </div>
+                ))}
+              </div>
+
+              <div className="sep" />
+
+              {renderMetricRow(
+                "Ydelse/år",
+                (result) => <strong>{fmt(Math.round(showNet ? result.ydelseN : result.ydelseB))}</strong>,
+              )}
+              {!milestone.af &&
+                renderMetricRow("+ Afdrag", (result) => (
+                  <strong style={{ color: C.text2 }}>{fmt(Math.round(result.afdragKr))}</strong>
+                ))}
+              {milestone.af &&
+                renderMetricRow("Likviditet/md.", (result) => (
+                  <span style={{ color: C.blue }}>+{fmt(result.likviditetMd)}</span>
+                ),
+                { marginTop: 6 },
+                )}
+              {renderMetricRow(
+                "Mdl. total",
+                (result) => (
+                  <span style={{ fontSize: 14, fontWeight: 600, color: milestone.tc, fontFamily: C.mono }}>
+                    {fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
+                  </span>
+                ),
+                { background: C.card, borderRadius: 12, padding: "8px 6px", marginTop: 6 },
               )}
             </div>
-            {milestone.rows.map(({ loanType, breakdown }) => (
-              <div key={loanType.id} style={{ marginBottom: 4 }}>
-                <CostBar breakdown={breakdown} maxVal={maxBarVal} showNet={showNet} />
-              </div>
-            ))}
           </div>
 
-          <div className="sep" />
-
-          {renderMetricRow(
-            "Ydelse/år",
-            (result) => <strong>{fmt(Math.round(showNet ? result.ydelseN : result.ydelseB))}</strong>,
-          )}
-          {!milestone.af &&
-            renderMetricRow("+ Afdrag", (result) => (
-              <strong style={{ color: C.text2 }}>{fmt(Math.round(result.afdragKr))}</strong>
-            ))}
-          {milestone.af &&
-            renderMetricRow("Likviditet/md.", (result) => (
-              <span style={{ color: C.blue }}>+{fmt(result.likviditetMd)}</span>
-            ),
-            { marginTop: 6 },
-            )}
-          {renderMetricRow(
-            "Mdl. total",
-            (result) => (
-              <span style={{ fontSize: 14, fontWeight: 600, color: milestone.tc, fontFamily: C.mono }}>
-                {fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
-              </span>
-            ),
-            { background: C.card, borderRadius: 12, padding: "8px 6px", marginTop: 6 },
-          )}
-
           {!milestone.af && (
-            <div style={{ fontSize: 12, color: C.text3, marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: C.text3, marginTop: 8 }}>
               Afdrag er opsparing i boligen — du får pengene igen ved salg/omlægning
             </div>
           )}
@@ -517,6 +536,7 @@ function MilestoneCard({ milestone, showNet, maxBarVal }) {
 }
 
 function App() {
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
   const [loanAmount, setLoanAmount] = useState(3000000);
   const [homePrice, setHomePrice] = useState(5000000);
   const [selectedTypes, setSelectedTypes] = useState(() =>
@@ -591,6 +611,8 @@ function App() {
   const hasValidInputs = homePrice > 0 && loanAmount >= 0;
   const currentLtv = hasValidInputs ? (loanAmount / homePrice) * 100 : null;
   const currentBand = getLoanBandForLtv(currentLtv ?? 0);
+  const isNarrow = viewportWidth <= 720;
+  const isPhone = viewportWidth <= 480;
   const selectedCaseData = activeLoanTypes.map((loanType) => ({
     loanType,
     breakdown: breakdown(
@@ -607,6 +629,12 @@ function App() {
   );
   const selectedEquity = Math.max(0, homePrice - loanAmount);
 
+  useEffect(() => {
+    const handleResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   return (
     <div
       style={{
@@ -614,11 +642,11 @@ function App() {
         background: C.bg,
         color: C.text,
         fontFamily: C.font,
-        padding: "32px 16px",
+        padding: isPhone ? "20px 12px" : "32px 16px",
       }}
     >
        <div style={{ maxWidth: 820, margin: "0 auto" }}>
-        <div style={{ marginBottom: 32 }}>
+        <div style={{ marginBottom: isPhone ? 24 : 32 }}>
           <div
             style={{
               fontSize: 17,
@@ -631,11 +659,11 @@ function App() {
             Realkreditberegner
           </div>
           <h1 style={{
-            fontSize: 56,
+            fontSize: isPhone ? 38 : isNarrow ? 46 : 56,
             fontWeight: 600,
             lineHeight: 1.05,
             marginBottom: 12,
-            letterSpacing: -1.5,
+            letterSpacing: isPhone ? -1 : -1.5,
             background: "linear-gradient(90deg, #1d1d1f, #0071e3, #8b5cf6, #1d1d1f)",
             backgroundSize: "200% 100%",
             WebkitBackgroundClip: "text",
@@ -675,20 +703,21 @@ function App() {
 
         <div className="card">
           <div
+            className="loan-toolbar"
             style={{
               display: "flex",
               justifyContent: "space-between",
               gap: 12,
-              alignItems: "flex-start",
+              alignItems: "center",
               marginBottom: 24,
             }}
           >
             <div
+              className="loan-selector"
               style={{
                 display: "flex",
                 gap: 6,
                 alignItems: "center",
-                flexWrap: "wrap",
                 minWidth: 0,
                 rowGap: 6,
                 flex: "1 1 auto",
@@ -721,7 +750,7 @@ function App() {
                 </button>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 6, flex: "0 0 auto", alignItems: "center" }}>
+            <div className="loan-toolbar-actions" style={{ display: "flex", gap: 6, flex: "0 0 auto", alignItems: "center" }}>
               <div
                 style={{
                   width: showNet ? 78 : 0,
@@ -751,18 +780,20 @@ function App() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: isPhone ? 18 : 24 }}>
             <div>
               <div
                 style={{
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "baseline",
+                  gap: 10,
+                  flexWrap: "wrap",
                   marginBottom: 10,
                 }}
               >
                 <span style={{ fontSize: 14, color: C.text2 }}>Boligpris</span>
-                <span className="mono" style={{ fontSize: 24, fontWeight: 600, fontFamily: C.mono }}>
+                <span className="mono" style={{ fontSize: isPhone ? 20 : 24, fontWeight: 600, fontFamily: C.mono }}>
                   {fmt(homePrice)} kr.
                 </span>
               </div>
@@ -800,11 +831,13 @@ function App() {
                   display: "flex",
                   justifyContent: "space-between",
                   alignItems: "baseline",
+                  gap: 10,
+                  flexWrap: "wrap",
                   marginBottom: 10,
                 }}
               >
                 <span style={{ fontSize: 14, color: C.text2 }}>Restgæld</span>
-                <span className="mono" style={{ fontSize: 24, fontWeight: 600, fontFamily: C.mono }}>
+                <span className="mono" style={{ fontSize: isPhone ? 20 : 24, fontWeight: 600, fontFamily: C.mono }}>
                   {fmt(loanAmount)} kr.
                 </span>
               </div>
@@ -1017,7 +1050,7 @@ function App() {
                     minWidth: 0,
                   }}
                 >
-                  <div style={{ fontSize: 14, fontWeight: 600, color: loanType.color, marginBottom: 8, whiteSpace: "nowrap" }}>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: loanType.color, marginBottom: 8 }}>
                     {loanType.label}
                   </div>
                   <div style={{ display: "grid", gap: 4, fontSize: 13 }}>
@@ -1193,7 +1226,14 @@ function App() {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: isNarrow ? "1fr" : "1fr 1fr",
+              gap: 20,
+              marginBottom: 20,
+            }}
+          >
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
                 <span style={{ fontSize: 14, color: C.text2 }}>Forventet afkast</span>
