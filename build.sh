@@ -8,6 +8,7 @@ FOOTER="_templates/footer.html"
 page() {
     local src=$1 out=$2 title=$3 page=$4
     echo "$out"
+    mkdir -p "$(dirname "$out")"
     pandoc "$src" \
         --from=html \
         --template="_templates/page.html" \
@@ -23,6 +24,7 @@ page() {
 page _pages/home.html index.html "Home" home
 page _pages/blog.html blog/index.html "Blog" blog
 page _pages/photos.html photos/index.html "Photos" photos
+page _pages/tools.html tools/index.html "Tools" tools
 
 # Posts
 while IFS= read -r md; do

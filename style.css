@@ -51,7 +51,8 @@ nav a {
 }
 body.home nav a[href="/"],
 body.blog nav a[href="/blog/"],
-body.photos nav a[href="/photos/"] {
+body.photos nav a[href="/photos/"],
+body.tools nav a[href="/tools/"] {
   color: var(--fg);
   text-decoration: underline;
   text-decoration-color: var(--nav-active-underline);
