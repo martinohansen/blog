@@ -546,6 +546,7 @@ function App() {
   const [chartMode, setChartMode] = useState("total");
   const [investReturn, setInvestReturn] = useState(7);
   const [investYears, setInvestYears] = useState(15);
+  const [investOwners, setInvestOwners] = useState(1);
   const [taxHousehold, setTaxHousehold] = useState("single");
   const [hiddenCostKeys, setHiddenCostKeys] = useState(() => new Set());
   const [hiddenInvKeys, setHiddenInvKeys] = useState(() => new Set());
@@ -594,6 +595,10 @@ function App() {
   const cSuffix =
     chartMode === "total" ? (showNet ? "_netto" : "_brutto") : showNet ? "_yn" : "_yb";
 
+  const hasValidInputs = homePrice > 0 && loanAmount >= 0;
+  const currentLtv = hasValidInputs ? (loanAmount / homePrice) * 100 : null;
+  const currentBand = getLoanBandForLtv(currentLtv ?? 0);
+
   const investData = useMemo(
     () =>
       buildInvestmentData(
@@ -602,15 +607,14 @@ function App() {
         investReturn,
         investYears,
         taxHousehold,
+        investOwners,
+        currentLtv ?? 60,
       ),
-    [activeTypeKey, loanAmount, investReturn, investYears, taxHousehold],
+    [activeTypeKey, loanAmount, investReturn, investYears, taxHousehold, investOwners, currentLtv],
   );
 
   const investChartType = activeLoanTypes[0]?.id;
   const investChartData = investData[investChartType] || [];
-  const hasValidInputs = homePrice > 0 && loanAmount >= 0;
-  const currentLtv = hasValidInputs ? (loanAmount / homePrice) * 100 : null;
-  const currentBand = getLoanBandForLtv(currentLtv ?? 0);
   const isNarrow = viewportWidth <= 720;
   const isPhone = viewportWidth <= 480;
   const selectedCaseData = activeLoanTypes.map((loanType) => ({
@@ -1147,81 +1151,113 @@ function App() {
         </div>
 
         <div className="card">
-          <div style={{ marginBottom: 20 }}>
-            <h2 style={{ fontSize: 28, fontWeight: 600, marginBottom: 6, color: C.text, letterSpacing: -0.5 }}>
-              Afdragsfri + investér vs. fortsæt afdrag
-            </h2>
-            <p style={{ fontSize: 14, color: C.text2, lineHeight: 1.6, fontWeight: 400 }}>
-              Udgangspunkt: 60% LTV. Pengene er de samme i begge scenarier — enten som egenkapital
-              i boligen (afdrag) eller som indskud i en portefølje (investering). Forskellen er
-              udelukkende:
-            </p>
-            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 3,
-                    background: C.orange,
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ color: C.orange }}>
-                  <strong>Afkast</strong>
-                </span>
-                <span style={{ color: C.text3 }}>
-                  — hvad investeringen kaster af sig (efter lagerbeskatning)
-                </span>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
+            <div>
+              <h2 style={{ fontSize: 28, fontWeight: 600, marginBottom: 6, color: C.text, letterSpacing: -0.5 }}>
+                Investér vs. afdrag
+              </h2>
+              <p style={{ fontSize: 14, color: C.text2, lineHeight: 1.6, fontWeight: 400 }}>
+                Udgangspunkt: {currentLtv === null ? "60%" : fmtPct2(currentLtv)} belåning med {fmt(loanAmount)} kr. lån. Pengene er de samme i begge scenarier — enten som egenkapital
+                i boligen (afdrag) eller som indskud i en portefølje (investering).
+              </p>
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      background: C.orange,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ color: C.orange }}>
+                    <strong>Afkast</strong>
+                  </span>
+                  <span style={{ color: C.text3 }}>
+                    — hvad investeringen kaster af sig (efter lagerbeskatning)
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      background: C.red,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ color: C.red }}>
+                    <strong>Ekstra rente+bidrag</strong>
+                  </span>
+                  <span style={{ color: C.text3 }}>— prisen for at holde højere gæld</span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      background: C.green,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ color: C.green }}>
+                    <strong>Netto afkast</strong>
+                  </span>
+                  <span style={{ color: C.text3 }}>
+                    — afkast minus meromkostning = den reelle gevinst/tab
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: 3,
+                      background: C.blue,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ color: C.blue }}>
+                    <strong>Likviditet</strong>
+                  </span>
+                  <span style={{ color: C.text3 }}>
+                    — månedlig frie midler når afdrag udgår af dit budget
+                  </span>
+                </div>
               </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 3,
-                    background: C.red,
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ color: C.red }}>
-                  <strong>Ekstra rente+bidrag</strong>
-                </span>
-                <span style={{ color: C.text3 }}>— prisen for at holde højere gæld</span>
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0, marginTop: 4 }}>
+              <div
+                style={{
+                  width: investOwners > 1 ? 52 : 0,
+                  opacity: investOwners > 1 ? 1 : 0,
+                  overflow: "hidden",
+                  transform: investOwners > 1 ? "translateX(0)" : "translateX(12px)",
+                  transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
+                  pointerEvents: investOwners > 1 ? "auto" : "none",
+                }}
+              >
+                <button
+                  className="tb on"
+                  style={{ width: "100%", whiteSpace: "nowrap" }}
+                  onClick={() => setInvestOwners((v) => (v >= 5 ? 2 : v + 1))}
+                >
+                  {investOwners}
+                </button>
               </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 3,
-                    background: C.green,
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ color: C.green }}>
-                  <strong>Netto afkast</strong>
-                </span>
-                <span style={{ color: C.text3 }}>
-                  — afkast minus meromkostning = den reelle gevinst/tab
-                </span>
-              </div>
-              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 3,
-                    background: C.blue,
-                    flexShrink: 0,
-                  }}
-                />
-                <span style={{ color: C.blue }}>
-                  <strong>Likviditet</strong>
-                </span>
-                <span style={{ color: C.text3 }}>
-                  — månedlig frie midler når afdrag udgår af dit budget
-                </span>
+              <div className="seg">
+                <button className={investOwners === 1 ? "on" : ""} onClick={() => setInvestOwners(1)}>
+                  Enkelt
+                </button>
+                <button
+                  className={investOwners > 1 ? "on" : ""}
+                  onClick={() => setInvestOwners((v) => (v === 1 ? 2 : v))}
+                >
+                  Flere
+                </button>
               </div>
             </div>
           </div>
@@ -1486,7 +1522,7 @@ function App() {
             Når den grønne linje er over nul, tjener du på at investere.
           </div>
           <div style={{ fontSize: 14, color: C.text4, marginTop: 6, lineHeight: 1.5 }}>
-            Lagerbeskatning: 27% op til 61.000 kr., 42% derover. Ved afdrag falder den vægtede
+            Lagerbeskatning: 27% op til {fmt(79400 * investOwners)} kr., 42% derover. Ved afdrag falder den vægtede
             bidragssats løbende, efterhånden som LTV falder. Inkluderet i beregningen.
           </div>
         </div>

@@ -206,10 +206,12 @@
     investReturnPct,
     years,
     taxHousehold = "single",
+    investOwners = 1,
+    ltv = 60,
   ) {
-    const propertyValue = loanAmount / 0.6;
+    const propertyValue = loanAmount / (ltv / 100);
     const annuity = annuityYearly(loanAmount, rate);
-    const bidragPctAfdragsfri = getEffectiveBidragPct(loanTypeId, 60, true);
+    const bidragPctAfdragsfri = getEffectiveBidragPct(loanTypeId, ltv, true);
     const monthlyReturn = Math.pow(1 + investReturnPct / 100, 1 / 12) - 1;
 
     let principalA = loanAmount;
@@ -259,7 +261,7 @@
       const previousAfkast = points[year - 1].afkast;
       const currentAfkast = portfolio - totalInvested;
       const taxableGain = Math.max(0, currentAfkast - previousAfkast);
-      const lowRateThreshold = 61000;
+      const lowRateThreshold = 79400 * investOwners;
 
       let taxDue = 0;
       if (taxableGain > 0) {
@@ -295,6 +297,8 @@
     investReturn,
     investYears,
     taxHousehold = "single",
+    investOwners = 1,
+    ltv = 60,
   ) {
     const data = {};
 
@@ -306,6 +310,8 @@
         investReturn,
         investYears,
         taxHousehold,
+        investOwners,
+        ltv,
       );
     });
 
