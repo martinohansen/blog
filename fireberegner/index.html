@@ -78,8 +78,11 @@
                   </label>
                   <label class="field">
                     <span
-                      >Ønsket udbetaling pr. år
-                      <i title="Beløbet vises i dagens kroner">i</i></span
+                      >Ønsket årlig hævning
+                      <i
+                        title="Beløbet vises i dagens kroner før eventuel skat på pensionsudbetalinger"
+                        >i</i
+                      ></span
                     >
                     <input
                       name="desiredAnnualWithdrawal"
@@ -172,7 +175,7 @@
                       type="text"
                       inputmode="numeric"
                       data-number-format="integer"
-                      value="60.000"
+                      value="50.000"
                       required
                   /></label>
                   <label class="inflation-field">
@@ -538,7 +541,10 @@
 
           <p class="disclaimer">
             Beregningen bruger faste, reale afkast og viser alle beløb i dagens
-            kroner. Resultatet er et overslag og er ikke investerings- eller
+            kroner. Indbetalinger fordeles løbende over året, og hævninger sker
+            ved starten af hver udbetalingsperiode. Beregningen medregner skat af
+            afkast, men ikke indkomstskat ved udbetaling fra ratepension.
+            Resultatet er et overslag og er ikke investerings- eller
             pensionsrådgivning.
           </p>
         </div>
