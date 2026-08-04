@@ -46,7 +46,8 @@
   --space-10: 40px;
 
   --radius-control: 4px;
-  --radius-disclosure: 8px;
+  --radius-phase: 10px;
+  --radius-plot: 12px;
   --radius-card: 14px;
   --radius-round: 999px;
 
@@ -206,8 +207,7 @@ summary {
 }
 
 .planner-card,
-.result-card,
-.timeline-card {
+.result-card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
@@ -690,7 +690,7 @@ legend,
   grid-column: 1 / -1;
   min-width: 0;
   overflow: hidden;
-  padding: var(--space-3) var(--space-4);
+  padding: 0;
 }
 
 .timeline-viewport {
@@ -703,7 +703,7 @@ legend,
 
 .phase-groups {
   display: flex;
-  margin: 0 3.035714% var(--space-2) 6.785714%;
+  margin: 0 6.785714% var(--space-2);
 }
 
 .phase-group {
@@ -739,58 +739,77 @@ legend,
 
 .phase-strip {
   display: flex;
+  margin-bottom: var(--space-8);
   margin-left: 6.785714%;
-  margin-right: 3.035714%;
-  overflow: hidden;
+  margin-right: 6.785714%;
+  overflow: visible;
 }
 
 .phase {
   align-items: center;
-  color: #fff;
   display: grid;
   grid-template-columns: auto auto;
   justify-content: center;
+  min-height: 58px;
   min-width: 0;
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-5);
   position: relative;
 }
 
-.phase + .phase::before {
-  background: #fff;
-  border: 4px solid currentColor;
+.phase::before {
+  background: var(--phase-background);
+  border-radius: var(--radius-phase);
+  content: "";
+  inset: 0 6px;
+  position: absolute;
+  z-index: 0;
+}
+
+.phase > :not(.phase-connector) {
+  position: relative;
+  z-index: 1;
+}
+
+.phase-connector {
+  border-left: 1px dashed currentColor;
+  bottom: calc(var(--space-8) * -1);
+  color: var(--phase-marker);
+  height: var(--space-8);
+  left: 0;
+  position: absolute;
+  width: 1px;
+  z-index: 3;
+}
+
+.phase-connector::after {
+  background: currentColor;
+  border: 4px solid var(--surface);
   border-radius: 50%;
+  bottom: -7px;
+  box-shadow: 0 1px 4px rgba(29, 43, 39, 0.16);
+  box-sizing: border-box;
   content: "";
   height: 14px;
-  left: -9px;
+  left: -7px;
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
   width: 14px;
-  z-index: 2;
 }
 
 .phase-icon {
-  fill: currentColor;
+  fill: none;
   grid-row: 1 / 3;
-  height: 27px;
+  height: 32px;
   margin-right: var(--space-3);
-  width: 27px;
-}
-
-.phase-icon-palm {
-  fill: none;
   stroke: currentColor;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-width: 2.1;
+  stroke-width: 2;
+  width: 32px;
 }
 
-.phase-icon-wallet {
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.8;
+.phase-icon-pig circle {
+  fill: currentColor;
+  stroke: none;
 }
 
 .phase b {
@@ -805,13 +824,13 @@ legend,
 }
 
 .phase-saving {
-  background: var(--blue);
-  color: var(--blue);
+  --phase-background: linear-gradient(135deg, #2f709d, #28668f);
+  --phase-marker: var(--blue);
 }
 
 .phase-saving-free {
-  background: linear-gradient(135deg, #5590b6, #3d7da6);
-  color: #4d86ab;
+  --phase-background: linear-gradient(135deg, #6e9fc1, #5488ad);
+  --phase-marker: #5d91b5;
 }
 
 .phase-saving-pension,
@@ -821,31 +840,40 @@ legend,
 
 .phase-saving-pension b,
 .phase-saving-free b {
-  font-size: var(--text-caption-size);
+  font-size: var(--text-label-sm-size);
 }
 
 .phase-saving-pension .phase-icon,
 .phase-saving-free .phase-icon {
-  height: 24px;
+  height: 29px;
   margin-right: var(--space-2);
-  width: 24px;
+  width: 29px;
 }
 
 .phase-fire {
-  background: var(--green);
-  color: var(--green);
+  --phase-background: linear-gradient(135deg, #164b39, #103e30);
+  --phase-marker: var(--green);
 }
 
 .phase-pension {
-  background: linear-gradient(90deg, #d9a328, #e7b739);
-  color: var(--gold);
+  --phase-background: linear-gradient(135deg, #d9a328, #e7b739);
+  --phase-marker: var(--gold);
 }
 
-.phase-saving > *,
-.phase-saving-free > *,
-.phase-fire > *,
-.phase-pension > * {
+.phase-saving > :not(.phase-connector),
+.phase-saving-free > :not(.phase-connector),
+.phase-fire > :not(.phase-connector),
+.phase-pension > :not(.phase-connector) {
   color: #fff;
+}
+
+.timeline-visual-frame {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  padding-top: var(--space-4);
 }
 
 .wealth-chart {
@@ -858,8 +886,12 @@ legend,
   width: 100%;
 }
 
-.chart-phase-saving {
+.chart-phase-saving-pension {
   fill: var(--blue-soft);
+}
+
+.chart-phase-saving-free {
+  fill: #f1f6f9;
 }
 
 .chart-phase-fire {
@@ -870,6 +902,11 @@ legend,
   fill: var(--gold-soft);
 }
 
+.chart-plot-surface {
+  fill: var(--surface-soft);
+  stroke: none;
+}
+
 .chart-grid-line {
   stroke: #cfd4d1;
   stroke-dasharray: 2 4;
@@ -878,6 +915,7 @@ legend,
 
 .chart-boundary {
   stroke: #b6bbb8;
+  stroke-dasharray: 3 3;
   stroke-width: 1;
 }
 
@@ -913,26 +951,12 @@ legend,
   font-size: var(--text-caption-size);
 }
 
-.chart-point-pension,
-.chart-point-free-funds {
-  fill: #fff;
-  stroke-width: 2.5;
-}
-
-.chart-point-pension {
-  stroke: var(--color-pension-line);
-}
-
-.chart-point-free-funds {
-  stroke: var(--color-free-funds-line);
-}
-
 .chart-legend {
   align-items: center;
   display: flex;
   gap: var(--space-6);
   justify-content: center;
-  padding: 0 0 var(--space-2);
+  padding: var(--space-1) 0 var(--space-3);
 }
 
 .chart-legend span {
@@ -1044,15 +1068,18 @@ legend,
 }
 
 .projection-card {
-  border-top: 1px solid var(--line);
-  margin-top: var(--space-1);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  margin-top: var(--space-3);
+  overflow: hidden;
 }
 
 .projection-card > summary {
   font-size: var(--text-data-sm-size);
   font-weight: var(--weight-semibold);
   line-height: var(--text-data-sm-line);
-  padding: var(--space-3) var(--space-3) var(--space-1);
+  padding: var(--space-3) var(--space-4);
 }
 
 .table-wrap {

@@ -295,22 +295,31 @@
       totalYears,
     );
 
-    setPhaseWidth(
-      document.querySelector("#phase-saving-pension"),
-      pensionSavingYears,
-      totalYears,
-    );
-    setPhaseWidth(
-      document.querySelector("#phase-saving-free"),
-      freeFundsOnlyYears,
-      totalYears,
-    );
-    setPhaseWidth(document.querySelector("#phase-fire"), fireYears, totalYears);
-    setPhaseWidth(
-      document.querySelector("#phase-pension"),
-      pensionYears,
-      totalYears,
-    );
+    const phases = [
+      {
+        element: document.querySelector("#phase-saving-pension"),
+        years: pensionSavingYears,
+      },
+      {
+        element: document.querySelector("#phase-saving-free"),
+        years: freeFundsOnlyYears,
+      },
+      { element: document.querySelector("#phase-fire"), years: fireYears },
+      {
+        element: document.querySelector("#phase-pension"),
+        years: pensionYears,
+      },
+    ];
+
+    phases.forEach(({ element, years }) => {
+      setPhaseWidth(element, years, totalYears);
+    });
+
+    const firstVisiblePhase = phases.find(({ years }) => years > 0)?.element;
+    phases.forEach(({ element, years }) => {
+      const connector = element.querySelector(".phase-connector");
+      connector.hidden = years <= 0 || element === firstVisiblePhase;
+    });
     setText(
       "phase-saving-pension-ages",
       `${currentAge} – ${pensionStopAge} år`,
@@ -322,8 +331,8 @@
 
   function renderChart(calculation, inputs) {
     const width = 1120;
-    const height = 198;
-    const margin = { top: 4, right: 34, bottom: 42, left: 76 };
+    const height = 236;
+    const margin = { top: 4, right: 76, bottom: 44, left: 76 };
     const plotWidth = width - margin.left - margin.right;
     const plotHeight = height - margin.top - margin.bottom;
     const plotBottom = margin.top + plotHeight;
@@ -333,6 +342,9 @@
     const fireAge = calculation.fireRow
       ? calculation.fireRow.age
       : inputs.retirementAge;
+    const pensionStopAge = calculation.pensionStopRow
+      ? Math.min(calculation.pensionStopRow.age, fireAge)
+      : fireAge;
     const pensionValue = (row) => row.ratePension + row.ageSavings;
     const freeFundsValue = (row) => row.freeFunds + row.ask;
     const rawMax = Math.max(
@@ -360,8 +372,13 @@
     );
     const phaseRects = [
       {
-        className: "chart-phase-saving",
+        className: "chart-phase-saving-pension",
         from: minAge,
+        to: pensionStopAge,
+      },
+      {
+        className: "chart-phase-saving-free",
+        from: pensionStopAge,
         to: fireAge,
       },
       {
@@ -381,15 +398,19 @@
           `<rect class="${phase.className}" x="${xForAge(phase.from)}" y="${margin.top}" width="${xForAge(phase.to) - xForAge(phase.from)}" height="${plotHeight}" />`,
       )
       .join("");
-    const grid = yTicks
+    const gridLines = yTicks
       .map((value) => {
         const y = yForValue(value);
-        return `
-          <line class="chart-grid-line" x1="${margin.left}" x2="${width - margin.right}" y1="${y}" y2="${y}" />
-          <text class="chart-axis-label" x="${margin.left - 12}" y="${y + 4}" text-anchor="end">${compactNumber.format(value)} kr.</text>`;
+        return `<line class="chart-grid-line" x1="${margin.left}" x2="${width - margin.right}" y1="${y}" y2="${y}" />`;
       })
       .join("");
-    const boundaries = [fireAge, inputs.retirementAge]
+    const yAxisLabels = yTicks
+      .map((value) => {
+        const y = yForValue(value);
+        return `<text class="chart-axis-label" x="${margin.left - 12}" y="${y + 4}" text-anchor="end">${compactNumber.format(value)} kr.</text>`;
+      })
+      .join("");
+    const boundaries = [pensionStopAge, fireAge, inputs.retirementAge]
       .filter(
         (age, index, ages) =>
           age > minAge && age < maxAge && ages.indexOf(age) === index,
@@ -412,22 +433,26 @@
           ${nowLabel}`;
       })
       .join("");
-    const finalPensionPoint = pensionPoints[pensionPoints.length - 1];
-    const finalFreeFundsPoint = freeFundsPoints[freeFundsPoints.length - 1];
-
     chart.innerHTML = `
       <svg viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="wealth-chart-title wealth-chart-description">
         <title id="wealth-chart-title">Pension og frie midler fra ${minAge} til ${maxAge} år</title>
         <desc id="wealth-chart-description">Grafen viser pension og frie midler for hvert år. Hold markøren over grafen for at se beløbene og den samlede formue.</desc>
-        ${phaseRects}
-        <path class="chart-area-pension" d="${areaPath(pensionPoints, plotBottom)}" />
-        <path class="chart-area-free-funds" d="${areaPath(freeFundsPoints, plotBottom)}" />
-        ${grid}
-        ${boundaries}
-        <path class="chart-line-pension" d="${pointPath(pensionPoints)}" />
-        <path class="chart-line-free-funds" d="${pointPath(freeFundsPoints)}" />
-        <circle class="chart-point-pension" cx="${finalPensionPoint.x}" cy="${finalPensionPoint.y}" r="4" />
-        <circle class="chart-point-free-funds" cx="${finalFreeFundsPoint.x}" cy="${finalFreeFundsPoint.y}" r="4" />
+        <defs>
+          <clipPath id="chart-plot-clip">
+            <rect x="${margin.left}" y="${margin.top}" width="${plotWidth}" height="${plotHeight}" rx="10" />
+          </clipPath>
+        </defs>
+        <rect class="chart-plot-surface" x="${margin.left}" y="${margin.top}" width="${plotWidth}" height="${plotHeight}" rx="10" />
+        <g clip-path="url(#chart-plot-clip)">
+          ${phaseRects}
+          <path class="chart-area-pension" d="${areaPath(pensionPoints, plotBottom)}" />
+          <path class="chart-area-free-funds" d="${areaPath(freeFundsPoints, plotBottom)}" />
+          ${gridLines}
+          ${boundaries}
+          <path class="chart-line-pension" d="${pointPath(pensionPoints)}" />
+          <path class="chart-line-free-funds" d="${pointPath(freeFundsPoints)}" />
+        </g>
+        ${yAxisLabels}
         ${yearAxis}
         <rect class="chart-hover-target" x="${margin.left}" y="${margin.top}" width="${plotWidth}" height="${plotHeight}" tabindex="0" role="img" aria-label="Vis beløb for et bestemt år" />
         <g class="chart-hover-layer" style="display: none" aria-hidden="true">

@@ -325,58 +325,59 @@
             </h2>
             <div class="timeline-viewport">
               <div class="timeline-plot">
-                <div
-                  class="phase-groups"
-                  aria-label="Overordnede perioder i beregningen"
-                >
+                <div class="timeline-visual-frame">
                   <div
-                    id="phase-group-saving"
-                    class="phase-group phase-group-saving"
+                    class="phase-groups"
+                    aria-label="Overordnede perioder i beregningen"
                   >
-                    <span>Opsparing</span>
+                    <div
+                      id="phase-group-saving"
+                      class="phase-group phase-group-saving"
+                    >
+                      <span>Opsparing</span>
+                    </div>
+                    <div
+                      id="phase-group-drawdown"
+                      class="phase-group phase-group-drawdown"
+                    >
+                      <span>Nedsparing</span>
+                    </div>
                   </div>
-                  <div
-                    id="phase-group-drawdown"
-                    class="phase-group phase-group-drawdown"
-                  >
-                    <span>Nedsparing</span>
-                  </div>
-                </div>
-                <div class="phase-strip" aria-label="Faser i beregningen">
+                  <div class="phase-strip" aria-label="Faser i beregningen">
                   <div
                     id="phase-saving-pension"
                     class="phase phase-saving phase-saving-pension"
                   >
                     <svg
-                      class="phase-icon"
+                      class="phase-icon phase-icon-pig"
                       aria-hidden="true"
                       viewBox="0 0 32 32"
                     >
-                      <path
-                        d="M7.4 14.3c1.6-3.5 5-5.7 9.3-5.7 1.7 0 3.2.3 4.6 1l3.2-1.7v4.3c1 .9 1.7 2 2.1 3.3h2v5.8h-3.5a10 10 0 0 1-2.9 2.7v3.1h-4.5v-1.8c-.8.1-1.6.2-2.4.1v1.7h-4.5v-3.2a9.2 9.2 0 0 1-3.7-5.1H4.8c-1.2 0-2.1-1-2.1-2.2v-2.3h2.2v1.9c0 .4.3.7.7.7h1.1c.1-.9.3-1.8.7-2.6Zm11.8-2.1h-6.6v2h6.6v-2Zm4.7 3.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z"
-                      />
-                      <path
-                        d="M14.4 5.6c.8-1.5 2.3-2.4 4-2.5-.2 1.7-1.2 3.2-2.7 4-1 .4-1.8-.5-1.3-1.5Z"
-                      />
+                      <path d="M8.2 13.2c2-3 5.2-4.7 9.2-4.7 2.2 0 4.2.5 5.8 1.5l3.6-1.5v4.4c1 1.1 1.6 2.4 1.7 4h1.8v4.4h-3.2a10.7 10.7 0 0 1-3.4 3.2v3h-4.1v-1.6c-1.5.3-3 .3-4.5 0v1.6H11v-2.7c-2.9-1.5-4.7-4.1-4.7-7.1 0-1.7.6-3.2 1.9-4.5Z" />
+                      <path d="M13.4 11.5h7.1M6.6 17.1H4.8a2.7 2.7 0 0 1-2.7-2.7v-1.2" />
+                      <circle cx="23.6" cy="15" r=".9" />
+                      <path d="M15.5 8.4c.2-2.1 1.7-3.7 4-4.2.2 1.8-.6 3.3-2.3 4.3" />
                     </svg>
                     <b>Pension + frie midler</b
                     ><small id="phase-saving-pension-ages"></small>
+                    <span class="phase-connector" aria-hidden="true"></span>
                   </div>
                   <div id="phase-saving-free" class="phase phase-saving-free">
                     <svg
-                      class="phase-icon phase-icon-wallet"
+                      class="phase-icon phase-icon-coins"
                       aria-hidden="true"
                       viewBox="0 0 32 32"
                     >
-                      <path
-                        d="M5 8.5h19.5a2.5 2.5 0 0 1 2.5 2.5v14.5H7.5A2.5 2.5 0 0 1 5 23V8.5Z"
-                      />
-                      <path d="M5.5 9 21 4.5c1.4-.4 2.8.4 3.2 1.8l.6 2.2" />
-                      <path d="M20.5 14.5H29v6h-8.5a3 3 0 0 1 0-6Z" />
-                      <circle cx="21.5" cy="17.5" r="1" />
+                      <ellipse cx="11" cy="7" rx="6.2" ry="3" />
+                      <path d="M4.8 7v4.2c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3V7" />
+                      <path d="M4.8 11.3v4.1c0 1.7 2.8 3 6.2 3 2.2 0 4.1-.5 5.2-1.3" />
+                      <ellipse cx="21.2" cy="17.1" rx="6.2" ry="3" />
+                      <path d="M15 17.1v4c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3v-4" />
+                      <path d="M15 21.2v4c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3v-4" />
                     </svg>
                     <b>Frie midler</b
                     ><small id="phase-saving-free-ages"></small>
+                    <span class="phase-connector" aria-hidden="true"></span>
                   </div>
                   <div id="phase-fire" class="phase phase-fire">
                     <svg
@@ -384,46 +385,42 @@
                       aria-hidden="true"
                       viewBox="0 0 32 32"
                     >
-                      <path d="M14 28c-.2-5.7.6-11.1 3.4-16" />
-                      <path
-                        d="M17.4 12C13 8.6 9.2 8.8 6.1 10.9c4.5.2 7.5 1.2 11.3 3.6"
-                      />
-                      <path
-                        d="M17.4 12c-1.3-4.4.4-7.4 3.4-9.3.1 3.7-.8 6.4-3.4 9.3"
-                      />
-                      <path
-                        d="M17.4 12c3.5-3.7 7.2-3.8 10.4-2-3.9.7-7 1.9-10.4 4.5"
-                      />
-                      <path
-                        d="M17.4 12c3.9.2 6.4 2.2 7.4 5.3-2.8-1.6-5.1-2.4-8.5-2.5"
-                      />
+                      <path d="M13.7 28.2c1.2-5.4 2.2-10.1 2.4-14.5M19.3 28.2c-.6-5.8-1.4-10.5-3.2-14.5" />
+                      <path d="M16.1 13.7C13.6 9.4 9.6 7.4 5.2 8.6c4.2.8 7.7 2.8 10.9 5.1Z" />
+                      <path d="M16.1 13.7c-.8-4.8 1.6-8.8 5.9-10.2-.7 4.5-2.6 7.8-5.9 10.2Z" />
+                      <path d="M16.1 13.7c3-4.1 7.4-5.3 11.1-2.9-4.5.2-8.1 1.2-11.1 2.9Z" />
+                      <path d="M16.1 13.7c3.8.2 6.6 2.1 8.1 5.5-3.2-1.8-5.9-2.3-8.5-1.7" />
+                      <path d="M16.1 13.7c-3.8.5-6.4 2.8-7.3 6.2 2.7-2.1 5.3-3 7.3-2.7" />
+                      <path d="M10.4 28.2h12.8" />
                     </svg>
                     <b>FIRE</b><small id="phase-fire-ages"></small>
+                    <span class="phase-connector" aria-hidden="true"></span>
                   </div>
                   <div id="phase-pension" class="phase phase-pension">
                     <svg
-                      class="phase-icon"
+                      class="phase-icon phase-icon-person"
                       aria-hidden="true"
                       viewBox="0 0 32 32"
                     >
-                      <circle cx="16" cy="8.5" r="5" />
-                      <path
-                        d="M7.5 28v-3.8c0-5.1 3.8-9.2 8.5-9.2s8.5 4.1 8.5 9.2V28h-17Z"
-                      />
+                      <circle cx="16" cy="8" r="4.5" />
+                      <path d="M5.8 27.8v-2.2c0-6 4.5-10.5 10.2-10.5s10.2 4.5 10.2 10.5v2.2H5.8Z" />
+                      <path d="M10.6 27.8v-4.7M21.4 27.8v-4.7" />
                     </svg>
                     <b>Pension</b><small id="phase-pension-ages"></small>
+                    <span class="phase-connector" aria-hidden="true"></span>
                   </div>
-                </div>
-                <div id="wealth-chart" class="wealth-chart"></div>
-                <div class="chart-legend" aria-label="Grafens linjer">
-                  <span
-                    ><i class="legend-pension" aria-hidden="true"></i
-                    >Pension</span
-                  >
-                  <span
-                    ><i class="legend-free-funds" aria-hidden="true"></i>Frie
-                    midler</span
-                  >
+                  </div>
+                  <div id="wealth-chart" class="wealth-chart"></div>
+                  <div class="chart-legend" aria-label="Grafens linjer">
+                    <span
+                      ><i class="legend-pension" aria-hidden="true"></i
+                      >Pension</span
+                    >
+                    <span
+                      ><i class="legend-free-funds" aria-hidden="true"></i>Frie
+                      midler</span
+                    >
+                  </div>
                 </div>
               </div>
             </div>
