@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="da">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Beregn din FIRE-alder og følg din opsparing og nedsparing år for år."
+    />
+    <title>FIRE-beregner</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='0.9em' font-size='90'%3E%F0%9F%8C%B4%3C/text%3E%3C/svg%3E"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <h1>FIRE-beregner</h1>
+        <p>Din vej til økonomisk frihed</p>
+      </header>
+
+      <p id="error" class="error-message" role="alert" hidden></p>
+
+      <div class="dashboard">
+        <section class="planner-card" aria-labelledby="planner-heading">
+          <form id="fire-form">
+            <div class="form-surface">
+              <fieldset id="plan-section" data-step-section="plan-section">
+                <legend id="planner-heading">Din plan</legend>
+                <div class="form-grid plan-grid">
+                  <label class="field">
+                    <span
+                      >Fødselsdato
+                      <i title="Din alder beregnes fra denne dato">i</i></span
+                    >
+                    <input
+                      name="birthDate"
+                      type="date"
+                      value="1990-01-01"
+                      required
+                    />
+                  </label>
+                  <label class="field">
+                    <span
+                      >Pensionsalder
+                      <i title="Alderen hvor pensionen kan udbetales"
+                        >i</i
+                      ></span
+                    >
+                    <input
+                      name="retirementAge"
+                      type="number"
+                      min="1"
+                      value="70"
+                      required
+                    />
+                  </label>
+                  <label class="field">
+                    <span
+                      >Udbetaling over antal år
+                      <i title="Antal år med pensionsudbetaling">i</i></span
+                    >
+                    <input
+                      name="payoutYears"
+                      type="number"
+                      min="1"
+                      value="20"
+                      required
+                    />
+                  </label>
+                  <label class="field">
+                    <span
+                      >Ønsket udbetaling pr. år
+                      <i title="Beløbet vises i dagens kroner">i</i></span
+                    >
+                    <input
+                      name="desiredAnnualWithdrawal"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="300.000"
+                      required
+                    />
+                  </label>
+                </div>
+              </fieldset>
+
+              <fieldset id="wealth-section" data-step-section="wealth-section">
+                <legend>Nuværende formue</legend>
+                <div class="form-grid wealth-grid">
+                  <label class="field"
+                    ><span>Ratepension</span
+                    ><input
+                      name="ratePensionBalance"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="500.000"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span>Aldersopsparing</span
+                    ><input
+                      name="ageSavingsBalance"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="50.000"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span>Frie midler</span
+                    ><input
+                      name="freeFundsBalance"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="250.000"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span>Aktiesparekonto</span
+                    ><input
+                      name="askBalance"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="150.000"
+                      required
+                  /></label>
+                </div>
+              </fieldset>
+
+              <fieldset
+                id="savings-section"
+                data-step-section="savings-section"
+              >
+                <legend>Årlig opsparing i dagens kroner</legend>
+                <div class="form-grid savings-grid">
+                  <label class="field"
+                    ><span>Ratepension</span
+                    ><input
+                      name="annualRatePensionContribution"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="60.000"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span>Aldersopsparing</span
+                    ><input
+                      name="annualAgeSavingsContribution"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="9.400"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span>Frie midler</span
+                    ><input
+                      name="annualFreeFundsContribution"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="60.000"
+                      required
+                  /></label>
+                  <label class="inflation-field">
+                    <span>Inflationsregulering</span>
+                    <span class="inflation-input">
+                      <b id="inflation-state">Følger inflationen</b>
+                      <input
+                        name="contributionsFollowInflation"
+                        type="checkbox"
+                        checked
+                      />
+                      <span class="inflation-switch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
+              <details
+                id="assumptions-section"
+                class="assumptions"
+                data-step-section="assumptions-section"
+                open
+              >
+                <summary>Forudsætninger</summary>
+                <div class="form-grid assumptions-grid">
+                  <label class="field"
+                    ><span>Pensionsafkastskat</span
+                    ><span class="input-suffix"
+                      ><input
+                        name="pensionTax"
+                        type="number"
+                        step="0.1"
+                        value="15.3"
+                        required
+                      /><b>%</b></span
+                    ></label
+                  >
+                  <label class="field"
+                    ><span>Skat på ASK</span
+                    ><span class="input-suffix"
+                      ><input
+                        name="askTax"
+                        type="number"
+                        step="0.1"
+                        value="17"
+                        required
+                      /><b>%</b></span
+                    ></label
+                  >
+                  <label class="field"
+                    ><span>Skat på frie midler</span
+                    ><span class="input-suffix"
+                      ><input
+                        name="freeFundsTax"
+                        type="number"
+                        step="0.1"
+                        value="27"
+                        required
+                      /><b>%</b></span
+                    ></label
+                  >
+                  <label class="field"
+                    ><span>Forventet afkast</span
+                    ><span class="input-suffix"
+                      ><input
+                        name="returnRate"
+                        type="number"
+                        step="0.1"
+                        value="7"
+                        required
+                      /><b>%</b></span
+                    ></label
+                  >
+                  <label class="field"
+                    ><span>Forventet inflation</span
+                    ><span class="input-suffix"
+                      ><input
+                        name="inflationRate"
+                        type="number"
+                        step="0.1"
+                        value="2"
+                        required
+                      /><b>%</b></span
+                    ></label
+                  >
+                </div>
+              </details>
+            </div>
+          </form>
+        </section>
+
+        <div id="results" hidden>
+          <aside class="result-card" aria-labelledby="result-heading">
+            <header>
+              <p>Din plan</p>
+              <h2 id="result-heading">
+                FIRE fra <span id="result-fire-age"></span>
+              </h2>
+              <strong id="result-withdrawal"></strong>
+            </header>
+
+            <div class="result-milestones" aria-label="Planens milepæle">
+              <div class="result-milestone">
+                <strong id="result-pension-stop-age"></strong>
+                <span class="result-milestone-rail" aria-hidden="true"
+                  ><i></i
+                ></span>
+                <span class="result-milestone-copy">
+                  <b id="result-pension-stop-label">Stop pensionsindbetaling</b>
+                  <small id="result-pension-stop-note"></small>
+                </span>
+              </div>
+              <div class="result-milestone result-milestone-fire">
+                <strong id="result-fire-milestone-age"></strong>
+                <span class="result-milestone-rail" aria-hidden="true"
+                  ><i></i
+                ></span>
+                <span class="result-milestone-copy">
+                  <b id="result-fire-milestone-label">Start FIRE</b>
+                  <small id="result-fire-milestone-note"></small>
+                </span>
+              </div>
+              <div class="result-milestone">
+                <strong id="result-retirement-age"></strong>
+                <span class="result-milestone-rail" aria-hidden="true"
+                  ><i></i
+                ></span>
+                <span class="result-milestone-copy">
+                  <b>Start pension</b>
+                  <small id="result-retirement-note"></small>
+                </span>
+              </div>
+            </div>
+
+            <footer>
+              <p>
+                Forventet reserve ved <span id="result-final-age"></span> år
+                <i
+                  title="Formue ved slutningen af den valgte udbetalingsperiode"
+                  >i</i
+                >
+              </p>
+              <strong id="result-final-balance"></strong>
+            </footer>
+          </aside>
+
+          <section class="timeline-card" aria-labelledby="timeline-heading">
+            <h2 id="timeline-heading" class="visually-hidden">
+              Dit økonomiske livsforløb
+            </h2>
+            <div class="timeline-viewport">
+              <div class="timeline-plot">
+                <div
+                  class="phase-groups"
+                  aria-label="Overordnede perioder i beregningen"
+                >
+                  <div
+                    id="phase-group-saving"
+                    class="phase-group phase-group-saving"
+                  >
+                    <span>Opsparing</span>
+                  </div>
+                  <div
+                    id="phase-group-drawdown"
+                    class="phase-group phase-group-drawdown"
+                  >
+                    <span>Nedsparing</span>
+                  </div>
+                </div>
+                <div class="phase-strip" aria-label="Faser i beregningen">
+                  <div
+                    id="phase-saving-pension"
+                    class="phase phase-saving phase-saving-pension"
+                  >
+                    <svg
+                      class="phase-icon"
+                      aria-hidden="true"
+                      viewBox="0 0 32 32"
+                    >
+                      <path
+                        d="M7.4 14.3c1.6-3.5 5-5.7 9.3-5.7 1.7 0 3.2.3 4.6 1l3.2-1.7v4.3c1 .9 1.7 2 2.1 3.3h2v5.8h-3.5a10 10 0 0 1-2.9 2.7v3.1h-4.5v-1.8c-.8.1-1.6.2-2.4.1v1.7h-4.5v-3.2a9.2 9.2 0 0 1-3.7-5.1H4.8c-1.2 0-2.1-1-2.1-2.2v-2.3h2.2v1.9c0 .4.3.7.7.7h1.1c.1-.9.3-1.8.7-2.6Zm11.8-2.1h-6.6v2h6.6v-2Zm4.7 3.3a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2Z"
+                      />
+                      <path
+                        d="M14.4 5.6c.8-1.5 2.3-2.4 4-2.5-.2 1.7-1.2 3.2-2.7 4-1 .4-1.8-.5-1.3-1.5Z"
+                      />
+                    </svg>
+                    <b>Pension + frie midler</b
+                    ><small id="phase-saving-pension-ages"></small>
+                  </div>
+                  <div id="phase-saving-free" class="phase phase-saving-free">
+                    <svg
+                      class="phase-icon phase-icon-wallet"
+                      aria-hidden="true"
+                      viewBox="0 0 32 32"
+                    >
+                      <path
+                        d="M5 8.5h19.5a2.5 2.5 0 0 1 2.5 2.5v14.5H7.5A2.5 2.5 0 0 1 5 23V8.5Z"
+                      />
+                      <path d="M5.5 9 21 4.5c1.4-.4 2.8.4 3.2 1.8l.6 2.2" />
+                      <path d="M20.5 14.5H29v6h-8.5a3 3 0 0 1 0-6Z" />
+                      <circle cx="21.5" cy="17.5" r="1" />
+                    </svg>
+                    <b>Frie midler</b
+                    ><small id="phase-saving-free-ages"></small>
+                  </div>
+                  <div id="phase-fire" class="phase phase-fire">
+                    <svg
+                      class="phase-icon phase-icon-palm"
+                      aria-hidden="true"
+                      viewBox="0 0 32 32"
+                    >
+                      <path d="M14 28c-.2-5.7.6-11.1 3.4-16" />
+                      <path
+                        d="M17.4 12C13 8.6 9.2 8.8 6.1 10.9c4.5.2 7.5 1.2 11.3 3.6"
+                      />
+                      <path
+                        d="M17.4 12c-1.3-4.4.4-7.4 3.4-9.3.1 3.7-.8 6.4-3.4 9.3"
+                      />
+                      <path
+                        d="M17.4 12c3.5-3.7 7.2-3.8 10.4-2-3.9.7-7 1.9-10.4 4.5"
+                      />
+                      <path
+                        d="M17.4 12c3.9.2 6.4 2.2 7.4 5.3-2.8-1.6-5.1-2.4-8.5-2.5"
+                      />
+                    </svg>
+                    <b>FIRE</b><small id="phase-fire-ages"></small>
+                  </div>
+                  <div id="phase-pension" class="phase phase-pension">
+                    <svg
+                      class="phase-icon"
+                      aria-hidden="true"
+                      viewBox="0 0 32 32"
+                    >
+                      <circle cx="16" cy="8.5" r="5" />
+                      <path
+                        d="M7.5 28v-3.8c0-5.1 3.8-9.2 8.5-9.2s8.5 4.1 8.5 9.2V28h-17Z"
+                      />
+                    </svg>
+                    <b>Pension</b><small id="phase-pension-ages"></small>
+                  </div>
+                </div>
+                <div id="wealth-chart" class="wealth-chart"></div>
+                <div class="chart-legend" aria-label="Grafens linjer">
+                  <span
+                    ><i class="legend-pension" aria-hidden="true"></i
+                    >Pension</span
+                  >
+                  <span
+                    ><i class="legend-free-funds" aria-hidden="true"></i>Frie
+                    midler</span
+                  >
+                </div>
+              </div>
+            </div>
+
+            <details class="projection-card">
+              <summary>Se op- og nedsparing år for år</summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Dato</th>
+                      <th>Alder</th>
+                      <th>Fase</th>
+                      <th>Ratepension</th>
+                      <th>Aldersopsparing</th>
+                      <th>Frie midler</th>
+                      <th>Aktiesparekonto</th>
+                      <th>Samlet formue</th>
+                      <th>Indbetaling</th>
+                      <th>Udbetaling</th>
+                      <th>Udbetaling fra</th>
+                    </tr>
+                  </thead>
+                  <tbody id="projection-body"></tbody>
+                </table>
+              </div>
+            </details>
+          </section>
+
+          <details class="key-figures">
+            <summary>Se alle nøgletal og forudsætninger</summary>
+            <dl>
+              <div>
+                <dt>Nuværende alder</dt>
+                <dd id="current-age"></dd>
+              </div>
+              <div>
+                <dt>Reelt afkast på pension</dt>
+                <dd id="real-pension-return"></dd>
+              </div>
+              <div>
+                <dt>Reelt afkast på aktiesparekonto</dt>
+                <dd id="real-ask-return"></dd>
+              </div>
+              <div>
+                <dt>Reelt afkast på frie midler</dt>
+                <dd id="real-free-return"></dd>
+              </div>
+              <div>
+                <dt>Nødvendig pensionsformue ved pension</dt>
+                <dd id="required-at-retirement"></dd>
+              </div>
+              <div>
+                <dt>Pensionsmålet i dag</dt>
+                <dd id="pension-target-today"></dd>
+              </div>
+              <div>
+                <dt>Alder hvor pensionsindbetaling kan stoppe</dt>
+                <dd id="pension-stop-age"></dd>
+              </div>
+              <div>
+                <dt>Dato hvor pensionsindbetaling kan stoppe</dt>
+                <dd id="pension-stop-date"></dd>
+              </div>
+              <div>
+                <dt>Pensionsformue ved stop</dt>
+                <dd id="pension-at-stop"></dd>
+              </div>
+              <div>
+                <dt>Pensionsmål ved stop</dt>
+                <dd id="pension-target-at-stop"></dd>
+              </div>
+              <div>
+                <dt>FIRE-alder</dt>
+                <dd id="fire-age"></dd>
+              </div>
+              <div>
+                <dt>FIRE-dato</dt>
+                <dd id="fire-date"></dd>
+              </div>
+              <div>
+                <dt>FIRE-periode frem til pension</dt>
+                <dd id="bridge-years"></dd>
+              </div>
+              <div>
+                <dt>Frie midler ved FIRE</dt>
+                <dd id="free-at-fire"></dd>
+              </div>
+              <div>
+                <dt>Aktiesparekonto ved FIRE</dt>
+                <dd id="ask-at-fire"></dd>
+              </div>
+              <div>
+                <dt>Mulig årlig udbetaling i FIRE-perioden</dt>
+                <dd id="bridge-withdrawal"></dd>
+              </div>
+              <div>
+                <dt>Slutdato for pensionsudbetaling</dt>
+                <dd id="final-date"></dd>
+              </div>
+              <div>
+                <dt>Samlet formue på slutdatoen</dt>
+                <dd id="final-balance"></dd>
+              </div>
+              <div>
+                <dt>Resterende pension på slutdatoen</dt>
+                <dd id="final-pension"></dd>
+              </div>
+              <div>
+                <dt>Resterende frie midler og ASK</dt>
+                <dd id="final-free-funds"></dd>
+              </div>
+            </dl>
+          </details>
+
+          <p class="disclaimer">
+            Beregningen bruger faste, reale afkast og viser alle beløb i dagens
+            kroner. Resultatet er et overslag og er ikke investerings- eller
+            pensionsrådgivning.
+          </p>
+        </div>
+      </div>
+    </main>
+
+    <a
+      class="support-ribbon"
+      href="https://www.buymeacoffee.com/martinlikesfilter"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <img
+        class="support-ribbon-logo"
+        src="https://cdn.buymeacoffee.com/buttons/bmc-new-btn-logo.svg"
+        alt=""
+        aria-hidden="true"
+      />
+      <span>Buy me a coffee</span>
+    </a>
+
+    <script src="./calculations.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>
