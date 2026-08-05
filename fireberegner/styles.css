@@ -1088,6 +1088,13 @@ legend,
   overflow-x: auto;
 }
 
+.projection-note {
+  color: var(--muted);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-line);
+  margin: var(--space-3) var(--space-4) 0;
+}
+
 table {
   border-collapse: collapse;
   font-size: var(--text-caption-size);

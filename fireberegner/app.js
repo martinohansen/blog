@@ -195,7 +195,7 @@
 
   function readInputs() {
     return {
-      birthDate: new Date(`${form.elements.birthDate.value}T12:00:00`),
+      currentAge: readNumber("currentAge"),
       retirementAge: readNumber("retirementAge"),
       payoutYears: readNumber("payoutYears"),
       desiredAnnualWithdrawal: readNumber("desiredAnnualWithdrawal"),
@@ -233,7 +233,7 @@
     return `
       <tr data-phase="${row.phase}">
         <td>${dateFormat.format(row.date)}</td>
-        <td>${ages.format(row.exactAge ?? row.age)}</td>
+        <td>${ages.format(row.age)}</td>
         <td>${row.phase}</td>
         <td>${currency.format(row.ratePension)}</td>
         <td>${currency.format(row.ageSavings)}</td>
@@ -272,14 +272,14 @@
   }
 
   function renderPhases(calculation, inputs) {
-    const currentAge = calculation.planRows[0].exactAge;
+    const currentAge = calculation.planRows[0].age;
     const fireAge = calculation.fireRow
-      ? calculation.fireRow.exactAge
+      ? calculation.fireRow.age
       : inputs.retirementAge;
     const pensionStopAge = calculation.pensionStopRow
-      ? Math.min(calculation.pensionStopRow.exactAge, fireAge)
+      ? Math.min(calculation.pensionStopRow.age, fireAge)
       : fireAge;
-    const finalAge = calculation.finalRow.exactAge;
+    const finalAge = calculation.finalRow.age;
     const totalYears = Math.max(1, finalAge - currentAge);
     const pensionSavingYears = Math.max(0, pensionStopAge - currentAge);
     const freeFundsOnlyYears = Math.max(0, fireAge - pensionStopAge);
@@ -352,13 +352,13 @@
     const plotHeight = height - margin.top - margin.bottom;
     const plotBottom = margin.top + plotHeight;
     const rows = calculation.planRows;
-    const minAge = rows[0].exactAge;
-    const maxAge = rows[rows.length - 1].exactAge;
+    const minAge = rows[0].age;
+    const maxAge = rows[rows.length - 1].age;
     const fireAge = calculation.fireRow
-      ? calculation.fireRow.exactAge
+      ? calculation.fireRow.age
       : inputs.retirementAge;
     const pensionStopAge = calculation.pensionStopRow
-      ? Math.min(calculation.pensionStopRow.exactAge, fireAge)
+      ? Math.min(calculation.pensionStopRow.age, fireAge)
       : fireAge;
     const pensionValue = (row) => row.ratePension + row.ageSavings;
     const freeFundsValue = (row) => row.freeFunds + row.ask;
@@ -373,12 +373,12 @@
     const yForValue = (value) => plotBottom - (value / yMax) * plotHeight;
     const pensionPoints = rows.map((row) => ({
       age: row.age,
-      x: xForAge(row.exactAge).toFixed(2),
+      x: xForAge(row.age).toFixed(2),
       y: yForValue(pensionValue(row)).toFixed(2),
     }));
     const freeFundsPoints = rows.map((row) => ({
       age: row.age,
-      x: xForAge(row.exactAge).toFixed(2),
+      x: xForAge(row.age).toFixed(2),
       y: yForValue(freeFundsValue(row)).toFixed(2),
     }));
     const yTicks = Array.from({ length: 5 }, (_, index) => (yMax / 4) * index);
@@ -437,7 +437,7 @@
       .join("");
     const yearAxis = axisRows
       .map((row, index) => {
-        const x = xForAge(row.exactAge);
+        const x = xForAge(row.age);
         const nowLabel =
           index === 0
             ? `<text class="chart-now-label" x="${x}" y="${plotBottom + 29}">nu</text>`
@@ -522,7 +522,7 @@
       hoverFreeFundsPoint.setAttribute("cy", freeFundsY);
       tooltip.setAttribute("transform", `translate(${tooltipX} ${tooltipY})`);
       svg.querySelector("#chart-tooltip-title").textContent =
-        `${row.date.getFullYear()} · ${ages.format(row.exactAge)} år`;
+        `${row.date.getFullYear()} · ${ages.format(row.age)} år`;
       svg.querySelector("#chart-tooltip-pension").textContent = currency.format(
         pensionValue(row),
       );
@@ -533,7 +533,7 @@
       );
       hoverTarget.setAttribute(
         "aria-label",
-        `${row.date.getFullYear()}, ${ages.format(row.exactAge)} år. Pension ${currency.format(pensionValue(row))} Frie midler ${currency.format(freeFundsValue(row))} Samlet formue ${currency.format(row.totalBalance)}`,
+        `${row.date.getFullYear()}, ${ages.format(row.age)} år. Pension ${currency.format(pensionValue(row))} Frie midler ${currency.format(freeFundsValue(row))} Samlet formue ${currency.format(row.totalBalance)}`,
       );
       hoverLayer.style.display = "block";
     }
@@ -548,8 +548,8 @@
       const targetAge = minAge + progress * (maxAge - minAge);
       const nearestIndex = rows.reduce(
         (bestIndex, row, index) =>
-          Math.abs(row.exactAge - targetAge) <
-          Math.abs(rows[bestIndex].exactAge - targetAge)
+          Math.abs(row.age - targetAge) <
+          Math.abs(rows[bestIndex].age - targetAge)
             ? index
             : bestIndex,
         0,
@@ -586,7 +586,7 @@
     const fire = calculation.fireRow;
 
     resultHeading.textContent = fire
-      ? `FIRE fra ${ages.format(fire.exactAge)} år`
+      ? `FIRE fra ${ages.format(fire.age)} år`
       : "FIRE-ikke nået";
     setText(
       "result-withdrawal",
@@ -596,10 +596,10 @@
       "result-final-balance",
       currency.format(calculation.finalRow.totalBalance),
     );
-    setText("result-final-age", ages.format(calculation.finalRow.exactAge));
+    setText("result-final-age", ages.format(calculation.finalRow.age));
     setText(
       "result-pension-stop-age",
-      stop ? `${ages.format(stop.exactAge)} år` : "—",
+      stop ? `${ages.format(stop.age)} år` : "—",
     );
     setText(
       "result-pension-stop-label",
@@ -615,7 +615,7 @@
     );
     setText(
       "result-fire-milestone-age",
-      fire ? `${ages.format(fire.exactAge)} år` : "—",
+      fire ? `${ages.format(fire.age)} år` : "—",
     );
     setText(
       "result-fire-milestone-label",
@@ -631,7 +631,7 @@
     setText(
       "result-retirement-note",
       calculation.isFullyFunded
-        ? `Pension og eventuelle frie midler finansierer perioden frem til ${ages.format(calculation.finalRow.exactAge)} år.`
+        ? `Pension og eventuelle frie midler finansierer perioden frem til ${ages.format(calculation.finalRow.age)} år.`
         : calculation.firstShortfallDate
           ? `Formuen dækker ikke den ønskede hævning fra ${dateFormat.format(calculation.firstShortfallDate)}.`
           : "Formuen dækker ikke den ønskede hævning gennem hele perioden.",
@@ -660,7 +660,7 @@
     );
     setText(
       "pension-stop-age",
-      stop ? `${ages.format(stop.exactAge)} år` : "Ikke nået",
+      stop ? `${ages.format(stop.age)} år` : "Ikke nået",
     );
     setText("pension-stop-date", stop ? dateFormat.format(stop.date) : "—");
     setText(
@@ -673,7 +673,7 @@
     );
     setText(
       "fire-age",
-      fire ? `${ages.format(fire.exactAge)} år` : "Ikke nået før pension",
+      fire ? `${ages.format(fire.age)} år` : "Ikke nået før pension",
     );
     setText("fire-date", fire ? dateFormat.format(fire.date) : "—");
     setText(

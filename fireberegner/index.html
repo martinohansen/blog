@@ -38,13 +38,18 @@
                 <div class="form-grid plan-grid">
                   <label class="field">
                     <span
-                      >Fødselsdato
-                      <i title="Din alder beregnes fra denne dato">i</i></span
+                      >Nuværende alder
+                      <i
+                        title="Beregningen bruger hele år fra dagens dato"
+                        >i</i
+                      ></span
                     >
                     <input
-                      name="birthDate"
-                      type="date"
-                      value="1990-01-01"
+                      name="currentAge"
+                      type="number"
+                      min="0"
+                      step="1"
+                      value="36"
                       required
                     />
                   </label>
@@ -431,6 +436,9 @@
             <details class="projection-card">
               <summary>Se op- og nedsparing år for år</summary>
               <div class="table-wrap">
+                <p class="projection-note">
+                  Datoerne er årlige beregningstidspunkter fra dagens dato.
+                </p>
                 <table>
                   <thead>
                     <tr>
@@ -485,7 +493,7 @@
                 <dd id="pension-stop-age"></dd>
               </div>
               <div>
-                <dt>Dato hvor pensionsindbetaling kan stoppe</dt>
+                <dt>Årligt tidspunkt hvor pensionsindbetaling kan stoppe</dt>
                 <dd id="pension-stop-date"></dd>
               </div>
               <div>
@@ -501,7 +509,7 @@
                 <dd id="fire-age"></dd>
               </div>
               <div>
-                <dt>FIRE-dato</dt>
+                <dt>Årligt FIRE-tidspunkt</dt>
                 <dd id="fire-date"></dd>
               </div>
               <div>
