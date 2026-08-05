@@ -212,20 +212,40 @@
     periods,
     beforeRetirement,
     freeFundsCostBasis,
+    pensionWithdrawalTax,
   ) {
     const pensionIndexes = [RATE_PENSION, AGE_SAVINGS];
     const freeIndexes = [FREE_FUNDS, ASK];
+    const pensionCapacities = pensionIndexes.map((index) =>
+      annualCapacity(balances[index], rates[index], periods),
+    );
+    const totalPensionCapacity = pensionCapacities.reduce(
+      (total, capacity) => total + capacity,
+      0,
+    );
+    const netPensionCapacity =
+      pensionCapacities[RATE_PENSION] * (1 - pensionWithdrawalTax) +
+      pensionCapacities[AGE_SAVINGS];
+    const pensionNetPerGross =
+      totalPensionCapacity > 0
+        ? netPensionCapacity / totalPensionCapacity
+        : 0;
+    const desiredGrossPensionWithdrawal =
+      pensionNetPerGross > 0
+        ? desiredNetWithdrawal / pensionNetPerGross
+        : 0;
     const pensionAllocation = beforeRetirement
       ? { amounts: [0, 0], total: 0 }
       : allocateWithdrawals(
-          pensionIndexes.map((index) =>
-            annualCapacity(balances[index], rates[index], periods),
-          ),
-          desiredNetWithdrawal,
+          pensionCapacities,
+          desiredGrossPensionWithdrawal,
         );
+    const pensionTax =
+      pensionAllocation.amounts[RATE_PENSION] * pensionWithdrawalTax;
+    const pensionNetWithdrawal = pensionAllocation.total - pensionTax;
     const remainingNetWithdrawal = Math.max(
       0,
-      desiredNetWithdrawal - pensionAllocation.total,
+      desiredNetWithdrawal - pensionNetWithdrawal,
     );
     const freeCapacities = freeIndexes.map((index) =>
       annualCapacity(balances[index], rates[index], periods),
@@ -315,8 +335,11 @@
       freeFundsWithdrawal: 0,
       realizedFreeFundsGain: 0,
       withdrawalTax: 0,
+      pensionWithdrawalTax: 0,
+      totalWithdrawalTax: 0,
       netWithdrawal: 0,
       effectiveFreeFundsWithdrawalTaxRate: 0,
+      effectiveWithdrawalTaxRate: 0,
       freeFundsCostBasis,
       withdrawalSource: "—",
       withdrawalShortfall: false,
@@ -386,6 +409,15 @@
       }
     });
 
+    const pensionWithdrawalTax = inputs.pensionWithdrawalTax ?? 0;
+    if (
+      !Number.isFinite(pensionWithdrawalTax) ||
+      pensionWithdrawalTax < 0 ||
+      pensionWithdrawalTax > 1
+    ) {
+      throw new Error("Skattesatser skal være mellem 0 og 100 %.");
+    }
+
     if (
       !Number.isFinite(inputs.returnRate) ||
       inputs.returnRate <= -1 ||
@@ -403,6 +435,7 @@
     const finalYear = yearsToRetirement + inputs.payoutYears;
     const retirementDate = annualDate(asOfDate, yearsToRetirement);
     const finalDate = annualDate(asOfDate, finalYear);
+    const pensionWithdrawalTax = inputs.pensionWithdrawalTax ?? 0;
 
     const netPensionReturn = inputs.returnRate * (1 - inputs.pensionTax);
     const realPensionReturn =
@@ -423,14 +456,6 @@
     if (rates.some((rate) => !Number.isFinite(rate) || rate <= -1)) {
       throw new Error("Forudsætningerne giver et ugyldigt reelt afkast.");
     }
-
-    const requiredAtRetirement =
-      inputs.desiredAnnualWithdrawal *
-      presentValueFactor(realPensionReturn, inputs.payoutYears);
-    const pensionTargetToday =
-      requiredAtRetirement /
-      Math.pow(1 + realPensionReturn, yearsToRetirement);
-    assertFinite(requiredAtRetirement, pensionTargetToday);
 
     const followsInflation = inputs.contributionsFollowInflation !== false;
     const redirectsPensionContributions =
@@ -455,6 +480,49 @@
       assertFinite(contribution);
       return contribution;
     }
+
+    function pensionNetFraction(ratePension, ageSavings) {
+      const totalPension = ratePension + ageSavings;
+
+      if (!inputs.withdrawalAfterTax || totalPension <= 0) {
+        return 1;
+      }
+
+      return (
+        (ratePension * (1 - pensionWithdrawalTax) + ageSavings) /
+        totalPension
+      );
+    }
+
+    let projectedRatePension = inputs.ratePensionBalance;
+    let projectedAgeSavings = inputs.ageSavingsBalance;
+
+    for (let year = 1; year <= yearsToRetirement; year += 1) {
+      projectedRatePension *= 1 + realPensionReturn;
+      projectedAgeSavings *= 1 + realPensionReturn;
+      projectedRatePension += contributionAtYearEnd(
+        inputs.annualRatePensionContribution,
+        year,
+      );
+      projectedAgeSavings += contributionAtYearEnd(
+        inputs.annualAgeSavingsContribution,
+        year,
+      );
+      assertFinite(projectedRatePension, projectedAgeSavings);
+    }
+
+    const projectedPensionNetFraction = pensionNetFraction(
+      projectedRatePension,
+      projectedAgeSavings,
+    );
+    const requiredAtRetirement =
+      (inputs.desiredAnnualWithdrawal /
+        Math.max(CALCULATION_TOLERANCE, projectedPensionNetFraction)) *
+      presentValueFactor(realPensionReturn, inputs.payoutYears);
+    const pensionTargetToday =
+      requiredAtRetirement /
+      Math.pow(1 + realPensionReturn, yearsToRetirement);
+    assertFinite(requiredAtRetirement, pensionTargetToday);
 
     function simulateDrawdown(
       startYear,
@@ -482,6 +550,7 @@
               periods,
               beforeRetirement,
               freeFundsCostBasis,
+              pensionWithdrawalTax,
             )
           : allocateForPhase(
               balances,
@@ -497,11 +566,17 @@
           freeFundsCostBasis,
           freeFundsWithdrawal,
         );
-        const netWithdrawal = allocation.total - freeFundsSale.tax;
+        const pensionWithdrawalTaxAmount =
+          allocation.amounts[RATE_PENSION] * pensionWithdrawalTax;
+        const totalWithdrawalTax =
+          freeFundsSale.tax + pensionWithdrawalTaxAmount;
+        const netWithdrawal = allocation.total - totalWithdrawalTax;
         const effectiveFreeFundsWithdrawalTaxRate =
           freeFundsWithdrawal > 0
             ? freeFundsSale.tax / freeFundsWithdrawal
             : 0;
+        const effectiveWithdrawalTaxRate =
+          allocation.total > 0 ? totalWithdrawalTax / allocation.total : 0;
         const deliveredWithdrawal = inputs.withdrawalAfterTax
           ? netWithdrawal
           : allocation.total;
@@ -546,8 +621,11 @@
                 freeFundsWithdrawal,
                 realizedFreeFundsGain: freeFundsSale.realizedGain,
                 withdrawalTax: freeFundsSale.tax,
+                pensionWithdrawalTax: pensionWithdrawalTaxAmount,
+                totalWithdrawalTax,
                 netWithdrawal,
                 effectiveFreeFundsWithdrawalTaxRate,
+                effectiveWithdrawalTaxRate,
                 withdrawalSource,
                 withdrawalShortfall: shortfall,
               },
@@ -560,6 +638,8 @@
           Math.max(0, balance - allocation.amounts[index]),
         );
         balances = growBalances(balances, rates);
+        freeFundsCostBasis /= 1 + inputs.inflationRate;
+        assertFinite(freeFundsCostBasis);
       }
 
       if (shouldRecord) {
@@ -585,11 +665,40 @@
 
     function evaluateMilestone(year, balances, freeFundsCostBasis) {
       const bridgeYears = yearsToRetirement - year;
+      const pensionGrowth = Math.pow(
+        1 + realPensionReturn,
+        bridgeYears,
+      );
+      const ratePensionAtRetirement =
+        balances[RATE_PENSION] * pensionGrowth;
+      const ageSavingsAtRetirement = balances[AGE_SAVINGS] * pensionGrowth;
       const pensionAtRetirement =
-        (balances[RATE_PENSION] + balances[AGE_SAVINGS]) *
-        Math.pow(1 + realPensionReturn, bridgeYears);
+        ratePensionAtRetirement + ageSavingsAtRetirement;
+      const payoutFactor = presentValueFactor(
+        realPensionReturn,
+        inputs.payoutYears,
+      );
+      const pensionNetAnnualCapacity =
+        payoutFactor > 0
+          ? (ratePensionAtRetirement *
+                (inputs.withdrawalAfterTax
+                  ? 1 - pensionWithdrawalTax
+                  : 1) +
+              ageSavingsAtRetirement) /
+            payoutFactor
+          : 0;
       const coastFinanced =
-        pensionAtRetirement + CALCULATION_TOLERANCE >= requiredAtRetirement;
+        pensionNetAnnualCapacity + CALCULATION_TOLERANCE >=
+        inputs.desiredAnnualWithdrawal;
+      const milestoneNetFraction = pensionNetFraction(
+        balances[RATE_PENSION],
+        balances[AGE_SAVINGS],
+      );
+      const pensionTarget =
+        (inputs.desiredAnnualWithdrawal /
+          Math.max(CALCULATION_TOLERANCE, milestoneNetFraction)) *
+        presentValueFactor(realPensionReturn, inputs.payoutYears) /
+        pensionGrowth;
       const drawdown = simulateDrawdown(
         year,
         balances,
@@ -612,7 +721,12 @@
         ? bridgeCapacityAllocation.total - bridgeCapacitySale.tax
         : bridgeCapacityAllocation.total;
 
-      assertFinite(pensionAtRetirement, possibleBridgeWithdrawal);
+      assertFinite(
+        pensionAtRetirement,
+        pensionNetAnnualCapacity,
+        pensionTarget,
+        possibleBridgeWithdrawal,
+      );
       return {
         age: inputs.currentAge + year,
         date: annualDate(asOfDate, year),
@@ -622,6 +736,7 @@
         freeFundsCostBasis,
         ask: balances[ASK],
         bridgeYears,
+        pensionTarget,
         coastFinanced,
         possibleBridgeWithdrawal,
         fireReady: drawdown.isFullyFunded,
@@ -683,6 +798,7 @@
       );
 
       balances = growBalances(balances, rates);
+      freeFundsCostBasis /= 1 + inputs.inflationRate;
       const nextYear = year + 1;
       const shouldCalculatePensionContributions =
         pensionContributionsActive || redirectsPensionContributions;
@@ -737,6 +853,10 @@
       (total, row) => total + row.withdrawalTax,
       0,
     );
+    const totalPensionWithdrawalTax = planRows.reduce(
+      (total, row) => total + row.pensionWithdrawalTax,
+      0,
+    );
     const totalFreeFundsWithdrawals = planRows.reduce(
       (total, row) => total + row.freeFundsWithdrawal,
       0,
@@ -746,12 +866,12 @@
         ? totalFreeFundsTax / totalFreeFundsWithdrawals
         : 0;
     const pensionTargetAtStop = pensionStopRow
-      ? requiredAtRetirement /
-        Math.pow(1 + realPensionReturn, pensionStopRow.bridgeYears)
+      ? pensionStopRow.pensionTarget
       : null;
     assertFinite(
       pensionTargetAtStop ?? 0,
       totalFreeFundsTax,
+      totalPensionWithdrawalTax,
       totalFreeFundsWithdrawals,
       effectiveFreeFundsWithdrawalTaxRate,
     );
@@ -774,6 +894,7 @@
       isFullyFunded: drawdown.isFullyFunded,
       firstShortfallDate: drawdown.firstShortfallDate,
       totalFreeFundsTax,
+      totalPensionWithdrawalTax,
       effectiveFreeFundsWithdrawalTaxRate,
       rows: milestoneRows,
       planRows,

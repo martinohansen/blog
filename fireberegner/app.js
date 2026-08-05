@@ -237,6 +237,7 @@
       annualAgeSavingsContribution: readNumber("annualAgeSavingsContribution"),
       annualFreeFundsContribution: readNumber("annualFreeFundsContribution"),
       pensionTax: readNumber("pensionTax", 100),
+      pensionWithdrawalTax: readNumber("pensionWithdrawalTax", 100),
       askTax: readNumber("askTax", 100),
       returnRate: readNumber("returnRate", 100),
       inflationRate: readNumber("inflationRate", 100),
@@ -407,7 +408,7 @@
         <td>${currency.format(row.totalBalance)}</td>
         <td>${row.contribution ? currency.format(row.contribution) : "—"}</td>
         <td>${row.withdrawal ? currency.format(row.withdrawal) : "—"}</td>
-        <td>${row.freeFundsWithdrawal ? percent.format(row.effectiveFreeFundsWithdrawalTaxRate) : "—"}</td>
+        <td>${row.withdrawal ? percent.format(row.effectiveWithdrawalTaxRate) : "—"}</td>
         <td>${row.withdrawalSource}</td>
       </tr>`;
   }
@@ -757,7 +758,7 @@
     setText(
       "result-withdrawal",
       inputs.withdrawalAfterTax
-        ? `${currency.format(inputs.desiredAnnualWithdrawal)} om året efter skat på frie midler`
+        ? `${currency.format(inputs.desiredAnnualWithdrawal)} om året efter skat`
         : `${currency.format(inputs.desiredAnnualWithdrawal)} om året før skat`,
     );
     setText(
@@ -821,6 +822,10 @@
     setText(
       "total-free-funds-tax",
       currency.format(calculation.totalFreeFundsTax),
+    );
+    setText(
+      "total-pension-withdrawal-tax",
+      currency.format(calculation.totalPensionWithdrawalTax),
     );
     setText(
       "effective-free-funds-tax-rate",

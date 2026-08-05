@@ -91,7 +91,7 @@
                     <span
                       >Ønsket årlig hævning
                       <i
-                        title="Beløbet vises i dagens kroner. Efter skat omfatter beregnet skat på frie midler, men ikke indkomstskat på pensionsudbetalinger."
+                        title="Beløbet vises i dagens kroner. Efter skat omfatter beregnet skat på frie midler og den indtastede effektive skat på ratepensionsudbetalinger."
                         >i</i
                       ></span
                     >
@@ -374,6 +374,23 @@
                   >
                   <label class="field"
                     ><span
+                      >Skat på ratepensionsudbetaling
+                      <i
+                        title="Din forventede effektive indkomstskat på udbetalinger fra ratepension. Aldersopsparing er fortsat skattefri ved udbetaling."
+                        >i</i
+                      ></span
+                    ><span class="input-suffix"
+                      ><input
+                        name="pensionWithdrawalTax"
+                        type="number"
+                        step="0.1"
+                        value="37"
+                        required
+                      /><b>%</b></span
+                    ></label
+                  >
+                  <label class="field"
+                    ><span
                       >Skat på ASK
                       <i
                         title="ASK beskattes årligt efter lagerprincippet. Den aktuelle værdi bruges som startværdi for fremtidige afkast."
@@ -636,6 +653,10 @@
                 <dd id="total-free-funds-tax"></dd>
               </div>
               <div>
+                <dt>Samlet skat på ratepensionsudbetalinger</dt>
+                <dd id="total-pension-withdrawal-tax"></dd>
+              </div>
+              <div>
                 <dt>Effektiv skat på hævninger fra frie midler</dt>
                 <dd id="effective-free-funds-tax-rate"></dd>
               </div>
@@ -714,9 +735,9 @@
             en enlig uden anden aktieindkomst og medregner ikke udbytter,
             lagerbeskattede værdipapirer eller fremførte tab. ASK beskattes kun
             af fremtidige afkast fra den indtastede startværdi. Beregningen
-            medregner ikke allerede optjent ASK-skat eller indkomstskat ved
-            udbetaling fra ratepension. Resultatet er et overslag og er ikke
-            investerings- eller pensionsrådgivning.
+            medregner ikke allerede optjent ASK-skat. Ratepensionsudbetalinger
+            beskattes med den indtastede effektive sats. Resultatet er et
+            overslag og er ikke investerings- eller pensionsrådgivning.
           </p>
         </div>
       </div>
