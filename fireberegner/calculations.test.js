@@ -1,5 +1,9 @@
 const assert = require("node:assert/strict");
-const { calculateFire } = require("./calculations.js");
+const {
+  calculateFire,
+  optimizeAnnualContributions,
+  CONTRIBUTION_LIMITS,
+} = require("./calculations.js");
 
 const asOfDate = new Date(2026, 7, 4);
 
@@ -846,6 +850,170 @@ assert.throws(
     ),
   /tal, der er for store/,
 );
+
+const optimizationInputs = {
+  ...standardInputs,
+  currentAge: 36,
+  retirementAge: 70,
+  payoutYears: 20,
+  annualRatePensionContribution: 60000,
+  annualAgeSavingsContribution: 9900,
+  annualFreeFundsContribution: 50000,
+};
+const unchangedOptimizationInputs = { ...optimizationInputs };
+const optimizedContributions = optimizeAnnualContributions(
+  optimizationInputs,
+  asOfDate,
+);
+
+assert.deepEqual(optimizationInputs, unchangedOptimizationInputs);
+assert.equal(optimizedContributions.status, "improved");
+assert.equal(optimizedContributions.precision, 1000);
+assert.deepEqual(optimizedContributions.limits, CONTRIBUTION_LIMITS);
+assert.ok(optimizedContributions.recommended);
+assert.ok(
+  optimizedContributions.recommended.fireAge <
+    optimizedContributions.current.fireAge,
+);
+assertClose(
+  optimizedContributions.totalAnnualContribution,
+  optimizationInputs.annualRatePensionContribution +
+    optimizationInputs.annualAgeSavingsContribution +
+    optimizationInputs.annualFreeFundsContribution,
+);
+assertClose(
+  optimizedContributions.recommended.annualRatePensionContribution +
+    optimizedContributions.recommended.annualAgeSavingsContribution +
+    optimizedContributions.recommended.annualFreeFundsContribution,
+  optimizedContributions.totalAnnualContribution,
+);
+assert.ok(
+  optimizedContributions.recommended.annualRatePensionContribution <=
+    CONTRIBUTION_LIMITS.ratePension,
+);
+assert.ok(
+  optimizedContributions.recommended.annualAgeSavingsContribution <=
+    CONTRIBUTION_LIMITS.ageSavings,
+);
+
+const repeatedOptimization = optimizeAnnualContributions(
+  {
+    ...optimizationInputs,
+    annualRatePensionContribution:
+      optimizedContributions.recommended.annualRatePensionContribution,
+    annualAgeSavingsContribution:
+      optimizedContributions.recommended.annualAgeSavingsContribution,
+    annualFreeFundsContribution:
+      optimizedContributions.recommended.annualFreeFundsContribution,
+  },
+  asOfDate,
+);
+assert.equal(repeatedOptimization.status, "current-optimal");
+assert.deepEqual(
+  repeatedOptimization.recommended,
+  repeatedOptimization.current,
+);
+
+const overLimitOptimization = optimizeAnnualContributions(
+  {
+    ...optimizationInputs,
+    annualRatePensionContribution: 100000,
+    annualAgeSavingsContribution: 20000,
+    annualFreeFundsContribution: 0,
+  },
+  asOfDate,
+);
+assert.equal(overLimitOptimization.status, "limits-applied");
+assert.ok(
+  overLimitOptimization.recommended.annualRatePensionContribution <=
+    CONTRIBUTION_LIMITS.ratePension,
+);
+assert.ok(
+  overLimitOptimization.recommended.annualAgeSavingsContribution <=
+    CONTRIBUTION_LIMITS.ageSavings,
+);
+assertClose(
+  overLimitOptimization.recommended.annualRatePensionContribution +
+    overLimitOptimization.recommended.annualAgeSavingsContribution +
+    overLimitOptimization.recommended.annualFreeFundsContribution,
+  120000,
+);
+
+const impossibleOptimization = optimizeAnnualContributions(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 35,
+    payoutYears: 10,
+    desiredAnnualWithdrawal: 100000,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+  },
+  asOfDate,
+);
+assert.equal(impossibleOptimization.status, "unachievable");
+assert.equal(impossibleOptimization.recommended, null);
+
+[true, false].forEach((redirectPensionContributionsToFreeFunds) => {
+  const redirectOptimization = optimizeAnnualContributions(
+    {
+      ...optimizationInputs,
+      redirectPensionContributionsToFreeFunds,
+    },
+    asOfDate,
+  );
+
+  assert.ok(
+    redirectOptimization.status === "unachievable" ||
+      redirectOptimization.recommended.fireAge <=
+        redirectOptimization.current.fireAge,
+  );
+});
+
+const optimizedFireTime =
+  optimizedContributions.recommended.fireDate.getTime();
+for (
+  let pensionContribution = 0;
+  pensionContribution <=
+  Math.min(
+    optimizedContributions.totalAnnualContribution,
+    CONTRIBUTION_LIMITS.ratePension + CONTRIBUTION_LIMITS.ageSavings,
+  );
+  pensionContribution += optimizedContributions.precision
+) {
+  const ageSavingsContribution = Math.min(
+    pensionContribution,
+    CONTRIBUTION_LIMITS.ageSavings,
+  );
+  const ratePensionContribution =
+    pensionContribution - ageSavingsContribution;
+
+  if (ratePensionContribution > CONTRIBUTION_LIMITS.ratePension) {
+    continue;
+  }
+
+  const candidate = calculateFire(
+    {
+      ...optimizationInputs,
+      annualRatePensionContribution: ratePensionContribution,
+      annualAgeSavingsContribution: ageSavingsContribution,
+      annualFreeFundsContribution:
+        optimizedContributions.totalAnnualContribution -
+        pensionContribution,
+    },
+    asOfDate,
+  );
+
+  if (candidate.fireRow) {
+    assert.ok(optimizedFireTime <= candidate.fireRow.date.getTime());
+  }
+}
 
 let randomState = 0x51f15e;
 function random() {

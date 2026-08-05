@@ -183,7 +183,12 @@
                 <legend>Årlig opsparing i dagens kroner</legend>
                 <div class="form-grid savings-grid">
                   <label class="field"
-                    ><span>Ratepension</span
+                    ><span
+                      >Ratepension
+                      <i
+                        title="Optimeringen bruger 2026-loftet på 68.700 kr."
+                        >i</i
+                      ></span
                     ><input
                       name="annualRatePensionContribution"
                       type="text"
@@ -193,13 +198,18 @@
                       required
                   /></label>
                   <label class="field"
-                    ><span>Aldersopsparing</span
+                    ><span
+                      >Aldersopsparing
+                      <i
+                        title="Optimeringen bruger 2026-grundloftet på 9.900 kr."
+                        >i</i
+                      ></span
                     ><input
                       name="annualAgeSavingsContribution"
                       type="text"
                       inputmode="numeric"
                       data-number-format="integer"
-                      value="9.400"
+                      value="9.900"
                       required
                   /></label>
                   <label class="field"
@@ -252,10 +262,101 @@
               </fieldset>
 
               <details
+                id="optimization-section"
+                class="assumptions optimization-disclosure"
+                data-step-section="optimization-section"
+              >
+                <summary>Optimering</summary>
+                <div class="optimization-actions">
+                  <button
+                    id="optimize-contributions"
+                    class="optimization-button"
+                    type="button"
+                    aria-controls="optimization-result"
+                  >
+                    <svg viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M3 5.5h11M11.5 2.5l3 3-3 3M17 14.5H6M8.5 11.5l-3 3 3 3" />
+                    </svg>
+                    <span>Optimér for tidligere FIRE</span>
+                  </button>
+                  <button
+                    id="apply-optimization"
+                    class="apply-optimization-button"
+                    type="button"
+                    disabled
+                  >
+                    Brug fordelingen
+                  </button>
+                </div>
+                <section
+                  id="optimization-result"
+                  class="optimization-result"
+                  aria-labelledby="optimization-heading"
+                  aria-live="polite"
+                  hidden
+                >
+                  <header class="optimization-header">
+                    <div>
+                      <p>Optimeret fordeling</p>
+                      <h3 id="optimization-heading"></h3>
+                    </div>
+                    <div
+                      id="optimization-fire-shift"
+                      class="optimization-fire-shift"
+                    >
+                      <span id="optimization-current-fire"></span>
+                      <svg viewBox="0 0 24 12" aria-hidden="true">
+                        <path d="M1 6h20M17 2l4 4-4 4" />
+                      </svg>
+                      <strong id="optimization-recommended-fire"></strong>
+                    </div>
+                  </header>
+                  <div
+                    id="optimization-comparison"
+                    class="optimization-comparison"
+                  >
+                    <div class="optimization-column-headings" aria-hidden="true">
+                      <span></span><span>Før</span><span></span
+                      ><span>Anbefalet</span>
+                    </div>
+                    <dl>
+                      <div class="optimization-row optimization-row-pension">
+                        <dt><i aria-hidden="true"></i>Ratepension</dt>
+                        <dd id="optimization-current-rate"></dd>
+                        <span aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-rate"></dd>
+                      </div>
+                      <div class="optimization-row optimization-row-pension">
+                        <dt><i aria-hidden="true"></i>Aldersopsparing</dt>
+                        <dd id="optimization-current-age-savings"></dd>
+                        <span aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-age-savings"></dd>
+                      </div>
+                      <div class="optimization-row optimization-row-free">
+                        <dt><i aria-hidden="true"></i>Frie midler</dt>
+                        <dd id="optimization-current-free"></dd>
+                        <span aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-free"></dd>
+                      </div>
+                    </dl>
+                    <div
+                      id="optimization-allocation-bar"
+                      class="optimization-allocation-bar"
+                      aria-hidden="true"
+                    >
+                      <i></i><i></i><i></i>
+                    </div>
+                  </div>
+                  <footer class="optimization-footer">
+                    <p id="optimization-note"></p>
+                  </footer>
+                </section>
+              </details>
+
+              <details
                 id="assumptions-section"
                 class="assumptions"
                 data-step-section="assumptions-section"
-                open
               >
                 <summary>Forudsætninger</summary>
                 <div class="form-grid assumptions-grid">

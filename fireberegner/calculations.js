@@ -12,6 +12,11 @@
   const SHARE_INCOME_THRESHOLD = 79400;
   const SHARE_INCOME_LOW_RATE = 0.27;
   const SHARE_INCOME_HIGH_RATE = 0.42;
+  const CONTRIBUTION_SEARCH_STEP = 1000;
+  const CONTRIBUTION_LIMITS = Object.freeze({
+    ratePension: 68700,
+    ageSavings: 9900,
+  });
 
   const RATE_PENSION = 0;
   const AGE_SAVINGS = 1;
@@ -776,5 +781,204 @@
     };
   }
 
-  return { calculateFire };
+  function clamp(value, minimum, maximum) {
+    return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  function distributePensionContribution(totalPensionContribution, inputs) {
+    const minimumRatePension = Math.max(
+      0,
+      totalPensionContribution - CONTRIBUTION_LIMITS.ageSavings,
+    );
+    const maximumRatePension = Math.min(
+      CONTRIBUTION_LIMITS.ratePension,
+      totalPensionContribution,
+    );
+    const currentPensionContribution =
+      inputs.annualRatePensionContribution +
+      inputs.annualAgeSavingsContribution;
+    const targetRatePension =
+      currentPensionContribution > 0
+        ? totalPensionContribution *
+          (inputs.annualRatePensionContribution /
+            currentPensionContribution)
+        : totalPensionContribution;
+    const annualRatePensionContribution = clamp(
+      Math.round(targetRatePension),
+      minimumRatePension,
+      maximumRatePension,
+    );
+
+    return {
+      annualRatePensionContribution,
+      annualAgeSavingsContribution:
+        totalPensionContribution - annualRatePensionContribution,
+    };
+  }
+
+  function contributionSnapshot(contributions, calculation) {
+    return {
+      ...contributions,
+      fireAge: calculation.fireRow?.age ?? null,
+      fireDate: calculation.fireRow
+        ? new Date(calculation.fireRow.date)
+        : null,
+    };
+  }
+
+  function contributionDistance(first, second) {
+    return (
+      Math.abs(
+        first.annualRatePensionContribution -
+          second.annualRatePensionContribution,
+      ) +
+      Math.abs(
+        first.annualAgeSavingsContribution -
+          second.annualAgeSavingsContribution,
+      ) +
+      Math.abs(
+        first.annualFreeFundsContribution -
+          second.annualFreeFundsContribution,
+      )
+    );
+  }
+
+  function optimizeAnnualContributions(
+    inputs,
+    calculationDate = new Date(),
+  ) {
+    const currentCalculation = calculateFire(inputs, calculationDate);
+    const currentContributions = {
+      annualRatePensionContribution:
+        inputs.annualRatePensionContribution,
+      annualAgeSavingsContribution:
+        inputs.annualAgeSavingsContribution,
+      annualFreeFundsContribution: inputs.annualFreeFundsContribution,
+    };
+    const totalAnnualContribution = Object.values(
+      currentContributions,
+    ).reduce((total, contribution) => total + contribution, 0);
+    const maximumPensionContribution = Math.min(
+      totalAnnualContribution,
+      CONTRIBUTION_LIMITS.ratePension + CONTRIBUTION_LIMITS.ageSavings,
+    );
+    const pensionTotals = new Set([0, maximumPensionContribution]);
+
+    for (
+      let contribution = CONTRIBUTION_SEARCH_STEP;
+      contribution < maximumPensionContribution;
+      contribution += CONTRIBUTION_SEARCH_STEP
+    ) {
+      pensionTotals.add(contribution);
+    }
+
+    const currentPensionContribution =
+      currentContributions.annualRatePensionContribution +
+      currentContributions.annualAgeSavingsContribution;
+    const currentContributionsAreWithinLimits =
+      currentContributions.annualRatePensionContribution <=
+        CONTRIBUTION_LIMITS.ratePension &&
+      currentContributions.annualAgeSavingsContribution <=
+        CONTRIBUTION_LIMITS.ageSavings;
+
+    if (
+      currentContributionsAreWithinLimits &&
+      currentPensionContribution <= maximumPensionContribution
+    ) {
+      pensionTotals.add(currentPensionContribution);
+    }
+
+    let bestCandidate = null;
+    let bestCalculation = null;
+    let bestFireTime = Number.POSITIVE_INFINITY;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    const seenCandidates = new Set();
+
+    [...pensionTotals]
+      .sort((first, second) => first - second)
+      .forEach((totalPensionContribution) => {
+        const pensionContributions = distributePensionContribution(
+          totalPensionContribution,
+          inputs,
+        );
+        const candidate = {
+          ...pensionContributions,
+          annualFreeFundsContribution:
+            totalAnnualContribution - totalPensionContribution,
+        };
+        const candidateKey = Object.values(candidate).join(":");
+
+        if (seenCandidates.has(candidateKey)) {
+          return;
+        }
+        seenCandidates.add(candidateKey);
+
+        const calculation = calculateFire(
+          { ...inputs, ...candidate },
+          calculationDate,
+        );
+        const fireTime = calculation.fireRow
+          ? calculation.fireRow.date.getTime()
+          : Number.POSITIVE_INFINITY;
+        const distance = contributionDistance(
+          candidate,
+          currentContributions,
+        );
+        const isBetterFireDate = fireTime < bestFireTime;
+        const isCloserTie =
+          fireTime === bestFireTime && distance < bestDistance;
+        const isDeterministicTie =
+          fireTime === bestFireTime &&
+          distance === bestDistance &&
+          bestCandidate &&
+          candidate.annualFreeFundsContribution >
+            bestCandidate.annualFreeFundsContribution;
+
+        if (isBetterFireDate || isCloserTie || isDeterministicTie) {
+          bestCandidate = candidate;
+          bestCalculation = calculation;
+          bestFireTime = fireTime;
+          bestDistance = distance;
+        }
+      });
+
+    const currentFireTime = currentCalculation.fireRow
+      ? currentCalculation.fireRow.date.getTime()
+      : Number.POSITIVE_INFINITY;
+    let status = "improved";
+
+    if (!bestCalculation?.fireRow) {
+      status = "unachievable";
+    } else if (
+      currentContributionsAreWithinLimits &&
+      currentFireTime === bestFireTime
+    ) {
+      status = "current-optimal";
+      bestCandidate = currentContributions;
+      bestCalculation = currentCalculation;
+    } else if (!currentContributionsAreWithinLimits) {
+      status = "limits-applied";
+    }
+
+    return {
+      status,
+      current: contributionSnapshot(
+        currentContributions,
+        currentCalculation,
+      ),
+      recommended:
+        status === "unachievable"
+          ? null
+          : contributionSnapshot(bestCandidate, bestCalculation),
+      totalAnnualContribution,
+      limits: { ...CONTRIBUTION_LIMITS },
+      precision: CONTRIBUTION_SEARCH_STEP,
+    };
+  }
+
+  return {
+    calculateFire,
+    optimizeAnnualContributions,
+    CONTRIBUTION_LIMITS,
+  };
 });

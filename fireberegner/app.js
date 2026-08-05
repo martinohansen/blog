@@ -10,7 +10,28 @@
     "#pension-redirect-state",
   );
   const withdrawalTaxState = document.querySelector("#withdrawal-tax-state");
-  const { calculateFire } = window.FireCalculations;
+  const optimizeButton = document.querySelector("#optimize-contributions");
+  const optimizeButtonLabel = optimizeButton.querySelector("span");
+  const optimizationResult = document.querySelector("#optimization-result");
+  const optimizationHeading = document.querySelector(
+    "#optimization-heading",
+  );
+  const optimizationComparison = document.querySelector(
+    "#optimization-comparison",
+  );
+  const optimizationFireShift = document.querySelector(
+    "#optimization-fire-shift",
+  );
+  const optimizationNote = document.querySelector("#optimization-note");
+  const optimizationAllocationBar = document.querySelector(
+    "#optimization-allocation-bar",
+  );
+  const applyOptimizationButton = document.querySelector(
+    "#apply-optimization",
+  );
+  const { calculateFire, optimizeAnnualContributions } =
+    window.FireCalculations;
+  let latestOptimization = null;
   const inputLocale =
     document.documentElement.lang || navigator.language || "da-DK";
   const inputNumber = new Intl.NumberFormat(inputLocale, {
@@ -249,6 +270,128 @@
     withdrawalTaxState.textContent = form.elements.withdrawalAfterTax.checked
       ? "Efter skat"
       : "Før skat";
+  }
+
+  function hideOptimizationResult() {
+    latestOptimization = null;
+    optimizationResult.hidden = true;
+    applyOptimizationButton.disabled = true;
+  }
+
+  function fireAgeLabel(fireAge) {
+    return fireAge === null ? "Ikke opnået" : `${ages.format(fireAge)} år`;
+  }
+
+  function renderOptimization(optimization) {
+    latestOptimization = optimization;
+    optimizationResult.hidden = false;
+    optimizationResult.removeAttribute("aria-busy");
+
+    if (optimization.status === "unachievable") {
+      optimizationHeading.textContent = "Ingen fordeling kan nå FIRE";
+      optimizationComparison.hidden = true;
+      optimizationFireShift.hidden = true;
+      applyOptimizationButton.disabled = true;
+      optimizationNote.textContent =
+        "Den nuværende årlige opsparing kan ikke finansiere hele planen. Prøv at øge opsparingen eller sænke den ønskede hævning.";
+      return;
+    }
+
+    const { current, recommended, totalAnnualContribution, precision } =
+      optimization;
+    const headings = {
+      improved: "Du kan nå FIRE tidligere",
+      "current-optimal": "Din fordeling er allerede optimal",
+      "limits-applied": "Fordelingen holder sig under 2026-lofterne",
+    };
+    const valueIds = [
+      ["rate", "annualRatePensionContribution"],
+      ["age-savings", "annualAgeSavingsContribution"],
+      ["free", "annualFreeFundsContribution"],
+    ];
+
+    optimizationHeading.textContent = headings[optimization.status];
+    optimizationComparison.hidden = false;
+    optimizationFireShift.hidden = false;
+    applyOptimizationButton.disabled =
+      optimization.status === "current-optimal";
+    setText("optimization-current-fire", fireAgeLabel(current.fireAge));
+    setText(
+      "optimization-recommended-fire",
+      fireAgeLabel(recommended.fireAge),
+    );
+
+    valueIds.forEach(([id, key]) => {
+      setText(`optimization-current-${id}`, currency.format(current[key]));
+      setText(
+        `optimization-recommended-${id}`,
+        currency.format(recommended[key]),
+      );
+    });
+
+    const safeTotal = Math.max(1, totalAnnualContribution);
+    optimizationAllocationBar.style.setProperty(
+      "--rate-share",
+      `${(recommended.annualRatePensionContribution / safeTotal) * 100}%`,
+    );
+    optimizationAllocationBar.style.setProperty(
+      "--age-share",
+      `${(recommended.annualAgeSavingsContribution / safeTotal) * 100}%`,
+    );
+    optimizationAllocationBar.style.setProperty(
+      "--free-share",
+      `${(recommended.annualFreeFundsContribution / safeTotal) * 100}%`,
+    );
+
+    optimizationNote.textContent =
+      optimization.status === "limits-applied"
+        ? `Din nuværende fordeling overskrider et pensionsloft. Anbefalingen bevarer ${currency.format(totalAnnualContribution)} om året og bruger 2026-lofterne.`
+        : `Samme årlige opsparing på ${currency.format(totalAnnualContribution)} Den samlede pensionsandel er afprøvet i trin på ${currency.format(precision)}`;
+  }
+
+  function runContributionOptimization() {
+    optimizeButton.disabled = true;
+    optimizeButtonLabel.textContent = "Optimerer…";
+    optimizationResult.setAttribute("aria-busy", "true");
+
+    window.setTimeout(() => {
+      try {
+        renderOptimization(optimizeAnnualContributions(readInputs()));
+        errorBox.hidden = true;
+      } catch (error) {
+        hideOptimizationResult();
+        errorBox.textContent = error.message;
+        errorBox.hidden = false;
+      } finally {
+        optimizeButton.disabled = false;
+        optimizeButtonLabel.textContent = "Optimér for tidligere FIRE";
+        optimizationResult.removeAttribute("aria-busy");
+      }
+    }, 0);
+  }
+
+  function applyOptimization() {
+    const recommended = latestOptimization?.recommended;
+
+    if (!recommended) {
+      return;
+    }
+
+    [
+      "annualRatePensionContribution",
+      "annualAgeSavingsContribution",
+      "annualFreeFundsContribution",
+    ].forEach((name) => {
+      form.elements[name].value = inputNumber.format(
+        Math.round(recommended[name]),
+      );
+    });
+
+    update();
+    optimizationHeading.textContent = "Fordelingen er anvendt";
+    optimizationNote.textContent =
+      "Planen er genberegnet med den anbefalede fordeling.";
+    applyOptimizationButton.disabled = true;
   }
 
   function rowMarkup(row) {
@@ -759,6 +902,7 @@
 
   form.addEventListener("submit", update);
   form.addEventListener("input", (event) => {
+    hideOptimizationResult();
     if (event.target.matches("[data-number-format='integer']")) {
       formatNumberInput(event.target, true);
     }
@@ -776,6 +920,8 @@
     }
     update(event);
   });
+  optimizeButton.addEventListener("click", runContributionOptimization);
+  applyOptimizationButton.addEventListener("click", applyOptimization);
 
   formattedNumberInputs.forEach((input) => {
     formatNumberInput(input);
