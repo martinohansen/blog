@@ -251,6 +251,7 @@ legend,
 }
 
 .plan-grid {
+  column-gap: var(--space-3);
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
@@ -260,7 +261,8 @@ legend,
 
 .savings-grid {
   align-items: end;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: var(--space-3);
+  grid-template-columns: repeat(3, minmax(0, 1fr)) repeat(2, 160px);
 }
 
 .field {
@@ -277,6 +279,7 @@ legend,
 }
 
 .field i,
+.inflation-field i,
 .result-card footer i {
   align-items: center;
   border: 1px solid currentColor;
@@ -289,6 +292,18 @@ legend,
   justify-content: center;
   vertical-align: 0.1em;
   width: 13px;
+}
+
+@media (min-width: 1280px) {
+  .plan-grid .field > span:first-child {
+    white-space: nowrap;
+  }
+}
+
+@media (min-width: 1081px) and (max-width: 1279px) {
+  .plan-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .field input {
@@ -1082,7 +1097,7 @@ legend,
   font-size: var(--text-data-sm-size);
   font-weight: var(--weight-semibold);
   line-height: var(--text-data-sm-line);
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) var(--space-7);
 }
 
 .table-wrap {
@@ -1226,6 +1241,10 @@ input:focus-visible {
 
   .plan-grid,
   .wealth-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .savings-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }

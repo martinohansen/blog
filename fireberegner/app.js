@@ -6,6 +6,9 @@
   const chart = document.querySelector("#wealth-chart");
   const resultHeading = document.querySelector("#result-heading");
   const inflationState = document.querySelector("#inflation-state");
+  const pensionRedirectState = document.querySelector(
+    "#pension-redirect-state",
+  );
   const withdrawalTaxState = document.querySelector("#withdrawal-tax-state");
   const { calculateFire } = window.FireCalculations;
   const inputLocale =
@@ -125,6 +128,8 @@
     const stepper = document.createElement("span");
     const field = input.closest(".field");
     const inputSuffix = input.closest(".input-suffix");
+    const inputUnit = inputSuffix?.querySelector("b")?.textContent.trim();
+    const inputUnitLabel = inputUnit === "%" ? "procent" : inputUnit;
     const isFormattedAmount = input.matches("[data-number-format='integer']");
     const fieldLabel =
       field?.querySelector("span")?.textContent.trim().replace(/\s+i$/, "") ||
@@ -141,7 +146,7 @@
     stepper.className = "amount-stepper";
     input.setAttribute(
       "aria-label",
-      inputSuffix ? `${fieldLabel} i procent` : fieldLabel,
+      inputUnitLabel ? `${fieldLabel} i ${inputUnitLabel}` : fieldLabel,
     );
 
     [
@@ -217,6 +222,8 @@
       withdrawalAfterTax: form.elements.withdrawalAfterTax.checked,
       contributionsFollowInflation:
         form.elements.contributionsFollowInflation.checked,
+      redirectPensionContributionsToFreeFunds:
+        form.elements.redirectPensionContributionsToFreeFunds.checked,
     };
   }
 
@@ -229,6 +236,13 @@
       .checked
       ? "Følger inflationen"
       : "Følger ikke inflationen";
+  }
+
+  function renderPensionRedirectState() {
+    pensionRedirectState.textContent = form.elements
+      .redirectPensionContributionsToFreeFunds.checked
+      ? "Omdirigeres"
+      : "Omdirigeres ikke";
   }
 
   function renderWithdrawalTaxState() {
@@ -751,6 +765,12 @@
     if (event.target === form.elements.contributionsFollowInflation) {
       renderInflationState();
     }
+    if (
+      event.target ===
+      form.elements.redirectPensionContributionsToFreeFunds
+    ) {
+      renderPensionRedirectState();
+    }
     if (event.target === form.elements.withdrawalAfterTax) {
       renderWithdrawalTaxState();
     }
@@ -763,6 +783,7 @@
   });
   nativeNumberInputs.forEach((input) => addNumberSteppers(input));
   renderInflationState();
+  renderPensionRedirectState();
   renderWithdrawalTaxState();
 
   update();

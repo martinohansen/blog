@@ -428,6 +428,8 @@
     assertFinite(requiredAtRetirement, pensionTargetToday);
 
     const followsInflation = inputs.contributionsFollowInflation !== false;
+    const redirectsPensionContributions =
+      inputs.redirectPensionContributionsToFreeFunds !== false;
     const initialBalances = [
       inputs.ratePensionBalance,
       inputs.ageSavingsBalance,
@@ -677,23 +679,29 @@
 
       balances = growBalances(balances, rates);
       const nextYear = year + 1;
+      const shouldCalculatePensionContributions =
+        pensionContributionsActive || redirectsPensionContributions;
+      const ratePensionContribution = shouldCalculatePensionContributions
+        ? contributionAtYearEnd(
+            inputs.annualRatePensionContribution,
+            nextYear,
+          )
+        : 0;
+      const ageSavingsContribution = shouldCalculatePensionContributions
+        ? contributionAtYearEnd(
+            inputs.annualAgeSavingsContribution,
+            nextYear,
+          )
+        : 0;
+      const redirectedPensionContribution =
+        !pensionContributionsActive && redirectsPensionContributions
+          ? ratePensionContribution + ageSavingsContribution
+          : 0;
       const contributions = [
-        pensionContributionsActive
-          ? contributionAtYearEnd(
-              inputs.annualRatePensionContribution,
-              nextYear,
-            )
-          : 0,
-        pensionContributionsActive
-          ? contributionAtYearEnd(
-              inputs.annualAgeSavingsContribution,
-              nextYear,
-            )
-          : 0,
-        contributionAtYearEnd(
-          inputs.annualFreeFundsContribution,
-          nextYear,
-        ),
+        pensionContributionsActive ? ratePensionContribution : 0,
+        pensionContributionsActive ? ageSavingsContribution : 0,
+        contributionAtYearEnd(inputs.annualFreeFundsContribution, nextYear) +
+          redirectedPensionContribution,
         0,
       ];
       contributionAtCheckpoint = contributions.reduce(

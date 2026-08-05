@@ -83,7 +83,7 @@ assert.ok(Math.abs(result.realPensionReturn - 0.04584878) < 0.000001);
 assert.ok(Number.isFinite(result.requiredAtRetirement));
 assert.equal(result.pensionCoastRow.age, 45);
 assert.equal(result.pensionStopRow.age, 45);
-assert.equal(result.fireRow.age, 61);
+assert.equal(result.fireRow.age, 59);
 assert.equal(result.isFullyFunded, true);
 assert.equal(result.firstShortfallDate, null);
 assert.equal(result.planRows[0].phase, "Opsparing");
@@ -298,6 +298,7 @@ const annualPensionStop = calculateFire(
     askTax: 0,
     returnRate: 0,
     inflationRate: 0,
+    redirectPensionContributionsToFreeFunds: false,
   },
   asOfDate,
 );
@@ -305,6 +306,124 @@ assert.equal(annualPensionStop.pensionCoastRow.age, 37);
 assert.equal(annualPensionStop.pensionStopRow.age, 37);
 assertClose(annualPensionStop.pensionCoastRow.ratePension, 1050);
 assertClose(annualPensionStop.finalRow.totalBalance, 50);
+
+const pensionRedirectInputs = {
+  ...standardInputs,
+  currentAge: 30,
+  retirementAge: 40,
+  payoutYears: 10,
+  desiredAnnualWithdrawal: 100,
+  ratePensionBalance: 0,
+  ageSavingsBalance: 1000,
+  freeFundsBalance: 0,
+  freeFundsCostBasis: 0,
+  askBalance: 0,
+  annualRatePensionContribution: 102,
+  annualAgeSavingsContribution: 102,
+  annualFreeFundsContribution: 51,
+  pensionTax: 0,
+  askTax: 0,
+  returnRate: 0.02,
+  inflationRate: 0.02,
+};
+const defaultPensionRedirect = calculateFire(pensionRedirectInputs, asOfDate);
+const enabledPensionRedirect = calculateFire(
+  {
+    ...pensionRedirectInputs,
+    redirectPensionContributionsToFreeFunds: true,
+  },
+  asOfDate,
+);
+const disabledPensionRedirect = calculateFire(
+  {
+    ...pensionRedirectInputs,
+    redirectPensionContributionsToFreeFunds: false,
+  },
+  asOfDate,
+);
+const fixedNominalPensionRedirect = calculateFire(
+  {
+    ...pensionRedirectInputs,
+    contributionsFollowInflation: false,
+  },
+  asOfDate,
+);
+const defaultRedirectAge31 = defaultPensionRedirect.planRows.find(
+  (row) => row.age === 31,
+);
+const enabledRedirectAge31 = enabledPensionRedirect.planRows.find(
+  (row) => row.age === 31,
+);
+const disabledRedirectAge31 = disabledPensionRedirect.planRows.find(
+  (row) => row.age === 31,
+);
+const fixedNominalRedirectAge31 = fixedNominalPensionRedirect.planRows.find(
+  (row) => row.age === 31,
+);
+
+assert.equal(defaultPensionRedirect.pensionStopRow.age, 30);
+assert.equal(enabledPensionRedirect.pensionStopRow.age, 30);
+assertClose(defaultRedirectAge31.freeFunds, enabledRedirectAge31.freeFunds);
+assertClose(defaultRedirectAge31.freeFundsCostBasis, 255);
+assertClose(defaultRedirectAge31.contribution, 255);
+assertClose(enabledRedirectAge31.ratePension, 0);
+assertClose(enabledRedirectAge31.ageSavings, 1000);
+assertClose(enabledRedirectAge31.freeFunds, 255);
+assertClose(enabledRedirectAge31.freeFundsCostBasis, 255);
+assertClose(enabledRedirectAge31.contribution, 255);
+assertClose(disabledRedirectAge31.ratePension, 0);
+assertClose(disabledRedirectAge31.ageSavings, 1000);
+assertClose(disabledRedirectAge31.freeFunds, 51);
+assertClose(disabledRedirectAge31.freeFundsCostBasis, 51);
+assertClose(disabledRedirectAge31.contribution, 51);
+assertClose(fixedNominalRedirectAge31.freeFunds, 250);
+assertClose(fixedNominalRedirectAge31.freeFundsCostBasis, 250);
+assertClose(fixedNominalRedirectAge31.contribution, 250);
+
+const redirectNearFire = calculateFire(
+  {
+    ...pensionRedirectInputs,
+    ageSavingsBalance: 0,
+    annualRatePensionContribution: 150,
+    annualAgeSavingsContribution: 50,
+    annualFreeFundsContribution: 10,
+    returnRate: 0,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+const redirectNearFireAge36 = redirectNearFire.planRows.find(
+  (row) => row.age === 36,
+);
+assert.equal(redirectNearFire.pensionStopRow.age, 35);
+assert.equal(redirectNearFire.fireRow.age, 37);
+assertClose(redirectNearFireAge36.ratePension, 750);
+assertClose(redirectNearFireAge36.ageSavings, 250);
+assertClose(redirectNearFireAge36.freeFunds, 260);
+assertClose(redirectNearFireAge36.freeFundsCostBasis, 260);
+assertClose(redirectNearFireAge36.contribution, 210);
+assert.ok(
+  redirectNearFire.planRows
+    .filter((row) => row.age > redirectNearFire.fireRow.age)
+    .every((row) => row.contribution === 0),
+);
+
+const zeroPensionRedirect = calculateFire(
+  {
+    ...pensionRedirectInputs,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+  },
+  asOfDate,
+);
+const zeroRedirectAge31 = zeroPensionRedirect.planRows.find(
+  (row) => row.age === 31,
+);
+assert.equal(zeroPensionRedirect.pensionStopRow.age, 30);
+assertClose(zeroRedirectAge31.freeFunds, 0);
+assertClose(zeroRedirectAge31.freeFundsCostBasis, 0);
+assertClose(zeroRedirectAge31.contribution, 0);
 
 const annualTransitions = calculateFire(
   {
@@ -761,6 +880,7 @@ for (let scenario = 0; scenario < 2000; scenario += 1) {
       inflationRate: randomBetween(-0.1, 0.15),
       withdrawalAfterTax: random() >= 0.5,
       contributionsFollowInflation: random() >= 0.5,
+      redirectPensionContributionsToFreeFunds: random() >= 0.5,
     },
     asOfDate,
   );

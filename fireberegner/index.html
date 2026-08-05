@@ -44,14 +44,16 @@
                         >i</i
                       ></span
                     >
-                    <input
-                      name="currentAge"
-                      type="number"
-                      min="0"
-                      step="1"
-                      value="36"
-                      required
-                    />
+                    <span class="input-suffix"
+                      ><input
+                        name="currentAge"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value="36"
+                        required
+                      /><b>år</b></span
+                    >
                   </label>
                   <label class="field">
                     <span
@@ -60,26 +62,30 @@
                         >i</i
                       ></span
                     >
-                    <input
-                      name="retirementAge"
-                      type="number"
-                      min="1"
-                      value="70"
-                      required
-                    />
+                    <span class="input-suffix"
+                      ><input
+                        name="retirementAge"
+                        type="number"
+                        min="1"
+                        value="70"
+                        required
+                      /><b>år</b></span
+                    >
                   </label>
                   <label class="field">
                     <span
-                      >Udbetaling over antal år
+                      >Udbetaling over
                       <i title="Antal år med pensionsudbetaling">i</i></span
                     >
-                    <input
-                      name="payoutYears"
-                      type="number"
-                      min="1"
-                      value="20"
-                      required
-                    />
+                    <span class="input-suffix"
+                      ><input
+                        name="payoutYears"
+                        type="number"
+                        min="1"
+                        value="20"
+                        required
+                      /><b>år</b></span
+                    >
                   </label>
                   <label class="field">
                     <span
@@ -211,11 +217,35 @@
                       required
                   /></label>
                   <label class="inflation-field">
-                    <span>Inflationsregulering</span>
+                    <span
+                      >Inflationsregulering
+                      <i
+                        title="Når funktionen er slået til, reguleres indbetalingerne med inflationen, så de bevarer samme købekraft. Når den er slået fra, er indbetalingerne faste nominelle beløb."
+                        >i</i
+                      ></span
+                    >
                     <span class="inflation-input">
                       <b id="inflation-state">Følger inflationen</b>
                       <input
                         name="contributionsFollowInflation"
+                        type="checkbox"
+                        checked
+                      />
+                      <span class="inflation-switch" aria-hidden="true"></span>
+                    </span>
+                  </label>
+                  <label class="inflation-field">
+                    <span
+                      >Omdiriger pension
+                      <i
+                        title="Når pensionen har nået sit mål, flyttes fremtidige indbetalinger til ratepension og aldersopsparing over til frie midler. Det fortsætter, indtil du når FIRE."
+                        >i</i
+                      ></span
+                    >
+                    <span class="inflation-input">
+                      <b id="pension-redirect-state">Omdirigeres</b>
+                      <input
+                        name="redirectPensionContributionsToFreeFunds"
                         type="checkbox"
                         checked
                       />
