@@ -30,7 +30,15 @@ function assertFiniteResult(calculation) {
     assert.ok(Number.isInteger(row.age));
     assert.ok(Number.isFinite(row.date.getTime()));
     assert.equal("exactAge" in row, false);
+    assert.ok(row.freeFundsCostBasis >= 0);
+    assert.ok(row.withdrawalTax >= 0);
+    assert.ok(row.withdrawalTax <= row.freeFundsWithdrawal);
+    assertClose(row.netWithdrawal, row.withdrawal - row.withdrawalTax);
   });
+
+  assert.ok(calculation.totalFreeFundsTax >= 0);
+  assert.ok(calculation.effectiveFreeFundsWithdrawalTaxRate >= 0);
+  assert.ok(calculation.effectiveFreeFundsWithdrawalTaxRate <= 0.42);
 }
 
 const standardInputs = {
@@ -41,15 +49,16 @@ const standardInputs = {
   ratePensionBalance: 500000,
   ageSavingsBalance: 50000,
   freeFundsBalance: 250000,
+  freeFundsCostBasis: 250000,
   askBalance: 150000,
   annualRatePensionContribution: 60000,
   annualAgeSavingsContribution: 9400,
   annualFreeFundsContribution: 60000,
   pensionTax: 0.153,
   askTax: 0.17,
-  freeFundsTax: 0.27,
   returnRate: 0.07,
   inflationRate: 0.02,
+  withdrawalAfterTax: false,
 };
 
 const result = calculateFire(
@@ -74,7 +83,7 @@ assert.ok(Math.abs(result.realPensionReturn - 0.04584878) < 0.000001);
 assert.ok(Number.isFinite(result.requiredAtRetirement));
 assert.equal(result.pensionCoastRow.age, 45);
 assert.equal(result.pensionStopRow.age, 45);
-assert.equal(result.fireRow.age, 64);
+assert.equal(result.fireRow.age, 61);
 assert.equal(result.isFullyFunded, true);
 assert.equal(result.firstShortfallDate, null);
 assert.equal(result.planRows[0].phase, "Opsparing");
@@ -106,6 +115,7 @@ result.rows.forEach((milestone) => {
   assertClose(planRow.ratePension, milestone.ratePension);
   assertClose(planRow.ageSavings, milestone.ageSavings);
   assertClose(planRow.freeFunds, milestone.freeFunds);
+  assertClose(planRow.freeFundsCostBasis, milestone.freeFundsCostBasis);
   assertClose(planRow.ask, milestone.ask);
 });
 
@@ -158,8 +168,8 @@ assert.throws(
   /Ratepension skal udbetales over mellem 10 og 30 hele år/,
 );
 assert.throws(
-  () => calculateFire({ ...standardInputs, freeFundsTax: 3 }, asOfDate),
-  /Skattesatser skal være mellem 0 og 100 %/,
+  () => calculateFire({ ...standardInputs, freeFundsCostBasis: -1 }, asOfDate),
+  /Beløb skal være 0 eller højere/,
 );
 
 const zeroAssets = calculateFire(
@@ -205,7 +215,6 @@ const exactDepletion = calculateFire(
     annualFreeFundsContribution: 0,
     pensionTax: 0,
     askTax: 0,
-    freeFundsTax: 0,
     returnRate: 0,
     inflationRate: 0,
   },
@@ -258,7 +267,6 @@ const annualFire = calculateFire(
     annualFreeFundsContribution: 0,
     pensionTax: 0,
     askTax: 0,
-    freeFundsTax: 0,
     returnRate: 0,
     inflationRate: 0,
   },
@@ -288,7 +296,6 @@ const annualPensionStop = calculateFire(
     annualFreeFundsContribution: 0,
     pensionTax: 0,
     askTax: 0,
-    freeFundsTax: 0,
     returnRate: 0,
     inflationRate: 0,
   },
@@ -315,7 +322,6 @@ const annualTransitions = calculateFire(
     annualFreeFundsContribution: 200,
     pensionTax: 0,
     askTax: 0,
-    freeFundsTax: 0,
     returnRate: 0.1,
     inflationRate: 0,
   },
@@ -342,7 +348,6 @@ const startOfYearWithdrawals = calculateFire(
     annualFreeFundsContribution: 0,
     pensionTax: 0,
     askTax: 0,
-    freeFundsTax: 0,
     returnRate: 0,
     inflationRate: 0,
   },
@@ -376,7 +381,6 @@ function calculateExactlyFundedPension(returnRate) {
     annualFreeFundsContribution: 0,
     pensionTax: 0,
     askTax: 0,
-    freeFundsTax: 0,
     returnRate,
     inflationRate: 0,
   };
@@ -413,7 +417,6 @@ const freeFundedFire = calculateFire(
     annualFreeFundsContribution: 0,
     pensionTax: 0,
     askTax: 0,
-    freeFundsTax: 0,
     returnRate: 0,
     inflationRate: 0,
   },
@@ -425,6 +428,283 @@ assert.ok(
 );
 assert.equal(freeFundedFire.pensionCoastRow, null);
 assert.equal(freeFundedFire.planRows[0].contribution, 0);
+
+const repeatedPartialSales = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 100,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 200,
+    freeFundsCostBasis: 80,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+const repeatedSaleRows = repeatedPartialSales.planRows.filter(
+  (row) => row.withdrawal > 0,
+);
+assert.equal(repeatedSaleRows.length, 2);
+repeatedSaleRows.forEach((row) => {
+  assertClose(row.freeFundsWithdrawal, 100);
+  assertClose(row.realizedFreeFundsGain, 60);
+  assertClose(row.withdrawalTax, 16.2);
+  assertClose(row.netWithdrawal, 83.8);
+});
+assertClose(repeatedSaleRows[0].freeFundsCostBasis, 80);
+assertClose(repeatedSaleRows[1].freeFundsCostBasis, 40);
+assertClose(repeatedPartialSales.finalRow.freeFundsCostBasis, 0);
+assertClose(repeatedPartialSales.totalFreeFundsTax, 32.4);
+assertClose(repeatedPartialSales.effectiveFreeFundsWithdrawalTaxRate, 0.162);
+
+const netTargetInputs = {
+  ...standardInputs,
+  currentAge: 30,
+  retirementAge: 31,
+  payoutYears: 1,
+  desiredAnnualWithdrawal: 300000,
+  ratePensionBalance: 0,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 1000000,
+  freeFundsCostBasis: 400000,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 0,
+  returnRate: 0,
+  inflationRate: 0,
+};
+const grossTargetCalculation = calculateFire(netTargetInputs, asOfDate);
+const netTargetCalculation = calculateFire(
+  { ...netTargetInputs, withdrawalAfterTax: true },
+  asOfDate,
+);
+const firstNetTargetWithdrawal = netTargetCalculation.planRows.find(
+  (row) => row.withdrawal > 0,
+);
+assertClose(firstNetTargetWithdrawal.withdrawal, 385147.0588235294);
+assertClose(firstNetTargetWithdrawal.withdrawalTax, 85147.0588235294);
+assertClose(firstNetTargetWithdrawal.netWithdrawal, 300000);
+assertClose(
+  firstNetTargetWithdrawal.effectiveFreeFundsWithdrawalTaxRate,
+  firstNetTargetWithdrawal.withdrawalTax /
+    firstNetTargetWithdrawal.freeFundsWithdrawal,
+);
+assert.ok(
+  netTargetCalculation.finalRow.freeFunds <
+    grossTargetCalculation.finalRow.freeFunds,
+);
+
+const insufficientNetTarget = calculateFire(
+  {
+    ...netTargetInputs,
+    freeFundsBalance: 200000,
+    freeFundsCostBasis: 80000,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+);
+assert.equal(insufficientNetTarget.isFullyFunded, false);
+assert.ok(
+  insufficientNetTarget.planRows.some(
+    (row) => row.withdrawal > 0 && row.netWithdrawal < 300000,
+  ),
+);
+
+const progressiveTax = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 200000,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 200000,
+    freeFundsCostBasis: 100000,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+const progressiveTaxRow = progressiveTax.planRows.find(
+  (row) => row.withdrawal > 0,
+);
+assertClose(progressiveTaxRow.realizedFreeFundsGain, 100000);
+assertClose(progressiveTaxRow.withdrawalTax, 30090);
+assertClose(progressiveTaxRow.netWithdrawal, 169910);
+
+const thresholdTax = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 158800,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 158800,
+    freeFundsCostBasis: 79400,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+assertClose(
+  thresholdTax.planRows.find((row) => row.withdrawal > 0).withdrawalTax,
+  21438,
+);
+
+const noGainSale = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 100,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 100,
+    freeFundsCostBasis: 100,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+assert.equal(noGainSale.totalFreeFundsTax, 0);
+
+const lossSale = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 50,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 100,
+    freeFundsCostBasis: 200,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+assert.ok(
+  lossSale.planRows
+    .filter((row) => row.withdrawal > 0)
+    .every(
+      (row) => row.realizedFreeFundsGain < 0 && row.withdrawalTax === 0,
+    ),
+);
+assertClose(lossSale.finalRow.freeFundsCostBasis, 0);
+
+const contributionCostBasis = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 32,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 10000,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 100,
+    freeFundsCostBasis: 100,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 100,
+    returnRate: 0,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+assertClose(
+  contributionCostBasis.planRows.find((row) => row.age === 31)
+    .freeFundsCostBasis,
+  200,
+);
+
+const askOnlyWithdrawals = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 50,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
+    askBalance: 100,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0.1,
+    inflationRate: 0,
+  },
+  asOfDate,
+);
+assertClose(askOnlyWithdrawals.planRows[0].ask, 100);
+assertClose(askOnlyWithdrawals.realAskReturn, 0.083);
+assert.ok(
+  askOnlyWithdrawals.planRows.every(
+    (row) => row.freeFundsWithdrawal === 0 && row.withdrawalTax === 0,
+  ),
+);
+const askOnlyNetWithdrawals = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 1,
+    desiredAnnualWithdrawal: 50,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
+    askBalance: 100,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0,
+    inflationRate: 0,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+);
+assert.ok(
+  askOnlyNetWithdrawals.planRows
+    .filter((row) => row.withdrawal > 0)
+    .every(
+      (row) =>
+        row.withdrawalTax === 0 &&
+        Math.abs(row.netWithdrawal - row.withdrawal) <= 0.01,
+    ),
+);
 
 assert.throws(
   () =>
@@ -470,15 +750,16 @@ for (let scenario = 0; scenario < 2000; scenario += 1) {
       ratePensionBalance: randomBetween(0, 5000000),
       ageSavingsBalance: randomBetween(0, 1000000),
       freeFundsBalance: randomBetween(0, 5000000),
+      freeFundsCostBasis: randomBetween(0, 7500000),
       askBalance: randomBetween(0, 2000000),
       annualRatePensionContribution: randomBetween(0, 150000),
       annualAgeSavingsContribution: randomBetween(0, 50000),
       annualFreeFundsContribution: randomBetween(0, 250000),
       pensionTax: randomBetween(0, 0.5),
       askTax: randomBetween(0, 0.5),
-      freeFundsTax: randomBetween(0, 0.5),
       returnRate: randomBetween(-0.2, 0.3),
       inflationRate: randomBetween(-0.1, 0.15),
+      withdrawalAfterTax: random() >= 0.5,
       contributionsFollowInflation: random() >= 0.5,
     },
     asOfDate,
@@ -493,6 +774,7 @@ for (let scenario = 0; scenario < 2000; scenario += 1) {
     assertClose(planRow.ratePension, milestone.ratePension);
     assertClose(planRow.ageSavings, milestone.ageSavings);
     assertClose(planRow.freeFunds, milestone.freeFunds);
+    assertClose(planRow.freeFundsCostBasis, milestone.freeFundsCostBasis);
     assertClose(planRow.ask, milestone.ask);
   });
 

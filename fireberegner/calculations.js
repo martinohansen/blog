@@ -9,6 +9,9 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   const MONEY_TOLERANCE = 0.01;
   const CALCULATION_TOLERANCE = 1e-7;
+  const SHARE_INCOME_THRESHOLD = 79400;
+  const SHARE_INCOME_LOW_RATE = 0.27;
+  const SHARE_INCOME_HIGH_RATE = 0.42;
 
   const RATE_PENSION = 0;
   const AGE_SAVINGS = 1;
@@ -138,6 +141,108 @@
     };
   }
 
+  function grossWithdrawalForNetTarget(
+    netTarget,
+    freeFundsCapacity,
+    askCapacity,
+    freeFundsBalance,
+    freeFundsCostBasis,
+  ) {
+    if (netTarget <= 0) {
+      return 0;
+    }
+
+    const totalCapacity = freeFundsCapacity + askCapacity;
+    if (totalCapacity <= 0) {
+      return 0;
+    }
+
+    const freeFundsShare = freeFundsCapacity / totalCapacity;
+    const gainShare =
+      freeFundsBalance > 0
+        ? Math.max(
+            0,
+            (freeFundsBalance - freeFundsCostBasis) / freeFundsBalance,
+          )
+        : 0;
+    const taxableGainPerGrossWithdrawal = freeFundsShare * gainShare;
+    let grossWithdrawal = netTarget;
+
+    if (taxableGainPerGrossWithdrawal > 0) {
+      const grossAtThreshold =
+        SHARE_INCOME_THRESHOLD / taxableGainPerGrossWithdrawal;
+      const netAtThreshold =
+        grossAtThreshold -
+        SHARE_INCOME_THRESHOLD * SHARE_INCOME_LOW_RATE;
+
+      if (netTarget <= netAtThreshold) {
+        grossWithdrawal =
+          netTarget /
+          (1 -
+            SHARE_INCOME_LOW_RATE * taxableGainPerGrossWithdrawal);
+      } else {
+        grossWithdrawal =
+          (netTarget -
+            (SHARE_INCOME_HIGH_RATE - SHARE_INCOME_LOW_RATE) *
+              SHARE_INCOME_THRESHOLD) /
+          (1 -
+            SHARE_INCOME_HIGH_RATE * taxableGainPerGrossWithdrawal);
+      }
+    }
+
+    assertFinite(
+      totalCapacity,
+      freeFundsShare,
+      gainShare,
+      taxableGainPerGrossWithdrawal,
+      grossWithdrawal,
+    );
+    return Math.min(grossWithdrawal, totalCapacity);
+  }
+
+  function allocateForNetWithdrawal(
+    balances,
+    rates,
+    desiredNetWithdrawal,
+    periods,
+    beforeRetirement,
+    freeFundsCostBasis,
+  ) {
+    const pensionIndexes = [RATE_PENSION, AGE_SAVINGS];
+    const freeIndexes = [FREE_FUNDS, ASK];
+    const pensionAllocation = beforeRetirement
+      ? { amounts: [0, 0], total: 0 }
+      : allocateWithdrawals(
+          pensionIndexes.map((index) =>
+            annualCapacity(balances[index], rates[index], periods),
+          ),
+          desiredNetWithdrawal,
+        );
+    const remainingNetWithdrawal = Math.max(
+      0,
+      desiredNetWithdrawal - pensionAllocation.total,
+    );
+    const freeCapacities = freeIndexes.map((index) =>
+      annualCapacity(balances[index], rates[index], periods),
+    );
+    const freeGrossWithdrawal = grossWithdrawalForNetTarget(
+      remainingNetWithdrawal,
+      freeCapacities[0],
+      freeCapacities[1],
+      balances[FREE_FUNDS],
+      freeFundsCostBasis,
+    );
+    const freeAllocation = allocateWithdrawals(
+      freeCapacities,
+      freeGrossWithdrawal,
+    );
+
+    return {
+      amounts: [...pensionAllocation.amounts, ...freeAllocation.amounts],
+      total: pensionAllocation.total + freeAllocation.total,
+    };
+  }
+
   function growBalances(balances, rates) {
     const grown = balances.map((balance, index) =>
       Math.max(0, balance * (1 + rates[index])),
@@ -146,7 +251,47 @@
     return grown;
   }
 
-  function createRow(age, date, balances, values = {}) {
+  function calculateFreeFundsSale(balance, costBasis, withdrawal) {
+    if (balance <= 0 || withdrawal <= 0) {
+      return {
+        realizedGain: 0,
+        tax: 0,
+        remainingCostBasis: costBasis,
+      };
+    }
+
+    const soldShare = Math.min(1, withdrawal / balance);
+    const usedCostBasis = costBasis * soldShare;
+    const realizedGain = withdrawal - usedCostBasis;
+    const taxableGain = Math.max(0, realizedGain);
+    const tax =
+      Math.min(taxableGain, SHARE_INCOME_THRESHOLD) *
+        SHARE_INCOME_LOW_RATE +
+      Math.max(0, taxableGain - SHARE_INCOME_THRESHOLD) *
+        SHARE_INCOME_HIGH_RATE;
+    const remainingCostBasis =
+      soldShare >= 1 - CALCULATION_TOLERANCE
+        ? 0
+        : Math.max(0, costBasis - usedCostBasis);
+
+    assertFinite(
+      soldShare,
+      usedCostBasis,
+      realizedGain,
+      taxableGain,
+      tax,
+      remainingCostBasis,
+    );
+    return { realizedGain, tax, remainingCostBasis };
+  }
+
+  function createRow(
+    age,
+    date,
+    balances,
+    freeFundsCostBasis,
+    values = {},
+  ) {
     const totalBalance = balances.reduce(
       (total, balance) => total + balance,
       0,
@@ -162,6 +307,12 @@
       totalBalance,
       contribution: 0,
       withdrawal: 0,
+      freeFundsWithdrawal: 0,
+      realizedFreeFundsGain: 0,
+      withdrawalTax: 0,
+      netWithdrawal: 0,
+      effectiveFreeFundsWithdrawalTaxRate: 0,
+      freeFundsCostBasis,
       withdrawalSource: "—",
       withdrawalShortfall: false,
       ...values,
@@ -178,13 +329,14 @@
       "ratePensionBalance",
       "ageSavingsBalance",
       "freeFundsBalance",
+      "freeFundsCostBasis",
       "askBalance",
       "annualRatePensionContribution",
       "annualAgeSavingsContribution",
       "annualFreeFundsContribution",
       "desiredAnnualWithdrawal",
     ];
-    const taxes = ["pensionTax", "askTax", "freeFundsTax"];
+    const taxes = ["pensionTax", "askTax"];
 
     if (!Number.isInteger(inputs.currentAge) || inputs.currentAge < 0) {
       throw new Error("Din nuværende alder skal være et helt tal.");
@@ -255,9 +407,7 @@
         (1 + inputs.inflationRate) -
       1;
     const realFreeFundsReturn =
-      (1 + inputs.returnRate * (1 - inputs.freeFundsTax)) /
-        (1 + inputs.inflationRate) -
-      1;
+      (1 + inputs.returnRate) / (1 + inputs.inflationRate) - 1;
     const rates = [
       realPensionReturn,
       realPensionReturn,
@@ -284,7 +434,7 @@
       inputs.freeFundsBalance,
       inputs.askBalance,
     ];
-    assertFinite(...initialBalances);
+    assertFinite(...initialBalances, inputs.freeFundsCostBasis);
 
     function contributionAtYearEnd(baseContribution, yearNumber) {
       if (baseContribution <= 0) {
@@ -302,10 +452,12 @@
     function simulateDrawdown(
       startYear,
       startBalances,
+      startFreeFundsCostBasis,
       shouldRecord,
       startingContribution = 0,
     ) {
       let balances = [...startBalances];
+      let freeFundsCostBasis = startFreeFundsCostBasis;
       const rows = [];
       let isFullyFunded = true;
       let firstShortfallDate = null;
@@ -315,17 +467,40 @@
         const periods = beforeRetirement
           ? yearsToRetirement - year
           : finalYear - year;
-        const allocation = allocateForPhase(
-          balances,
-          rates,
-          inputs.desiredAnnualWithdrawal,
-          periods,
-          beforeRetirement,
-        );
-        const shortfall =
-          allocation.total + MONEY_TOLERANCE <
-          inputs.desiredAnnualWithdrawal;
+        const allocation = inputs.withdrawalAfterTax
+          ? allocateForNetWithdrawal(
+              balances,
+              rates,
+              inputs.desiredAnnualWithdrawal,
+              periods,
+              beforeRetirement,
+              freeFundsCostBasis,
+            )
+          : allocateForPhase(
+              balances,
+              rates,
+              inputs.desiredAnnualWithdrawal,
+              periods,
+              beforeRetirement,
+            );
         const date = annualDate(asOfDate, year);
+        const freeFundsWithdrawal = allocation.amounts[FREE_FUNDS];
+        const freeFundsSale = calculateFreeFundsSale(
+          balances[FREE_FUNDS],
+          freeFundsCostBasis,
+          freeFundsWithdrawal,
+        );
+        const netWithdrawal = allocation.total - freeFundsSale.tax;
+        const effectiveFreeFundsWithdrawalTaxRate =
+          freeFundsWithdrawal > 0
+            ? freeFundsSale.tax / freeFundsWithdrawal
+            : 0;
+        const deliveredWithdrawal = inputs.withdrawalAfterTax
+          ? netWithdrawal
+          : allocation.total;
+        const shortfall =
+          deliveredWithdrawal + MONEY_TOLERANCE <
+          inputs.desiredAnnualWithdrawal;
 
         if (shortfall && !firstShortfallDate) {
           firstShortfallDate = new Date(date);
@@ -355,11 +530,17 @@
               inputs.currentAge + year,
               date,
               balances,
+              freeFundsCostBasis,
               {
                 phase: beforeRetirement ? "FIRE" : "Pension",
                 contribution:
                   year === startYear ? startingContribution : 0,
                 withdrawal: allocation.total,
+                freeFundsWithdrawal,
+                realizedFreeFundsGain: freeFundsSale.realizedGain,
+                withdrawalTax: freeFundsSale.tax,
+                netWithdrawal,
+                effectiveFreeFundsWithdrawalTaxRate,
                 withdrawalSource,
                 withdrawalShortfall: shortfall,
               },
@@ -367,6 +548,7 @@
           );
         }
 
+        freeFundsCostBasis = freeFundsSale.remainingCostBasis;
         balances = balances.map((balance, index) =>
           Math.max(0, balance - allocation.amounts[index]),
         );
@@ -379,6 +561,7 @@
             inputs.currentAge + finalYear,
             finalDate,
             balances,
+            freeFundsCostBasis,
             { phase: "Slut" },
           ),
         );
@@ -387,25 +570,40 @@
       return {
         rows,
         finalBalances: balances,
+        finalFreeFundsCostBasis: freeFundsCostBasis,
         isFullyFunded,
         firstShortfallDate,
       };
     }
 
-    function evaluateMilestone(year, balances) {
+    function evaluateMilestone(year, balances, freeFundsCostBasis) {
       const bridgeYears = yearsToRetirement - year;
       const pensionAtRetirement =
         (balances[RATE_PENSION] + balances[AGE_SAVINGS]) *
         Math.pow(1 + realPensionReturn, bridgeYears);
       const coastFinanced =
         pensionAtRetirement + CALCULATION_TOLERANCE >= requiredAtRetirement;
-      const drawdown = simulateDrawdown(year, balances, false);
-      const possibleBridgeWithdrawal =
-        annualCapacity(
-          balances[FREE_FUNDS],
-          realFreeFundsReturn,
-          bridgeYears,
-        ) + annualCapacity(balances[ASK], realAskReturn, bridgeYears);
+      const drawdown = simulateDrawdown(
+        year,
+        balances,
+        freeFundsCostBasis,
+        false,
+      );
+      const bridgeCapacityAllocation = allocateForPhase(
+        balances,
+        rates,
+        Number.MAX_VALUE,
+        bridgeYears,
+        true,
+      );
+      const bridgeCapacitySale = calculateFreeFundsSale(
+        balances[FREE_FUNDS],
+        freeFundsCostBasis,
+        bridgeCapacityAllocation.amounts[FREE_FUNDS],
+      );
+      const possibleBridgeWithdrawal = inputs.withdrawalAfterTax
+        ? bridgeCapacityAllocation.total - bridgeCapacitySale.tax
+        : bridgeCapacityAllocation.total;
 
       assertFinite(pensionAtRetirement, possibleBridgeWithdrawal);
       return {
@@ -414,6 +612,7 @@
         ratePension: balances[RATE_PENSION],
         ageSavings: balances[AGE_SAVINGS],
         freeFunds: balances[FREE_FUNDS],
+        freeFundsCostBasis,
         ask: balances[ASK],
         bridgeYears,
         coastFinanced,
@@ -425,6 +624,7 @@
     const accumulationRows = [];
     const milestoneRows = [];
     let balances = [...initialBalances];
+    let freeFundsCostBasis = inputs.freeFundsCostBasis;
     let contributionAtCheckpoint = 0;
     let pensionContributionsActive = true;
     let pensionCoastRow = null;
@@ -432,10 +632,11 @@
     let fireRow = null;
     let drawdownStartYear = yearsToRetirement;
     let drawdownStartBalances = null;
+    let drawdownStartFreeFundsCostBasis = null;
     let drawdownStartContribution = 0;
 
     for (let year = 0; year <= yearsToRetirement; year += 1) {
-      const milestone = evaluateMilestone(year, balances);
+      const milestone = evaluateMilestone(year, balances, freeFundsCostBasis);
       milestoneRows.push(milestone);
 
       if (!pensionCoastRow && milestone.coastFinanced) {
@@ -449,12 +650,14 @@
         pensionStopRow = pensionStopRow || milestone;
         drawdownStartYear = year;
         drawdownStartBalances = [...balances];
+        drawdownStartFreeFundsCostBasis = freeFundsCostBasis;
         drawdownStartContribution = contributionAtCheckpoint;
         break;
       }
 
       if (year === yearsToRetirement) {
         drawdownStartBalances = [...balances];
+        drawdownStartFreeFundsCostBasis = freeFundsCostBasis;
         drawdownStartContribution = contributionAtCheckpoint;
         break;
       }
@@ -464,6 +667,7 @@
           inputs.currentAge + year,
           annualDate(asOfDate, year),
           balances,
+          freeFundsCostBasis,
           {
             phase: "Opsparing",
             contribution: contributionAtCheckpoint,
@@ -499,22 +703,45 @@
       balances = balances.map(
         (balance, index) => balance + contributions[index],
       );
-      assertFinite(contributionAtCheckpoint, ...balances);
+      freeFundsCostBasis += contributions[FREE_FUNDS];
+      assertFinite(
+        contributionAtCheckpoint,
+        freeFundsCostBasis,
+        ...balances,
+      );
     }
 
     const drawdown = simulateDrawdown(
       drawdownStartYear,
       drawdownStartBalances,
+      drawdownStartFreeFundsCostBasis,
       true,
       drawdownStartContribution,
     );
     const planRows = [...accumulationRows, ...drawdown.rows];
     const finalRow = planRows[planRows.length - 1];
+    const totalFreeFundsTax = planRows.reduce(
+      (total, row) => total + row.withdrawalTax,
+      0,
+    );
+    const totalFreeFundsWithdrawals = planRows.reduce(
+      (total, row) => total + row.freeFundsWithdrawal,
+      0,
+    );
+    const effectiveFreeFundsWithdrawalTaxRate =
+      totalFreeFundsWithdrawals > 0
+        ? totalFreeFundsTax / totalFreeFundsWithdrawals
+        : 0;
     const pensionTargetAtStop = pensionStopRow
       ? requiredAtRetirement /
         Math.pow(1 + realPensionReturn, pensionStopRow.bridgeYears)
       : null;
-    assertFinite(pensionTargetAtStop ?? 0);
+    assertFinite(
+      pensionTargetAtStop ?? 0,
+      totalFreeFundsTax,
+      totalFreeFundsWithdrawals,
+      effectiveFreeFundsWithdrawalTaxRate,
+    );
 
     return {
       currentAge: inputs.currentAge,
@@ -533,6 +760,8 @@
       fireRow,
       isFullyFunded: drawdown.isFullyFunded,
       firstShortfallDate: drawdown.firstShortfallDate,
+      totalFreeFundsTax,
+      effectiveFreeFundsWithdrawalTaxRate,
       rows: milestoneRows,
       planRows,
       finalRow,

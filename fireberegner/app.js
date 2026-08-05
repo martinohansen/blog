@@ -6,6 +6,7 @@
   const chart = document.querySelector("#wealth-chart");
   const resultHeading = document.querySelector("#result-heading");
   const inflationState = document.querySelector("#inflation-state");
+  const withdrawalTaxState = document.querySelector("#withdrawal-tax-state");
   const { calculateFire } = window.FireCalculations;
   const inputLocale =
     document.documentElement.lang || navigator.language || "da-DK";
@@ -202,6 +203,7 @@
       ratePensionBalance: readNumber("ratePensionBalance"),
       ageSavingsBalance: readNumber("ageSavingsBalance"),
       freeFundsBalance: readNumber("freeFundsBalance"),
+      freeFundsCostBasis: readNumber("freeFundsCostBasis"),
       askBalance: readNumber("askBalance"),
       annualRatePensionContribution: readNumber(
         "annualRatePensionContribution",
@@ -210,9 +212,9 @@
       annualFreeFundsContribution: readNumber("annualFreeFundsContribution"),
       pensionTax: readNumber("pensionTax", 100),
       askTax: readNumber("askTax", 100),
-      freeFundsTax: readNumber("freeFundsTax", 100),
       returnRate: readNumber("returnRate", 100),
       inflationRate: readNumber("inflationRate", 100),
+      withdrawalAfterTax: form.elements.withdrawalAfterTax.checked,
       contributionsFollowInflation:
         form.elements.contributionsFollowInflation.checked,
     };
@@ -229,6 +231,12 @@
       : "Følger ikke inflationen";
   }
 
+  function renderWithdrawalTaxState() {
+    withdrawalTaxState.textContent = form.elements.withdrawalAfterTax.checked
+      ? "Efter skat"
+      : "Før skat";
+  }
+
   function rowMarkup(row) {
     return `
       <tr data-phase="${row.phase}">
@@ -242,6 +250,7 @@
         <td>${currency.format(row.totalBalance)}</td>
         <td>${row.contribution ? currency.format(row.contribution) : "—"}</td>
         <td>${row.withdrawal ? currency.format(row.withdrawal) : "—"}</td>
+        <td>${row.freeFundsWithdrawal ? percent.format(row.effectiveFreeFundsWithdrawalTaxRate) : "—"}</td>
         <td>${row.withdrawalSource}</td>
       </tr>`;
   }
@@ -590,7 +599,9 @@
       : "FIRE-ikke nået";
     setText(
       "result-withdrawal",
-      `${currency.format(inputs.desiredAnnualWithdrawal)} om året før eventuel skat`,
+      inputs.withdrawalAfterTax
+        ? `${currency.format(inputs.desiredAnnualWithdrawal)} om året efter skat på frie midler`
+        : `${currency.format(inputs.desiredAnnualWithdrawal)} om året før skat`,
     );
     setText(
       "result-final-balance",
@@ -649,6 +660,14 @@
     setText(
       "real-free-return",
       percent.format(calculation.realFreeFundsReturn),
+    );
+    setText(
+      "total-free-funds-tax",
+      currency.format(calculation.totalFreeFundsTax),
+    );
+    setText(
+      "effective-free-funds-tax-rate",
+      percent.format(calculation.effectiveFreeFundsWithdrawalTaxRate),
     );
     setText(
       "required-at-retirement",
@@ -732,6 +751,9 @@
     if (event.target === form.elements.contributionsFollowInflation) {
       renderInflationState();
     }
+    if (event.target === form.elements.withdrawalAfterTax) {
+      renderWithdrawalTaxState();
+    }
     update(event);
   });
 
@@ -741,6 +763,7 @@
   });
   nativeNumberInputs.forEach((input) => addNumberSteppers(input));
   renderInflationState();
+  renderWithdrawalTaxState();
 
   update();
 })();
