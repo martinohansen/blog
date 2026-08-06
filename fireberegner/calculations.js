@@ -16,6 +16,7 @@
   const CONTRIBUTION_LIMITS = Object.freeze({
     ratePension: 68700,
     ageSavings: 9900,
+    ageSavingsHigh: 64200,
   });
 
   const RATE_PENSION = 0;
@@ -42,6 +43,22 @@
       contributions.annualFreeFundsContribution;
     assertFinite(budget);
     return budget;
+  }
+
+  function ageSavingsContributionLimit(inputs) {
+    const limit =
+      inputs.ageSavingsContributionLimit ?? CONTRIBUTION_LIMITS.ageSavings;
+
+    if (
+      limit !== CONTRIBUTION_LIMITS.ageSavings &&
+      limit !== CONTRIBUTION_LIMITS.ageSavingsHigh
+    ) {
+      throw new Error(
+        "Loftet for aldersopsparing skal være et gældende 2026-loft.",
+      );
+    }
+
+    return limit;
   }
 
   function normalizeDate(date) {
@@ -374,6 +391,7 @@
       "desiredAnnualWithdrawal",
     ];
     const taxes = ["pensionTax", "askTax"];
+    ageSavingsContributionLimit(inputs);
 
     if (!Number.isInteger(inputs.currentAge) || inputs.currentAge < 0) {
       throw new Error("Din nuværende alder skal være et helt tal.");
@@ -457,6 +475,8 @@
     const pensionWithdrawalTax = inputs.pensionWithdrawalTax ?? 0;
     const ratePensionContributionTaxRelief =
       inputs.ratePensionContributionTaxRelief ?? 0;
+    const selectedAgeSavingsContributionLimit =
+      ageSavingsContributionLimit(inputs);
 
     const netPensionReturn = inputs.returnRate * (1 - inputs.pensionTax);
     const realPensionReturn =
@@ -901,6 +921,12 @@
       },
       ratePensionContributionTaxRelief,
     );
+    const ageSavingsContributionLimitExceeded =
+      inputs.annualAgeSavingsContribution >
+      selectedAgeSavingsContributionLimit + MONEY_TOLERANCE;
+    const ratePensionContributionLimitExceeded =
+      inputs.annualRatePensionContribution >
+      CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE;
     assertFinite(
       pensionTargetAtStop ?? 0,
       totalFreeFundsTax,
@@ -924,6 +950,10 @@
       pensionStopRow,
       pensionTargetAtStop,
       annualNetContributionBudget,
+      ratePensionContributionLimit: CONTRIBUTION_LIMITS.ratePension,
+      ratePensionContributionLimitExceeded,
+      ageSavingsContributionLimit: selectedAgeSavingsContributionLimit,
+      ageSavingsContributionLimitExceeded,
       fireRow,
       isFullyFunded: drawdown.isFullyFunded,
       firstShortfallDate: drawdown.firstShortfallDate,
@@ -940,10 +970,14 @@
     return Math.min(maximum, Math.max(minimum, value));
   }
 
-  function distributePensionContribution(totalPensionContribution, inputs) {
+  function distributePensionContribution(
+    totalPensionContribution,
+    inputs,
+    selectedAgeSavingsContributionLimit,
+  ) {
     const minimumRatePension = Math.max(
       0,
-      totalPensionContribution - CONTRIBUTION_LIMITS.ageSavings,
+      totalPensionContribution - selectedAgeSavingsContributionLimit,
     );
     const maximumRatePension = Math.min(
       CONTRIBUTION_LIMITS.ratePension,
@@ -985,10 +1019,12 @@
     totalPensionContribution,
     inputs,
     taxRelief,
+    selectedAgeSavingsContributionLimit,
   ) {
     const pensionContributions = distributePensionContribution(
       totalPensionContribution,
       inputs,
+      selectedAgeSavingsContributionLimit,
     );
 
     return contributionNetBudget(
@@ -1001,13 +1037,19 @@
     annualNetBudget,
     inputs,
     taxRelief,
+    selectedAgeSavingsContributionLimit,
   ) {
     let affordable = 0;
     let unaffordable =
-      CONTRIBUTION_LIMITS.ratePension + CONTRIBUTION_LIMITS.ageSavings;
+      CONTRIBUTION_LIMITS.ratePension + selectedAgeSavingsContributionLimit;
 
     if (
-      pensionContributionNetCost(unaffordable, inputs, taxRelief) <=
+      pensionContributionNetCost(
+        unaffordable,
+        inputs,
+        taxRelief,
+        selectedAgeSavingsContributionLimit,
+      ) <=
       annualNetBudget + MONEY_TOLERANCE
     ) {
       return unaffordable;
@@ -1017,7 +1059,12 @@
       const candidate = (affordable + unaffordable) / 2;
 
       if (
-        pensionContributionNetCost(candidate, inputs, taxRelief) <=
+        pensionContributionNetCost(
+          candidate,
+          inputs,
+          taxRelief,
+          selectedAgeSavingsContributionLimit,
+        ) <=
         annualNetBudget + MONEY_TOLERANCE
       ) {
         affordable = candidate;
@@ -1060,6 +1107,8 @@
     };
     const ratePensionContributionTaxRelief =
       inputs.ratePensionContributionTaxRelief ?? 0;
+    const selectedAgeSavingsContributionLimit =
+      ageSavingsContributionLimit(inputs);
     const annualNetBudget = contributionNetBudget(
       currentContributions,
       ratePensionContributionTaxRelief,
@@ -1068,6 +1117,7 @@
       annualNetBudget,
       inputs,
       ratePensionContributionTaxRelief,
+      selectedAgeSavingsContributionLimit,
     );
     const pensionTotals = new Set([0, maximumPensionContribution]);
 
@@ -1086,7 +1136,7 @@
       currentContributions.annualRatePensionContribution <=
         CONTRIBUTION_LIMITS.ratePension &&
       currentContributions.annualAgeSavingsContribution <=
-        CONTRIBUTION_LIMITS.ageSavings;
+        selectedAgeSavingsContributionLimit;
 
     if (
       currentContributionsAreWithinLimits &&
@@ -1107,6 +1157,7 @@
         const pensionContributions = distributePensionContribution(
           totalPensionContribution,
           inputs,
+          selectedAgeSavingsContributionLimit,
         );
         const pensionNetCost = contributionNetBudget(
           { ...pensionContributions, annualFreeFundsContribution: 0 },
@@ -1191,7 +1242,10 @@
           : contributionSnapshot(bestCandidate, bestCalculation),
       annualNetBudget,
       ratePensionContributionTaxRelief,
-      limits: { ...CONTRIBUTION_LIMITS },
+      limits: {
+        ratePension: CONTRIBUTION_LIMITS.ratePension,
+        ageSavings: selectedAgeSavingsContributionLimit,
+      },
       precision: CONTRIBUTION_SEARCH_STEP,
     };
   }

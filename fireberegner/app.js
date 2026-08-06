@@ -236,6 +236,7 @@
       ),
       annualAgeSavingsContribution: readNumber("annualAgeSavingsContribution"),
       annualFreeFundsContribution: readNumber("annualFreeFundsContribution"),
+      ageSavingsContributionLimit: readNumber("ageSavingsContributionLimit"),
       pensionTax: readNumber("pensionTax", 100),
       ratePensionContributionTaxRelief: readNumber(
         "ratePensionContributionTaxRelief",
@@ -251,6 +252,18 @@
       redirectPensionContributionsToFreeFunds:
         form.elements.redirectPensionContributionsToFreeFunds.checked,
     };
+  }
+
+  function markContributionLimit(name, exceeded, limit) {
+    const input = form.elements[name];
+    const field = input.closest(".field");
+
+    field.classList.toggle("limit-exceeded", exceeded);
+    if (exceeded) {
+      input.title = `Indbetalingen overskrider loftet på ${currency.format(limit)}`;
+    } else {
+      input.removeAttribute("title");
+    }
   }
 
   function setText(id, value) {
@@ -848,6 +861,10 @@
       currency.format(calculation.annualNetContributionBudget),
     );
     setText(
+      "age-savings-contribution-limit",
+      currency.format(calculation.ageSavingsContributionLimit),
+    );
+    setText(
       "required-at-retirement",
       currency.format(calculation.requiredAtRetirement),
     );
@@ -902,6 +919,16 @@
     );
 
     tableBody.innerHTML = calculation.planRows.map(rowMarkup).join("");
+    markContributionLimit(
+      "annualRatePensionContribution",
+      calculation.ratePensionContributionLimitExceeded,
+      calculation.ratePensionContributionLimit,
+    );
+    markContributionLimit(
+      "annualAgeSavingsContribution",
+      calculation.ageSavingsContributionLimitExceeded,
+      calculation.ageSavingsContributionLimit,
+    );
     errorBox.hidden = true;
     results.hidden = false;
   }

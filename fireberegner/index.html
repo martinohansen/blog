@@ -201,7 +201,7 @@
                     ><span
                       >Aldersopsparing
                       <i
-                        title="Optimeringen bruger 2026-grundloftet på 9.900 kr."
+                        title="Optimeringen bruger det 2026-loft, du vælger under Forudsætninger."
                         >i</i
                       ></span
                     ><input
@@ -359,6 +359,18 @@
               >
                 <summary>Forudsætninger</summary>
                 <div class="form-grid assumptions-grid">
+                  <label class="field"
+                    ><span
+                      >Loft for aldersopsparing
+                      <i
+                        title="Vælg kun det forhøjede loft, hvis du har højst 7 år til folkepensionsalderen og ikke er begrænset af 10-års-reglen."
+                        >i</i
+                      ></span
+                    ><select name="ageSavingsContributionLimit" required>
+                      <option value="9900">Grundloft · 9.900 kr.</option>
+                      <option value="64200">Forhøjet · 64.200 kr.</option>
+                    </select></label
+                  >
                   <label class="field"
                     ><span>Pensionsafkastskat</span
                     ><span class="input-suffix"
@@ -679,6 +691,10 @@
               <div>
                 <dt>Årligt nettobudget til opsparing</dt>
                 <dd id="annual-net-contribution-budget"></dd>
+              </div>
+              <div>
+                <dt>Valgt loft for aldersopsparing</dt>
+                <dd id="age-savings-contribution-limit"></dd>
               </div>
               <div>
                 <dt>Nødvendig pensionsformue ved pension</dt>

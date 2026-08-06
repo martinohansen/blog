@@ -198,6 +198,47 @@ assert.throws(
     ),
   /Skattesatser skal være mellem 0 og 100 %/,
 );
+assert.throws(
+  () =>
+    calculateFire(
+      { ...standardInputs, ageSavingsContributionLimit: 12345 },
+      asOfDate,
+    ),
+  /gældende 2026-loft/,
+);
+
+const lowAgeSavingsLimit = calculateFire(
+  {
+    ...standardInputs,
+    annualRatePensionContribution: 68701,
+    annualAgeSavingsContribution: 10000,
+  },
+  asOfDate,
+);
+const highAgeSavingsLimit = calculateFire(
+  {
+    ...standardInputs,
+    annualAgeSavingsContribution: 60000,
+    ageSavingsContributionLimit: CONTRIBUTION_LIMITS.ageSavingsHigh,
+  },
+  asOfDate,
+);
+assert.equal(
+  lowAgeSavingsLimit.ageSavingsContributionLimit,
+  CONTRIBUTION_LIMITS.ageSavings,
+);
+assert.equal(lowAgeSavingsLimit.ageSavingsContributionLimitExceeded, true);
+assert.equal(
+  lowAgeSavingsLimit.ratePensionContributionLimit,
+  CONTRIBUTION_LIMITS.ratePension,
+);
+assert.equal(lowAgeSavingsLimit.ratePensionContributionLimitExceeded, true);
+assert.equal(
+  highAgeSavingsLimit.ageSavingsContributionLimit,
+  CONTRIBUTION_LIMITS.ageSavingsHigh,
+);
+assert.equal(highAgeSavingsLimit.ageSavingsContributionLimitExceeded, false);
+assert.equal(highAgeSavingsLimit.ratePensionContributionLimitExceeded, false);
 
 const zeroAssets = calculateFire(
   {
@@ -1015,7 +1056,10 @@ assert.ok(
   ["improved", "current-optimal"].includes(optimizedContributions.status),
 );
 assert.equal(optimizedContributions.precision, 1000);
-assert.deepEqual(optimizedContributions.limits, CONTRIBUTION_LIMITS);
+assert.deepEqual(optimizedContributions.limits, {
+  ratePension: CONTRIBUTION_LIMITS.ratePension,
+  ageSavings: CONTRIBUTION_LIMITS.ageSavings,
+});
 assert.ok(optimizedContributions.recommended);
 assert.ok(
   optimizedContributions.recommended.fireAge <=
@@ -1086,6 +1130,26 @@ assertClose(
     optimizationInputs.ratePensionContributionTaxRelief,
   ),
   83000,
+);
+
+const highLimitOptimization = optimizeAnnualContributions(
+  {
+    ...optimizationInputs,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 60000,
+    annualFreeFundsContribution: 50000,
+    ageSavingsContributionLimit: CONTRIBUTION_LIMITS.ageSavingsHigh,
+  },
+  asOfDate,
+);
+assert.equal(
+  highLimitOptimization.limits.ageSavings,
+  CONTRIBUTION_LIMITS.ageSavingsHigh,
+);
+assert.notEqual(highLimitOptimization.status, "limits-applied");
+assert.ok(
+  highLimitOptimization.recommended.annualAgeSavingsContribution <=
+    CONTRIBUTION_LIMITS.ageSavingsHigh,
 );
 
 const impossibleOptimization = optimizeAnnualContributions(

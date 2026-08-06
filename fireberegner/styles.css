@@ -306,7 +306,8 @@ legend,
   }
 }
 
-.field input {
+.field input,
+.field select {
   background: #fff;
   border: 1px solid var(--color-border-control);
   border-radius: var(--radius-control);
@@ -323,11 +324,13 @@ legend,
   width: 100%;
 }
 
-.field > input {
+.field > input,
+.field > select {
   height: var(--control-height);
 }
 
 .field input:focus,
+.field select:focus,
 .input-suffix:focus-within {
   border-color: var(--green);
   box-shadow: var(--focus-ring);
@@ -354,6 +357,16 @@ legend,
   box-shadow: none;
   min-height: 0;
   padding-right: 8px;
+}
+
+.field.limit-exceeded .stepper-input {
+  background: #fff8e6;
+  border-color: #b7791f;
+}
+
+.field.limit-exceeded .stepper-input input,
+.field.limit-exceeded .amount-step-button {
+  background: #fff8e6;
 }
 
 .field input[type="number"] {
