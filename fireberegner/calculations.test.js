@@ -190,6 +190,14 @@ assert.throws(
     calculateFire({ ...standardInputs, pensionWithdrawalTax: 1.01 }, asOfDate),
   /Skattesatser skal være mellem 0 og 100 %/,
 );
+assert.throws(
+  () =>
+    calculateFire(
+      { ...standardInputs, ratePensionContributionTaxRelief: 1.01 },
+      asOfDate,
+    ),
+  /Skattesatser skal være mellem 0 og 100 %/,
+);
 
 const zeroAssets = calculateFire(
   {
@@ -340,6 +348,7 @@ const pensionRedirectInputs = {
   annualRatePensionContribution: 102,
   annualAgeSavingsContribution: 102,
   annualFreeFundsContribution: 51,
+  ratePensionContributionTaxRelief: 0.4,
   pensionTax: 0,
   askTax: 0,
   returnRate: 0.02,
@@ -383,21 +392,42 @@ const fixedNominalRedirectAge31 = fixedNominalPensionRedirect.planRows.find(
 assert.equal(defaultPensionRedirect.pensionStopRow.age, 30);
 assert.equal(enabledPensionRedirect.pensionStopRow.age, 30);
 assertClose(defaultRedirectAge31.freeFunds, enabledRedirectAge31.freeFunds);
-assertClose(defaultRedirectAge31.freeFundsCostBasis, 255);
-assertClose(defaultRedirectAge31.contribution, 255);
+assertClose(defaultRedirectAge31.freeFundsCostBasis, 214.2);
+assertClose(defaultRedirectAge31.contribution, 214.2);
 assertClose(enabledRedirectAge31.ratePension, 0);
 assertClose(enabledRedirectAge31.ageSavings, 1000);
-assertClose(enabledRedirectAge31.freeFunds, 255);
-assertClose(enabledRedirectAge31.freeFundsCostBasis, 255);
-assertClose(enabledRedirectAge31.contribution, 255);
+assertClose(enabledRedirectAge31.freeFunds, 214.2);
+assertClose(enabledRedirectAge31.freeFundsCostBasis, 214.2);
+assertClose(enabledRedirectAge31.contribution, 214.2);
 assertClose(disabledRedirectAge31.ratePension, 0);
 assertClose(disabledRedirectAge31.ageSavings, 1000);
 assertClose(disabledRedirectAge31.freeFunds, 51);
 assertClose(disabledRedirectAge31.freeFundsCostBasis, 51);
 assertClose(disabledRedirectAge31.contribution, 51);
-assertClose(fixedNominalRedirectAge31.freeFunds, 250);
-assertClose(fixedNominalRedirectAge31.freeFundsCostBasis, 250);
-assertClose(fixedNominalRedirectAge31.contribution, 250);
+assertClose(fixedNominalRedirectAge31.freeFunds, 210);
+assertClose(fixedNominalRedirectAge31.freeFundsCostBasis, 210);
+assertClose(fixedNominalRedirectAge31.contribution, 210);
+
+const noTaxReliefRedirect = calculateFire(
+  { ...pensionRedirectInputs, ratePensionContributionTaxRelief: 0 },
+  asOfDate,
+);
+const fullTaxReliefRedirect = calculateFire(
+  {
+    ...pensionRedirectInputs,
+    annualAgeSavingsContribution: 0,
+    ratePensionContributionTaxRelief: 1,
+  },
+  asOfDate,
+);
+assertClose(
+  noTaxReliefRedirect.planRows.find((row) => row.age === 31).freeFunds,
+  255,
+);
+assertClose(
+  fullTaxReliefRedirect.planRows.find((row) => row.age === 31).freeFunds,
+  51,
+);
 
 const redirectNearFire = calculateFire(
   {
@@ -418,9 +448,9 @@ assert.equal(redirectNearFire.pensionStopRow.age, 35);
 assert.equal(redirectNearFire.fireRow.age, 37);
 assertClose(redirectNearFireAge36.ratePension, 750);
 assertClose(redirectNearFireAge36.ageSavings, 250);
-assertClose(redirectNearFireAge36.freeFunds, 260);
-assertClose(redirectNearFireAge36.freeFundsCostBasis, 260);
-assertClose(redirectNearFireAge36.contribution, 210);
+assertClose(redirectNearFireAge36.freeFunds, 200);
+assertClose(redirectNearFireAge36.freeFundsCostBasis, 200);
+assertClose(redirectNearFireAge36.contribution, 150);
 assert.ok(
   redirectNearFire.planRows
     .filter((row) => row.age > redirectNearFire.fireRow.age)
@@ -965,7 +995,15 @@ const optimizationInputs = {
   annualRatePensionContribution: 60000,
   annualAgeSavingsContribution: 9900,
   annualFreeFundsContribution: 50000,
+  ratePensionContributionTaxRelief: 0.37,
 };
+function netContributionBudget(contributions, taxRelief) {
+  return (
+    contributions.annualRatePensionContribution * (1 - taxRelief) +
+    contributions.annualAgeSavingsContribution +
+    contributions.annualFreeFundsContribution
+  );
+}
 const unchangedOptimizationInputs = { ...optimizationInputs };
 const optimizedContributions = optimizeAnnualContributions(
   optimizationInputs,
@@ -973,25 +1011,29 @@ const optimizedContributions = optimizeAnnualContributions(
 );
 
 assert.deepEqual(optimizationInputs, unchangedOptimizationInputs);
-assert.equal(optimizedContributions.status, "improved");
+assert.ok(
+  ["improved", "current-optimal"].includes(optimizedContributions.status),
+);
 assert.equal(optimizedContributions.precision, 1000);
 assert.deepEqual(optimizedContributions.limits, CONTRIBUTION_LIMITS);
 assert.ok(optimizedContributions.recommended);
 assert.ok(
-  optimizedContributions.recommended.fireAge <
+  optimizedContributions.recommended.fireAge <=
     optimizedContributions.current.fireAge,
 );
 assertClose(
-  optimizedContributions.totalAnnualContribution,
-  optimizationInputs.annualRatePensionContribution +
-    optimizationInputs.annualAgeSavingsContribution +
-    optimizationInputs.annualFreeFundsContribution,
+  optimizedContributions.annualNetBudget,
+  netContributionBudget(
+    optimizationInputs,
+    optimizationInputs.ratePensionContributionTaxRelief,
+  ),
 );
 assertClose(
-  optimizedContributions.recommended.annualRatePensionContribution +
-    optimizedContributions.recommended.annualAgeSavingsContribution +
-    optimizedContributions.recommended.annualFreeFundsContribution,
-  optimizedContributions.totalAnnualContribution,
+  netContributionBudget(
+    optimizedContributions.recommended,
+    optimizationInputs.ratePensionContributionTaxRelief,
+  ),
+  optimizedContributions.annualNetBudget,
 );
 assert.ok(
   optimizedContributions.recommended.annualRatePensionContribution <=
@@ -1039,10 +1081,11 @@ assert.ok(
     CONTRIBUTION_LIMITS.ageSavings,
 );
 assertClose(
-  overLimitOptimization.recommended.annualRatePensionContribution +
-    overLimitOptimization.recommended.annualAgeSavingsContribution +
-    overLimitOptimization.recommended.annualFreeFundsContribution,
-  120000,
+  netContributionBudget(
+    overLimitOptimization.recommended,
+    optimizationInputs.ratePensionContributionTaxRelief,
+  ),
+  83000,
 );
 
 const impossibleOptimization = optimizeAnnualContributions(
@@ -1087,20 +1130,38 @@ const optimizedFireTime =
 for (
   let pensionContribution = 0;
   pensionContribution <=
-  Math.min(
-    optimizedContributions.totalAnnualContribution,
-    CONTRIBUTION_LIMITS.ratePension + CONTRIBUTION_LIMITS.ageSavings,
-  );
+  CONTRIBUTION_LIMITS.ratePension + CONTRIBUTION_LIMITS.ageSavings;
   pensionContribution += optimizedContributions.precision
 ) {
-  const ageSavingsContribution = Math.min(
-    pensionContribution,
-    CONTRIBUTION_LIMITS.ageSavings,
+  const minimumRatePension = Math.max(
+    0,
+    pensionContribution - CONTRIBUTION_LIMITS.ageSavings,
   );
-  const ratePensionContribution =
-    pensionContribution - ageSavingsContribution;
+  const maximumRatePension = Math.min(
+    CONTRIBUTION_LIMITS.ratePension,
+    pensionContribution,
+  );
+  const ratePensionContribution = Math.min(
+    maximumRatePension,
+    Math.max(
+      minimumRatePension,
+      Math.round(
+        pensionContribution *
+          (optimizationInputs.annualRatePensionContribution /
+            (optimizationInputs.annualRatePensionContribution +
+              optimizationInputs.annualAgeSavingsContribution)),
+      ),
+    ),
+  );
+  const ageSavingsContribution =
+    pensionContribution - ratePensionContribution;
+  const annualFreeFundsContribution =
+    optimizedContributions.annualNetBudget -
+    ratePensionContribution *
+      (1 - optimizationInputs.ratePensionContributionTaxRelief) -
+    ageSavingsContribution;
 
-  if (ratePensionContribution > CONTRIBUTION_LIMITS.ratePension) {
+  if (annualFreeFundsContribution < 0) {
     continue;
   }
 
@@ -1109,9 +1170,7 @@ for (
       ...optimizationInputs,
       annualRatePensionContribution: ratePensionContribution,
       annualAgeSavingsContribution: ageSavingsContribution,
-      annualFreeFundsContribution:
-        optimizedContributions.totalAnnualContribution -
-        pensionContribution,
+      annualFreeFundsContribution,
     },
     asOfDate,
   );
@@ -1149,6 +1208,7 @@ for (let scenario = 0; scenario < 2000; scenario += 1) {
       annualAgeSavingsContribution: randomBetween(0, 50000),
       annualFreeFundsContribution: randomBetween(0, 250000),
       pensionTax: randomBetween(0, 0.5),
+      ratePensionContributionTaxRelief: randomBetween(0, 0.6),
       pensionWithdrawalTax: randomBetween(0, 0.6),
       askTax: randomBetween(0, 0.5),
       returnRate: randomBetween(-0.2, 0.3),

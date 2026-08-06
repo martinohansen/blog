@@ -180,13 +180,13 @@
                 id="savings-section"
                 data-step-section="savings-section"
               >
-                <legend>Årlig opsparing i dagens kroner</legend>
+                <legend>Årlig indbetaling i dagens kroner</legend>
                 <div class="form-grid savings-grid">
                   <label class="field"
                     ><span
                       >Ratepension
                       <i
-                        title="Optimeringen bruger 2026-loftet på 68.700 kr."
+                        title="Beløbet er den faktiske indbetaling på ratepensionen. Nettoudgiften afhænger af skatteværdien under Forudsætninger. Optimeringen bruger 2026-loftet på 68.700 kr."
                         >i</i
                       ></span
                     ><input
@@ -244,16 +244,15 @@
                     <span
                       >Omdiriger pension
                       <i
-                        title="Når pensionen har nået sit mål, flyttes fremtidige indbetalinger til ratepension og aldersopsparing over til frie midler. Det fortsætter, indtil du når FIRE."
+                        title="Når pensionen har nået sit mål, flyttes nettoudgiften til de fremtidige pensionsindbetalinger over til frie midler. Ratepensionen reduceres med den indtastede skatteværdi."
                         >i</i
                       ></span
                     >
                     <span class="inflation-input">
-                      <b id="pension-redirect-state">Omdirigeres</b>
+                      <b id="pension-redirect-state">Omdirigeres ikke</b>
                       <input
                         name="redirectPensionContributionsToFreeFunds"
                         type="checkbox"
-                        checked
                       />
                       <span class="inflation-switch" aria-hidden="true"></span>
                     </span>
@@ -368,6 +367,23 @@
                         type="number"
                         step="0.1"
                         value="15.3"
+                        required
+                      /><b>%</b></span
+                    ></label
+                  >
+                  <label class="field"
+                    ><span
+                      >Skatteværdi af ratepensionsfradrag
+                      <i
+                        title="Den forventede skattebesparelse ved indbetaling på ratepension. Satsen bruges til at beregne nettoudgiften og må ikke forveksles med skatten ved udbetaling."
+                        >i</i
+                      ></span
+                    ><span class="input-suffix"
+                      ><input
+                        name="ratePensionContributionTaxRelief"
+                        type="number"
+                        step="0.1"
+                        value="37"
                         required
                       /><b>%</b></span
                     ></label
@@ -661,6 +677,10 @@
                 <dd id="effective-free-funds-tax-rate"></dd>
               </div>
               <div>
+                <dt>Årligt nettobudget til opsparing</dt>
+                <dd id="annual-net-contribution-budget"></dd>
+              </div>
+              <div>
                 <dt>Nødvendig pensionsformue ved pension</dt>
                 <dd id="required-at-retirement"></dd>
               </div>
@@ -736,8 +756,10 @@
             lagerbeskattede værdipapirer eller fremførte tab. ASK beskattes kun
             af fremtidige afkast fra den indtastede startværdi. Beregningen
             medregner ikke allerede optjent ASK-skat. Ratepensionsudbetalinger
-            beskattes med den indtastede effektive sats. Resultatet er et
-            overslag og er ikke investerings- eller pensionsrådgivning.
+            beskattes med den indtastede effektive sats. Nettoudgiften til
+            ratepensionsindbetalinger beregnes med den indtastede skatteværdi.
+            Resultatet er et overslag og er ikke investerings- eller
+            pensionsrådgivning.
           </p>
         </div>
       </div>

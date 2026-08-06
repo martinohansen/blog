@@ -237,6 +237,10 @@
       annualAgeSavingsContribution: readNumber("annualAgeSavingsContribution"),
       annualFreeFundsContribution: readNumber("annualFreeFundsContribution"),
       pensionTax: readNumber("pensionTax", 100),
+      ratePensionContributionTaxRelief: readNumber(
+        "ratePensionContributionTaxRelief",
+        100,
+      ),
       pensionWithdrawalTax: readNumber("pensionWithdrawalTax", 100),
       askTax: readNumber("askTax", 100),
       returnRate: readNumber("returnRate", 100),
@@ -294,12 +298,17 @@
       optimizationFireShift.hidden = true;
       applyOptimizationButton.disabled = true;
       optimizationNote.textContent =
-        "Den nuværende årlige opsparing kan ikke finansiere hele planen. Prøv at øge opsparingen eller sænke den ønskede hævning.";
+        "Det nuværende årlige nettobudget kan ikke finansiere hele planen. Prøv at øge budgettet eller sænke den ønskede hævning.";
       return;
     }
 
-    const { current, recommended, totalAnnualContribution, precision } =
-      optimization;
+    const {
+      current,
+      recommended,
+      annualNetBudget,
+      ratePensionContributionTaxRelief,
+      precision,
+    } = optimization;
     const headings = {
       improved: "Du kan nå FIRE tidligere",
       "current-optimal": "Din fordeling er allerede optimal",
@@ -330,10 +339,13 @@
       );
     });
 
-    const safeTotal = Math.max(1, totalAnnualContribution);
+    const safeTotal = Math.max(1, annualNetBudget);
+    const recommendedRateNetCost =
+      recommended.annualRatePensionContribution *
+      (1 - ratePensionContributionTaxRelief);
     optimizationAllocationBar.style.setProperty(
       "--rate-share",
-      `${(recommended.annualRatePensionContribution / safeTotal) * 100}%`,
+      `${(recommendedRateNetCost / safeTotal) * 100}%`,
     );
     optimizationAllocationBar.style.setProperty(
       "--age-share",
@@ -346,8 +358,8 @@
 
     optimizationNote.textContent =
       optimization.status === "limits-applied"
-        ? `Din nuværende fordeling overskrider et pensionsloft. Anbefalingen bevarer ${currency.format(totalAnnualContribution)} om året og bruger 2026-lofterne.`
-        : `Samme årlige opsparing på ${currency.format(totalAnnualContribution)} Den samlede pensionsandel er afprøvet i trin på ${currency.format(precision)}`;
+        ? `Din nuværende fordeling overskrider et pensionsloft. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og bruger 2026-lofterne.`
+        : `Samme årlige nettobudget på ${currency.format(annualNetBudget)}. Den samlede pensionsandel er afprøvet i trin på ${currency.format(precision)}.`;
   }
 
   function runContributionOptimization() {
@@ -830,6 +842,10 @@
     setText(
       "effective-free-funds-tax-rate",
       percent.format(calculation.effectiveFreeFundsWithdrawalTaxRate),
+    );
+    setText(
+      "annual-net-contribution-budget",
+      currency.format(calculation.annualNetContributionBudget),
     );
     setText(
       "required-at-retirement",

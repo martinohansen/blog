@@ -35,6 +35,15 @@
     }
   }
 
+  function contributionNetBudget(contributions, taxRelief) {
+    const budget =
+      contributions.annualRatePensionContribution * (1 - taxRelief) +
+      contributions.annualAgeSavingsContribution +
+      contributions.annualFreeFundsContribution;
+    assertFinite(budget);
+    return budget;
+  }
+
   function normalizeDate(date) {
     if (!(date instanceof Date) || !Number.isFinite(date.getTime())) {
       throw calculationError();
@@ -418,6 +427,16 @@
       throw new Error("Skattesatser skal være mellem 0 og 100 %.");
     }
 
+    const ratePensionContributionTaxRelief =
+      inputs.ratePensionContributionTaxRelief ?? 0;
+    if (
+      !Number.isFinite(ratePensionContributionTaxRelief) ||
+      ratePensionContributionTaxRelief < 0 ||
+      ratePensionContributionTaxRelief > 1
+    ) {
+      throw new Error("Skattesatser skal være mellem 0 og 100 %.");
+    }
+
     if (
       !Number.isFinite(inputs.returnRate) ||
       inputs.returnRate <= -1 ||
@@ -436,6 +455,8 @@
     const retirementDate = annualDate(asOfDate, yearsToRetirement);
     const finalDate = annualDate(asOfDate, finalYear);
     const pensionWithdrawalTax = inputs.pensionWithdrawalTax ?? 0;
+    const ratePensionContributionTaxRelief =
+      inputs.ratePensionContributionTaxRelief ?? 0;
 
     const netPensionReturn = inputs.returnRate * (1 - inputs.pensionTax);
     const realPensionReturn =
@@ -816,7 +837,9 @@
         : 0;
       const redirectedPensionContribution =
         !pensionContributionsActive && redirectsPensionContributions
-          ? ratePensionContribution + ageSavingsContribution
+          ? ratePensionContribution *
+              (1 - ratePensionContributionTaxRelief) +
+            ageSavingsContribution
           : 0;
       const contributions = [
         pensionContributionsActive ? ratePensionContribution : 0,
@@ -868,6 +891,16 @@
     const pensionTargetAtStop = pensionStopRow
       ? pensionStopRow.pensionTarget
       : null;
+    const annualNetContributionBudget = contributionNetBudget(
+      {
+        annualRatePensionContribution:
+          inputs.annualRatePensionContribution,
+        annualAgeSavingsContribution:
+          inputs.annualAgeSavingsContribution,
+        annualFreeFundsContribution: inputs.annualFreeFundsContribution,
+      },
+      ratePensionContributionTaxRelief,
+    );
     assertFinite(
       pensionTargetAtStop ?? 0,
       totalFreeFundsTax,
@@ -890,6 +923,7 @@
       pensionCoastRow,
       pensionStopRow,
       pensionTargetAtStop,
+      annualNetContributionBudget,
       fireRow,
       isFullyFunded: drawdown.isFullyFunded,
       firstShortfallDate: drawdown.firstShortfallDate,
@@ -947,6 +981,54 @@
     };
   }
 
+  function pensionContributionNetCost(
+    totalPensionContribution,
+    inputs,
+    taxRelief,
+  ) {
+    const pensionContributions = distributePensionContribution(
+      totalPensionContribution,
+      inputs,
+    );
+
+    return contributionNetBudget(
+      { ...pensionContributions, annualFreeFundsContribution: 0 },
+      taxRelief,
+    );
+  }
+
+  function maximumAffordablePensionContribution(
+    annualNetBudget,
+    inputs,
+    taxRelief,
+  ) {
+    let affordable = 0;
+    let unaffordable =
+      CONTRIBUTION_LIMITS.ratePension + CONTRIBUTION_LIMITS.ageSavings;
+
+    if (
+      pensionContributionNetCost(unaffordable, inputs, taxRelief) <=
+      annualNetBudget + MONEY_TOLERANCE
+    ) {
+      return unaffordable;
+    }
+
+    for (let iteration = 0; iteration < 60; iteration += 1) {
+      const candidate = (affordable + unaffordable) / 2;
+
+      if (
+        pensionContributionNetCost(candidate, inputs, taxRelief) <=
+        annualNetBudget + MONEY_TOLERANCE
+      ) {
+        affordable = candidate;
+      } else {
+        unaffordable = candidate;
+      }
+    }
+
+    return Math.max(0, Math.floor(affordable));
+  }
+
   function contributionDistance(first, second) {
     return (
       Math.abs(
@@ -976,12 +1058,16 @@
         inputs.annualAgeSavingsContribution,
       annualFreeFundsContribution: inputs.annualFreeFundsContribution,
     };
-    const totalAnnualContribution = Object.values(
+    const ratePensionContributionTaxRelief =
+      inputs.ratePensionContributionTaxRelief ?? 0;
+    const annualNetBudget = contributionNetBudget(
       currentContributions,
-    ).reduce((total, contribution) => total + contribution, 0);
-    const maximumPensionContribution = Math.min(
-      totalAnnualContribution,
-      CONTRIBUTION_LIMITS.ratePension + CONTRIBUTION_LIMITS.ageSavings,
+      ratePensionContributionTaxRelief,
+    );
+    const maximumPensionContribution = maximumAffordablePensionContribution(
+      annualNetBudget,
+      inputs,
+      ratePensionContributionTaxRelief,
     );
     const pensionTotals = new Set([0, maximumPensionContribution]);
 
@@ -1022,10 +1108,22 @@
           totalPensionContribution,
           inputs,
         );
+        const pensionNetCost = contributionNetBudget(
+          { ...pensionContributions, annualFreeFundsContribution: 0 },
+          ratePensionContributionTaxRelief,
+        );
+        const annualFreeFundsContribution = annualNetBudget - pensionNetCost;
+
+        if (annualFreeFundsContribution < -MONEY_TOLERANCE) {
+          return;
+        }
+
         const candidate = {
           ...pensionContributions,
-          annualFreeFundsContribution:
-            totalAnnualContribution - totalPensionContribution,
+          annualFreeFundsContribution: Math.max(
+            0,
+            annualFreeFundsContribution,
+          ),
         };
         const candidateKey = Object.values(candidate).join(":");
 
@@ -1091,7 +1189,8 @@
         status === "unachievable"
           ? null
           : contributionSnapshot(bestCandidate, bestCalculation),
-      totalAnnualContribution,
+      annualNetBudget,
+      ratePensionContributionTaxRelief,
       limits: { ...CONTRIBUTION_LIMITS },
       precision: CONTRIBUTION_SEARCH_STEP,
     };
