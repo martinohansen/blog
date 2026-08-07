@@ -299,6 +299,12 @@
     return grown;
   }
 
+  function midyearGrowthFactor(rate) {
+    const factor = Math.sqrt(1 + rate);
+    assertFinite(factor);
+    return factor;
+  }
+
   function calculateShareIncomeTax(taxableGain) {
     const tax =
       Math.min(taxableGain, SHARE_INCOME_THRESHOLD) *
@@ -640,7 +646,7 @@
     ];
     assertFinite(...initialBalances, inputs.freeFundsCostBasis);
 
-    function contributionAtYearEnd(baseContribution, yearNumber) {
+    function contributionAtMidyear(baseContribution, yearNumber) {
       if (baseContribution <= 0) {
         return 0;
       }
@@ -648,9 +654,58 @@
       const contribution = followsInflation
         ? baseContribution
         : baseContribution /
-          Math.pow(1 + inputs.inflationRate, yearNumber);
+          Math.pow(1 + inputs.inflationRate, yearNumber - 0.5);
       assertFinite(contribution);
       return contribution;
+    }
+
+    function accumulateWithMidyearContributions(
+      startingBalances,
+      contributions,
+    ) {
+      const growth = growBalancesWithTax(startingBalances);
+      const currentRates = ratesForBalances(startingBalances);
+      const endingBalances = growth.balances.map(
+        (balance, index) =>
+          balance +
+          contributions[index] * midyearGrowthFactor(currentRates[index]),
+      );
+
+      if (usesInventoryTax && contributions[FREE_FUNDS] > 0) {
+        const startingBalance = startingBalances[FREE_FUNDS];
+        const contribution = contributions[FREE_FUNDS];
+        const nominalHalfYearGrowth = Math.sqrt(1 + inputs.returnRate);
+        const inflationHalfYearGrowth = Math.sqrt(
+          1 + inputs.inflationRate,
+        );
+        const openingBalanceAtYearEnd =
+          (startingBalance * (1 + inputs.returnRate)) /
+          (1 + inputs.inflationRate);
+        const contributionAtYearEnd =
+          contribution *
+          (nominalHalfYearGrowth / inflationHalfYearGrowth);
+        const taxableGain =
+          inputs.returnRate > 0
+            ? startingBalance * inputs.returnRate +
+              contribution *
+                inflationHalfYearGrowth *
+                (nominalHalfYearGrowth - 1)
+            : 0;
+        const tax =
+          calculateShareIncomeTax(taxableGain) /
+          (1 + inputs.inflationRate);
+
+        endingBalances[FREE_FUNDS] = Math.max(
+          0,
+          openingBalanceAtYearEnd + contributionAtYearEnd - tax,
+        );
+        growth.freeFundsTax = tax;
+        growth.freeFundsTaxableGain =
+          taxableGain / (1 + inputs.inflationRate);
+      }
+
+      assertFinite(...endingBalances);
+      return { ...growth, balances: endingBalances };
     }
 
     function pensionNetFraction(ratePension, ageSavings) {
@@ -670,16 +725,18 @@
     let projectedAgeSavings = inputs.ageSavingsBalance;
 
     for (let year = 1; year <= yearsToRetirement; year += 1) {
-      projectedRatePension *= 1 + realPensionReturn;
-      projectedAgeSavings *= 1 + realPensionReturn;
-      projectedRatePension += contributionAtYearEnd(
-        inputs.annualRatePensionContribution,
-        year,
-      );
-      projectedAgeSavings += contributionAtYearEnd(
-        inputs.annualAgeSavingsContribution,
-        year,
-      );
+      projectedRatePension =
+        projectedRatePension * (1 + realPensionReturn) +
+        contributionAtMidyear(
+          inputs.annualRatePensionContribution,
+          year,
+        ) * midyearGrowthFactor(realPensionReturn);
+      projectedAgeSavings =
+        projectedAgeSavings * (1 + realPensionReturn) +
+        contributionAtMidyear(
+          inputs.annualAgeSavingsContribution,
+          year,
+        ) * midyearGrowthFactor(realPensionReturn);
       assertFinite(projectedRatePension, projectedAgeSavings);
     }
 
@@ -984,26 +1041,17 @@
         ),
       );
 
-      const growth = growBalancesWithTax(balances);
-      accumulationRows[accumulationRows.length - 1].annualFreeFundsTax =
-        growth.freeFundsTax;
-      balances = growth.balances;
-      accumulationFreeFundsTax += growth.freeFundsTax;
-      accumulationFreeFundsTaxableGain += growth.freeFundsTaxableGain;
-      freeFundsCostBasis = usesInventoryTax
-        ? 0
-        : freeFundsCostBasis / (1 + inputs.inflationRate);
       const nextYear = year + 1;
       const shouldCalculatePensionContributions =
         pensionContributionsActive || redirectsPensionContributions;
       const ratePensionContribution = shouldCalculatePensionContributions
-        ? contributionAtYearEnd(
+        ? contributionAtMidyear(
             inputs.annualRatePensionContribution,
             nextYear,
           )
         : 0;
       const ageSavingsContribution = shouldCalculatePensionContributions
-        ? contributionAtYearEnd(
+        ? contributionAtMidyear(
             inputs.annualAgeSavingsContribution,
             nextYear,
           )
@@ -1017,7 +1065,7 @@
       const contributions = [
         pensionContributionsActive ? ratePensionContribution : 0,
         pensionContributionsActive ? ageSavingsContribution : 0,
-        contributionAtYearEnd(inputs.annualFreeFundsContribution, nextYear) +
+        contributionAtMidyear(inputs.annualFreeFundsContribution, nextYear) +
           redirectedPensionContribution,
         0,
       ];
@@ -1025,11 +1073,22 @@
         (total, contribution) => total + contribution,
         0,
       );
-      balances = balances.map(
-        (balance, index) => balance + contributions[index],
+      const growth = accumulateWithMidyearContributions(
+        balances,
+        contributions,
       );
+      accumulationRows[accumulationRows.length - 1].annualFreeFundsTax =
+        growth.freeFundsTax;
+      balances = growth.balances;
+      accumulationFreeFundsTax += growth.freeFundsTax;
+      accumulationFreeFundsTaxableGain += growth.freeFundsTaxableGain;
       if (!usesInventoryTax) {
-        freeFundsCostBasis += contributions[FREE_FUNDS];
+        freeFundsCostBasis =
+          freeFundsCostBasis / (1 + inputs.inflationRate) +
+          contributions[FREE_FUNDS] /
+            Math.sqrt(1 + inputs.inflationRate);
+      } else {
+        freeFundsCostBasis = 0;
       }
       assertFinite(
         contributionAtCheckpoint,

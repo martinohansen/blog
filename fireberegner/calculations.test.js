@@ -151,7 +151,7 @@ assertClose(
 );
 assertClose(
   fixedNominalContributions.planRows[1].contribution,
-  129400 / 1.02,
+  129400 / Math.sqrt(1.02),
 );
 assert.ok(
   fixedNominalContributions.planRows[1].contribution <
@@ -442,21 +442,30 @@ const fixedNominalRedirectAge31 = fixedNominalPensionRedirect.planRows.find(
 assert.equal(defaultPensionRedirect.pensionStopRow.age, 30);
 assert.equal(enabledPensionRedirect.pensionStopRow.age, 30);
 assertClose(defaultRedirectAge31.freeFunds, enabledRedirectAge31.freeFunds);
-assertClose(defaultRedirectAge31.freeFundsCostBasis, 214.2);
+assertClose(
+  defaultRedirectAge31.freeFundsCostBasis,
+  214.2 / Math.sqrt(1.02),
+);
 assertClose(defaultRedirectAge31.contribution, 214.2);
 assertClose(enabledRedirectAge31.ratePension, 0);
 assertClose(enabledRedirectAge31.ageSavings, 1000);
 assertClose(enabledRedirectAge31.freeFunds, 214.2);
-assertClose(enabledRedirectAge31.freeFundsCostBasis, 214.2);
+assertClose(
+  enabledRedirectAge31.freeFundsCostBasis,
+  214.2 / Math.sqrt(1.02),
+);
 assertClose(enabledRedirectAge31.contribution, 214.2);
 assertClose(disabledRedirectAge31.ratePension, 0);
 assertClose(disabledRedirectAge31.ageSavings, 1000);
 assertClose(disabledRedirectAge31.freeFunds, 51);
-assertClose(disabledRedirectAge31.freeFundsCostBasis, 51);
+assertClose(disabledRedirectAge31.freeFundsCostBasis, 51 / Math.sqrt(1.02));
 assertClose(disabledRedirectAge31.contribution, 51);
-assertClose(fixedNominalRedirectAge31.freeFunds, 210);
-assertClose(fixedNominalRedirectAge31.freeFundsCostBasis, 210);
-assertClose(fixedNominalRedirectAge31.contribution, 210);
+assertClose(fixedNominalRedirectAge31.freeFunds, 214.2 / Math.sqrt(1.02));
+assertClose(fixedNominalRedirectAge31.freeFundsCostBasis, 214.2 / 1.02);
+assertClose(
+  fixedNominalRedirectAge31.contribution,
+  214.2 / Math.sqrt(1.02),
+);
 
 const noTaxReliefRedirect = calculateFire(
   { ...pensionRedirectInputs, ratePensionContributionTaxRelief: 0 },
@@ -546,8 +555,8 @@ const annualTransitions = calculateFire(
   asOfDate,
 );
 const age31 = annualTransitions.planRows.find((row) => row.age === 31);
-assertClose(age31.ageSavings, 210);
-assertClose(age31.freeFunds, 310);
+assertClose(age31.ageSavings, 110 + 100 * Math.sqrt(1.1));
+assertClose(age31.freeFunds, 110 + 200 * Math.sqrt(1.1));
 assertClose(age31.contribution, 300);
 
 const startOfYearWithdrawals = calculateFire(
@@ -941,6 +950,33 @@ assertClose(
 );
 assertClose(inventoryTaxBelowThreshold.totalFreeFundsTax, 2700);
 assertClose(inventoryTaxBelowThreshold.effectiveFreeFundsTaxRate, 0.27);
+
+const inventoryTaxWithMidyearContribution = calculateFire(
+  {
+    ...inventoryTaxInputs,
+    freeFundsBalance: 100000,
+    annualFreeFundsContribution: 100000,
+  },
+  asOfDate,
+);
+const inventoryContributionGrowth = Math.sqrt(1.1);
+const inventoryContributionTaxableGain =
+  100000 * 0.1 + 100000 * (inventoryContributionGrowth - 1);
+const inventoryContributionTax = inventoryContributionTaxableGain * 0.27;
+const inventoryContributionRow =
+  inventoryTaxWithMidyearContribution.planRows.find(
+    (row) => row.age === 31,
+  );
+assertClose(
+  inventoryTaxWithMidyearContribution.planRows[0].annualFreeFundsTax,
+  inventoryContributionTax,
+);
+assertClose(
+  inventoryContributionRow.freeFunds,
+  100000 * 1.1 +
+    100000 * inventoryContributionGrowth -
+    inventoryContributionTax,
+);
 
 const progressiveInventoryCapacity = calculateFire(
   {
