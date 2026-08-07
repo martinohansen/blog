@@ -1301,6 +1301,54 @@ assert.ok(
     CONTRIBUTION_LIMITS.ageSavingsHigh,
 );
 
+const independentPensionSplitInputs = {
+  ...standardInputs,
+  currentAge: 25,
+  retirementAge: 50,
+  payoutYears: 20,
+  desiredAnnualWithdrawal: 200000,
+  ratePensionBalance: 200000,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 100000,
+  freeFundsCostBasis: 100000,
+  askBalance: 0,
+  annualRatePensionContribution: 60000,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 0,
+  ratePensionContributionTaxRelief: 0.1,
+  pensionWithdrawalTax: 0.5,
+  returnRate: 0.1,
+  inflationRate: 0.02,
+  withdrawalAfterTax: true,
+  freeFundsTaxation: FREE_FUNDS_TAXATION.realization,
+};
+const independentPensionSplit = optimizeAnnualContributions(
+  independentPensionSplitInputs,
+  asOfDate,
+);
+assert.equal(independentPensionSplit.recommended.fireAge, 45);
+assert.ok(
+  independentPensionSplit.recommended.annualAgeSavingsContribution > 0,
+);
+assertClose(
+  netContributionBudget(
+    independentPensionSplit.recommended,
+    independentPensionSplitInputs.ratePensionContributionTaxRelief,
+  ),
+  independentPensionSplit.annualNetBudget,
+);
+
+const ratioConstrainedPensionSplit = calculateFire(
+  {
+    ...independentPensionSplitInputs,
+    annualRatePensionContribution: 19000,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 36900,
+  },
+  asOfDate,
+);
+assert.equal(ratioConstrainedPensionSplit.fireRow.age, 46);
+
 const impossibleOptimization = optimizeAnnualContributions(
   {
     ...standardInputs,

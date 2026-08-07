@@ -551,6 +551,10 @@
       let unaffordable = balance;
 
       for (let iteration = 0; iteration < 60; iteration += 1) {
+        if (unaffordable - affordable <= MONEY_TOLERANCE) {
+          break;
+        }
+
         const withdrawal = (affordable + unaffordable) / 2;
         let remaining = balance;
         let funded = true;
@@ -1200,45 +1204,6 @@
     };
   }
 
-  function clamp(value, minimum, maximum) {
-    return Math.min(maximum, Math.max(minimum, value));
-  }
-
-  function distributePensionContribution(
-    totalPensionContribution,
-    inputs,
-    selectedAgeSavingsContributionLimit,
-  ) {
-    const minimumRatePension = Math.max(
-      0,
-      totalPensionContribution - selectedAgeSavingsContributionLimit,
-    );
-    const maximumRatePension = Math.min(
-      CONTRIBUTION_LIMITS.ratePension,
-      totalPensionContribution,
-    );
-    const currentPensionContribution =
-      inputs.annualRatePensionContribution +
-      inputs.annualAgeSavingsContribution;
-    const targetRatePension =
-      currentPensionContribution > 0
-        ? totalPensionContribution *
-          (inputs.annualRatePensionContribution /
-            currentPensionContribution)
-        : totalPensionContribution;
-    const annualRatePensionContribution = clamp(
-      Math.round(targetRatePension),
-      minimumRatePension,
-      maximumRatePension,
-    );
-
-    return {
-      annualRatePensionContribution,
-      annualAgeSavingsContribution:
-        totalPensionContribution - annualRatePensionContribution,
-    };
-  }
-
   function contributionSnapshot(contributions, calculation) {
     return {
       ...contributions,
@@ -1249,65 +1214,22 @@
     };
   }
 
-  function pensionContributionNetCost(
-    totalPensionContribution,
-    inputs,
-    taxRelief,
-    selectedAgeSavingsContributionLimit,
-  ) {
-    const pensionContributions = distributePensionContribution(
-      totalPensionContribution,
-      inputs,
-      selectedAgeSavingsContributionLimit,
-    );
+  function contributionCandidates(maximum, current) {
+    const candidates = new Set([0, maximum]);
 
-    return contributionNetBudget(
-      { ...pensionContributions, annualFreeFundsContribution: 0 },
-      taxRelief,
-    );
-  }
-
-  function maximumAffordablePensionContribution(
-    annualNetBudget,
-    inputs,
-    taxRelief,
-    selectedAgeSavingsContributionLimit,
-  ) {
-    let affordable = 0;
-    let unaffordable =
-      CONTRIBUTION_LIMITS.ratePension + selectedAgeSavingsContributionLimit;
-
-    if (
-      pensionContributionNetCost(
-        unaffordable,
-        inputs,
-        taxRelief,
-        selectedAgeSavingsContributionLimit,
-      ) <=
-      annualNetBudget + MONEY_TOLERANCE
+    for (
+      let contribution = CONTRIBUTION_SEARCH_STEP;
+      contribution < maximum;
+      contribution += CONTRIBUTION_SEARCH_STEP
     ) {
-      return unaffordable;
+      candidates.add(contribution);
     }
 
-    for (let iteration = 0; iteration < 60; iteration += 1) {
-      const candidate = (affordable + unaffordable) / 2;
-
-      if (
-        pensionContributionNetCost(
-          candidate,
-          inputs,
-          taxRelief,
-          selectedAgeSavingsContributionLimit,
-        ) <=
-        annualNetBudget + MONEY_TOLERANCE
-      ) {
-        affordable = candidate;
-      } else {
-        unaffordable = candidate;
-      }
+    if (current >= 0 && current <= maximum) {
+      candidates.add(current);
     }
 
-    return Math.max(0, Math.floor(affordable));
+    return [...candidates].sort((first, second) => first - second);
   }
 
   function contributionDistance(first, second) {
@@ -1347,37 +1269,30 @@
       currentContributions,
       ratePensionContributionTaxRelief,
     );
-    const maximumPensionContribution = maximumAffordablePensionContribution(
-      annualNetBudget,
-      inputs,
-      ratePensionContributionTaxRelief,
-      selectedAgeSavingsContributionLimit,
+    const ratePensionNetCost = 1 - ratePensionContributionTaxRelief;
+    const maximumRatePensionContribution = Math.min(
+      CONTRIBUTION_LIMITS.ratePension,
+      ratePensionNetCost > 0
+        ? annualNetBudget / ratePensionNetCost
+        : CONTRIBUTION_LIMITS.ratePension,
     );
-    const pensionTotals = new Set([0, maximumPensionContribution]);
-
-    for (
-      let contribution = CONTRIBUTION_SEARCH_STEP;
-      contribution < maximumPensionContribution;
-      contribution += CONTRIBUTION_SEARCH_STEP
-    ) {
-      pensionTotals.add(contribution);
-    }
-
-    const currentPensionContribution =
-      currentContributions.annualRatePensionContribution +
-      currentContributions.annualAgeSavingsContribution;
+    const maximumAgeSavingsContribution = Math.min(
+      selectedAgeSavingsContributionLimit,
+      annualNetBudget,
+    );
+    const ratePensionCandidates = contributionCandidates(
+      maximumRatePensionContribution,
+      currentContributions.annualRatePensionContribution,
+    );
+    const ageSavingsCandidates = contributionCandidates(
+      maximumAgeSavingsContribution,
+      currentContributions.annualAgeSavingsContribution,
+    );
     const currentContributionsAreWithinLimits =
       currentContributions.annualRatePensionContribution <=
         CONTRIBUTION_LIMITS.ratePension &&
       currentContributions.annualAgeSavingsContribution <=
         selectedAgeSavingsContributionLimit;
-
-    if (
-      currentContributionsAreWithinLimits &&
-      currentPensionContribution <= maximumPensionContribution
-    ) {
-      pensionTotals.add(currentPensionContribution);
-    }
 
     let bestCandidate = null;
     let bestCalculation = null;
@@ -1385,26 +1300,20 @@
     let bestDistance = Number.POSITIVE_INFINITY;
     const seenCandidates = new Set();
 
-    [...pensionTotals]
-      .sort((first, second) => first - second)
-      .forEach((totalPensionContribution) => {
-        const pensionContributions = distributePensionContribution(
-          totalPensionContribution,
-          inputs,
-          selectedAgeSavingsContributionLimit,
-        );
-        const pensionNetCost = contributionNetBudget(
-          { ...pensionContributions, annualFreeFundsContribution: 0 },
-          ratePensionContributionTaxRelief,
-        );
-        const annualFreeFundsContribution = annualNetBudget - pensionNetCost;
+    ratePensionCandidates.forEach((annualRatePensionContribution) => {
+      ageSavingsCandidates.forEach((annualAgeSavingsContribution) => {
+        const annualFreeFundsContribution =
+          annualNetBudget -
+          annualRatePensionContribution * ratePensionNetCost -
+          annualAgeSavingsContribution;
 
         if (annualFreeFundsContribution < -MONEY_TOLERANCE) {
           return;
         }
 
         const candidate = {
-          ...pensionContributions,
+          annualRatePensionContribution,
+          annualAgeSavingsContribution,
           annualFreeFundsContribution: Math.max(
             0,
             annualFreeFundsContribution,
@@ -1445,6 +1354,7 @@
           bestDistance = distance;
         }
       });
+    });
 
     const currentFireTime = currentCalculation.fireRow
       ? currentCalculation.fireRow.date.getTime()
