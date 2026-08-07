@@ -680,6 +680,147 @@ assert.ok(
 assert.equal(freeFundedFire.pensionCoastRow, null);
 assert.equal(freeFundedFire.planRows[0].contribution, 0);
 
+const bridgeCapacityInputs = {
+  ...standardInputs,
+  currentAge: 30,
+  retirementAge: 32,
+  payoutYears: 1,
+  desiredAnnualWithdrawal: 100,
+  ratePensionBalance: 0,
+  ageSavingsBalance: 1000,
+  freeFundsBalance: 1000,
+  freeFundsCostBasis: 1000,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 0,
+  pensionTax: 0,
+  pensionWithdrawalTax: 0,
+  askTax: 0.17,
+  returnRate: 0.1,
+  inflationRate: 0,
+  withdrawalAfterTax: true,
+  freeFundsInventoryShare: 0,
+};
+const sustainableBridgeCapacity = calculateFire(
+  bridgeCapacityInputs,
+  asOfDate,
+);
+assert.equal(sustainableBridgeCapacity.fireRow.age, 30);
+assertClose(
+  sustainableBridgeCapacity.fireRow.possibleBridgeWithdrawal,
+  517.61,
+);
+assert.ok(
+  sustainableBridgeCapacity.fireRow.possibleBridgeWithdrawal <
+    1000 / (1 + 1 / 1.1),
+);
+
+const bridgeCapacityAboveLimit = calculateFire(
+  {
+    ...bridgeCapacityInputs,
+    desiredAnnualWithdrawal:
+      sustainableBridgeCapacity.fireRow.possibleBridgeWithdrawal + 0.01,
+  },
+  asOfDate,
+);
+assert.ok(bridgeCapacityAboveLimit.fireRow.age > 30);
+
+const longBridgeCapacity = calculateFire(
+  {
+    ...bridgeCapacityInputs,
+    retirementAge: 50,
+    ageSavingsBalance: 1000000,
+    freeFundsBalance: 1000000,
+    freeFundsCostBasis: 1000000,
+    returnRate: 0.07,
+  },
+  asOfDate,
+);
+assert.equal(longBridgeCapacity.fireRow.age, 30);
+assertClose(
+  longBridgeCapacity.fireRow.possibleBridgeWithdrawal,
+  79544.83,
+);
+assert.ok(
+  longBridgeCapacity.fireRow.possibleBridgeWithdrawal < 88217.69,
+);
+
+const beforeTaxBridgeCapacity = calculateFire(
+  { ...bridgeCapacityInputs, withdrawalAfterTax: false },
+  asOfDate,
+);
+assertClose(
+  beforeTaxBridgeCapacity.fireRow.possibleBridgeWithdrawal,
+  1000 / (1 + 1 / 1.1),
+);
+
+const askBridgeCapacity = calculateFire(
+  {
+    ...bridgeCapacityInputs,
+    freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
+    askBalance: 1000,
+  },
+  asOfDate,
+);
+assertClose(
+  askBridgeCapacity.fireRow.possibleBridgeWithdrawal,
+  1000 / (1 + 1 / 1.083),
+);
+
+const inventoryBridgeCapacity = calculateFire(
+  { ...bridgeCapacityInputs, freeFundsInventoryShare: 1 },
+  asOfDate,
+);
+assertClose(
+  inventoryBridgeCapacity.fireRow.possibleBridgeWithdrawal,
+  1000 / (1 + 1 / 1.073),
+);
+
+const zeroYearBridgeCapacity = calculateFire(
+  {
+    ...bridgeCapacityInputs,
+    retirementAge: 31,
+    ageSavingsBalance: 100,
+    freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
+    returnRate: 0,
+  },
+  asOfDate,
+);
+assert.equal(zeroYearBridgeCapacity.fireRow.age, 31);
+assert.equal(zeroYearBridgeCapacity.fireRow.possibleBridgeWithdrawal, 0);
+
+const bridgeCapacityDisabled = calculateFire(
+  bridgeCapacityInputs,
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.equal(bridgeCapacityDisabled.fireRow.possibleBridgeWithdrawal, null);
+assert.equal(
+  bridgeCapacityDisabled.fireRow.age,
+  sustainableBridgeCapacity.fireRow.age,
+);
+assert.equal(
+  bridgeCapacityDisabled.isFullyFunded,
+  sustainableBridgeCapacity.isFullyFunded,
+);
+assert.deepEqual(
+  bridgeCapacityDisabled.planRows,
+  sustainableBridgeCapacity.planRows,
+);
+assert.deepEqual(
+  bridgeCapacityDisabled.rows.map((row) => ({
+    ...row,
+    possibleBridgeWithdrawal: null,
+  })),
+  sustainableBridgeCapacity.rows.map((row) => ({
+    ...row,
+    possibleBridgeWithdrawal: null,
+  })),
+);
+
 const repeatedPartialSales = calculateFire(
   {
     ...standardInputs,
@@ -1500,6 +1641,7 @@ for (
       annualFreeFundsContribution,
     },
     asOfDate,
+    { includeBridgeCapacity: false },
   );
 
   if (candidate.fireRow) {
@@ -1546,6 +1688,7 @@ for (let scenario = 0; scenario < 2000; scenario += 1) {
       redirectPensionContributionsToFreeFunds: random() >= 0.5,
     },
     asOfDate,
+    { includeBridgeCapacity: false },
   );
 
   assertFiniteResult(randomized);

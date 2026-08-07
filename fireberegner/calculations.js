@@ -537,7 +537,11 @@
     }
   }
 
-  function calculateFire(inputs, calculationDate = new Date()) {
+  function calculateFire(
+    inputs,
+    calculationDate = new Date(),
+    { includeBridgeCapacity = true } = {},
+  ) {
     assertInputs(inputs);
     const asOfDate = normalizeDate(calculationDate);
     const yearsToRetirement = inputs.retirementAge - inputs.currentAge;
@@ -818,8 +822,12 @@
       startYear,
       startBalances,
       startFreeFundsCostBasis,
-      shouldRecord,
-      startingContribution = 0,
+      {
+        desiredWithdrawal = inputs.desiredAnnualWithdrawal,
+        endYear = finalYear,
+        shouldRecord = false,
+        startingContribution = 0,
+      } = {},
     ) {
       let balances = [...startBalances];
       let freeFundsCostBasis = startFreeFundsCostBasis;
@@ -829,24 +837,24 @@
       let annualFreeFundsTax = 0;
       let annualFreeFundsTaxableGain = 0;
 
-      for (let year = startYear; year < finalYear; year += 1) {
+      for (let year = startYear; year < endYear; year += 1) {
         const beforeRetirement = year < yearsToRetirement;
         const periods = beforeRetirement
           ? yearsToRetirement - year
-          : finalYear - year;
+          : endYear - year;
         const capacities = capacitiesForBalances(balances, periods);
         const allocation = inputs.withdrawalAfterTax
           ? allocateForNetWithdrawal(
               balances,
               capacities,
-              inputs.desiredAnnualWithdrawal,
+              desiredWithdrawal,
               beforeRetirement,
               freeFundsCostBasis,
               pensionWithdrawalTax,
             )
           : allocateForPhase(
               capacities,
-              inputs.desiredAnnualWithdrawal,
+              desiredWithdrawal,
               beforeRetirement,
             );
         const date = annualDate(asOfDate, year);
@@ -875,8 +883,7 @@
           ? netWithdrawal
           : allocation.total;
         const shortfall =
-          deliveredWithdrawal + MONEY_TOLERANCE <
-          inputs.desiredAnnualWithdrawal;
+          deliveredWithdrawal + MONEY_TOLERANCE < desiredWithdrawal;
 
         if (shortfall && !firstShortfallDate) {
           firstShortfallDate = new Date(date);
@@ -950,8 +957,8 @@
       if (shouldRecord) {
         rows.push(
           createRow(
-            inputs.currentAge + finalYear,
-            finalDate,
+            inputs.currentAge + endYear,
+            annualDate(asOfDate, endYear),
             balances,
             freeFundsCostBasis,
             { phase: "Slut" },
@@ -968,6 +975,68 @@
         isFullyFunded,
         firstShortfallDate,
       };
+    }
+
+    function sustainableBridgeWithdrawal(
+      startYear,
+      startBalances,
+      startFreeFundsCostBasis,
+    ) {
+      const bridgeYears = yearsToRetirement - startYear;
+
+      if (bridgeYears <= 0) {
+        return 0;
+      }
+
+      const grossCapacity = allocateForPhase(
+        capacitiesForBalances(startBalances, bridgeYears),
+        Number.MAX_VALUE,
+        true,
+      ).total;
+
+      if (
+        grossCapacity <= 0 ||
+        !inputs.withdrawalAfterTax ||
+        startBalances[FREE_FUNDS_REALIZATION] <= MONEY_TOLERANCE
+      ) {
+        return grossCapacity;
+      }
+
+      function bridgeIsFunded(desiredWithdrawal) {
+        return simulateDrawdown(
+          startYear,
+          startBalances,
+          startFreeFundsCostBasis,
+          {
+            desiredWithdrawal,
+            endYear: yearsToRetirement,
+          },
+        ).isFullyFunded;
+      }
+
+      if (bridgeIsFunded(grossCapacity)) {
+        return grossCapacity;
+      }
+
+      let affordable = 0;
+      let unaffordable = grossCapacity;
+
+      for (let iteration = 0; iteration < 60; iteration += 1) {
+        if (unaffordable - affordable <= MONEY_TOLERANCE) {
+          break;
+        }
+
+        const candidate = (affordable + unaffordable) / 2;
+
+        if (bridgeIsFunded(candidate)) {
+          affordable = candidate;
+        } else {
+          unaffordable = candidate;
+        }
+      }
+
+      assertFinite(affordable);
+      return affordable;
     }
 
     function evaluateMilestone(year, balances, freeFundsCostBasis) {
@@ -1010,27 +1079,13 @@
         year,
         balances,
         freeFundsCostBasis,
-        false,
+        { shouldRecord: false },
       );
-      const bridgeCapacityAllocation = allocateForPhase(
-        capacitiesForBalances(balances, bridgeYears),
-        Number.MAX_VALUE,
-        true,
-      );
-      const bridgeCapacitySale = calculateFreeFundsSale(
-        balances[FREE_FUNDS_REALIZATION],
-        freeFundsCostBasis,
-        bridgeCapacityAllocation.amounts[FREE_FUNDS_REALIZATION],
-      );
-      const possibleBridgeWithdrawal = inputs.withdrawalAfterTax
-        ? bridgeCapacityAllocation.total - bridgeCapacitySale.tax
-        : bridgeCapacityAllocation.total;
 
       assertFinite(
         pensionAtRetirement,
         pensionNetAnnualCapacity,
         pensionTarget,
-        possibleBridgeWithdrawal,
       );
       return {
         age: inputs.currentAge + year,
@@ -1047,7 +1102,7 @@
         bridgeYears,
         pensionTarget,
         coastFinanced,
-        possibleBridgeWithdrawal,
+        possibleBridgeWithdrawal: null,
         fireReady: drawdown.isFullyFunded,
       };
     }
@@ -1080,6 +1135,13 @@
       }
 
       if (milestone.fireReady) {
+        if (includeBridgeCapacity) {
+          milestone.possibleBridgeWithdrawal = sustainableBridgeWithdrawal(
+            year,
+            balances,
+            freeFundsCostBasis,
+          );
+        }
         fireRow = milestone;
         pensionStopRow = pensionStopRow || milestone;
         drawdownStartYear = year;
@@ -1168,8 +1230,10 @@
       drawdownStartYear,
       drawdownStartBalances,
       drawdownStartFreeFundsCostBasis,
-      true,
-      drawdownStartContribution,
+      {
+        shouldRecord: true,
+        startingContribution: drawdownStartContribution,
+      },
     );
     const planRows = [...accumulationRows, ...drawdown.rows];
     const finalRow = planRows[planRows.length - 1];
@@ -1331,7 +1395,9 @@
     inputs,
     calculationDate = new Date(),
   ) {
-    const currentCalculation = calculateFire(inputs, calculationDate);
+    const currentCalculation = calculateFire(inputs, calculationDate, {
+      includeBridgeCapacity: false,
+    });
     const currentContributions = {
       annualRatePensionContribution:
         inputs.annualRatePensionContribution,
@@ -1407,6 +1473,7 @@
         const calculation = calculateFire(
           { ...inputs, ...candidate },
           calculationDate,
+          { includeBridgeCapacity: false },
         );
         const fireTime = calculation.fireRow
           ? calculation.fireRow.date.getTime()
