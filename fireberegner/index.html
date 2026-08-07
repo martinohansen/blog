@@ -50,7 +50,7 @@
                         type="number"
                         min="0"
                         step="1"
-                        value="36"
+                        value="30"
                         required
                       /><b>år</b></span
                     >
@@ -107,8 +107,12 @@
                   <label class="inflation-field">
                     <span>Hævningsbeløbet er</span>
                     <span class="inflation-input">
-                      <b id="withdrawal-tax-state">Før skat</b>
-                      <input name="withdrawalAfterTax" type="checkbox" />
+                      <b id="withdrawal-tax-state">Efter skat</b>
+                      <input
+                        name="withdrawalAfterTax"
+                        type="checkbox"
+                        checked
+                      />
                       <span class="inflation-switch" aria-hidden="true"></span>
                     </span>
                   </label>
@@ -651,7 +655,8 @@
                 <p id="projection-note" class="projection-note">
                   Datoerne er årlige beregningstidspunkter fra dagens dato.
                   Effektiv skat viser skattesatsen for årets udbetaling.
-                  Udbetaling er det samlede beløb før skat.
+                  Før skat viser den samlede hævning fra formuen. Efter skat
+                  viser beløbet efter beregnet skat.
                 </p>
                 <table>
                   <thead>
@@ -665,9 +670,8 @@
                       <th>Aktiesparekonto</th>
                       <th>Samlet formue</th>
                       <th>Indbetaling</th>
-                      <th id="projection-withdrawal-heading">
-                        Udbetaling før skat
-                      </th>
+                      <th>Udbetaling før skat</th>
+                      <th>Udbetaling efter skat</th>
                       <th id="projection-tax-heading">Effektiv skat</th>
                       <th>Udbetaling fra</th>
                     </tr>
