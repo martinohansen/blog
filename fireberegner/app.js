@@ -297,10 +297,31 @@
       : "Omdirigeres ikke";
   }
 
+  function renderProjectionTableState() {
+    const withdrawalAfterTax = form.elements.withdrawalAfterTax.checked;
+    const usesInventoryTax = form.elements.freeFundsTaxation.checked;
+    const taxDescription = usesInventoryTax
+      ? "Lagerskat er skatten af afkastet frem til næste dato og er allerede trukket fra næste års formue."
+      : "Effektiv skat viser skattesatsen for årets udbetaling.";
+    const withdrawalDescription = withdrawalAfterTax
+      ? "Udbetaling er beløbet efter skat. Den samlede hævning fra formuen kan være højere."
+      : "Udbetaling er det samlede beløb før skat.";
+
+    setText(
+      "projection-withdrawal-heading",
+      withdrawalAfterTax ? "Udbetaling efter skat" : "Udbetaling før skat",
+    );
+    setText(
+      "projection-note",
+      `Datoerne er årlige beregningstidspunkter fra dagens dato. ${taxDescription} ${withdrawalDescription}`,
+    );
+  }
+
   function renderWithdrawalTaxState() {
     withdrawalTaxState.textContent = form.elements.withdrawalAfterTax.checked
       ? "Efter skat"
       : "Før skat";
+    renderProjectionTableState();
   }
 
   function renderFreeFundsTaxation() {
@@ -346,12 +367,7 @@
       "projection-tax-heading",
       usesInventoryTax ? "Lagerskat" : "Effektiv skat",
     );
-    setText(
-      "projection-note",
-      usesInventoryTax
-        ? "Datoerne er årlige beregningstidspunkter fra dagens dato. Lagerskat er skatten af afkastet frem til næste dato og er allerede trukket fra næste års formue. Udbetaling er det samlede bruttobeløb fra formuen."
-        : "Datoerne er årlige beregningstidspunkter fra dagens dato. Udbetaling er det samlede bruttobeløb fra formuen. Når hævningsbeløbet er efter skat, kan bruttoudbetalingen være højere end det ønskede beløb.",
-    );
+    renderProjectionTableState();
   }
 
   function hideOptimizationResult() {
@@ -484,7 +500,10 @@
     applyOptimizationButton.disabled = true;
   }
 
-  function rowMarkup(row, freeFundsTaxation) {
+  function rowMarkup(row, freeFundsTaxation, withdrawalAfterTax) {
+    const displayedWithdrawal = withdrawalAfterTax
+      ? row.netWithdrawal
+      : row.withdrawal;
     const taxValue =
       freeFundsTaxation === "inventory"
         ? row.annualFreeFundsTax
@@ -505,7 +524,7 @@
         <td>${currency.format(row.ask)}</td>
         <td>${currency.format(row.totalBalance)}</td>
         <td>${row.contribution ? currency.format(row.contribution) : "—"}</td>
-        <td>${row.withdrawal ? currency.format(row.withdrawal) : "—"}</td>
+        <td>${row.withdrawal ? currency.format(displayedWithdrawal) : "—"}</td>
         <td>${taxValue}</td>
         <td>${row.withdrawalSource}</td>
       </tr>`;
@@ -992,7 +1011,13 @@
     );
 
     tableBody.innerHTML = calculation.planRows
-      .map((row) => rowMarkup(row, inputs.freeFundsTaxation))
+      .map((row) =>
+        rowMarkup(
+          row,
+          inputs.freeFundsTaxation,
+          inputs.withdrawalAfterTax,
+        ),
+      )
       .join("");
     markContributionLimit(
       "annualRatePensionContribution",
