@@ -295,13 +295,9 @@
   }
 
   function renderProjectionTableState() {
-    const usesInventoryTax = form.elements.freeFundsTaxation.checked;
-    const taxDescription = usesInventoryTax
-      ? "Lagerskat er skatten af afkastet frem til næste dato og er allerede trukket fra næste års formue."
-      : "Effektiv skat viser skattesatsen for årets udbetaling.";
     setText(
       "projection-note",
-      `Datoerne er årlige beregningstidspunkter fra dagens dato. ${taxDescription} Før skat viser den samlede hævning fra formuen. Efter skat viser beløbet efter beregnet skat.`,
+      "Datoerne er årlige beregningstidspunkter fra dagens dato. Før skat viser den samlede hævning fra formuen. Efter skat viser beløbet efter beregnet skat. Lagerskat viser skatten af årets positive afkast på frie midler og er trukket fra formuen frem mod næste dato. Ved realisationsbeskatning vises ingen lagerskat. Effektiv skat viser skatten på årets samlede udbetaling som procent af udbetalingen før skat. Lagerskat indgår ikke i denne procentsats.",
     );
   }
 
@@ -346,10 +342,6 @@
       usesInventoryTax
         ? "Effektiv skat af positivt afkast på frie midler"
         : "Effektiv skat på hævninger fra frie midler",
-    );
-    setText(
-      "projection-tax-heading",
-      usesInventoryTax ? "Lagerskat" : "Effektiv skat",
     );
     renderProjectionTableState();
   }
@@ -485,14 +477,13 @@
   }
 
   function rowMarkup(row, freeFundsTaxation) {
-    const taxValue =
-      freeFundsTaxation === "inventory"
-        ? row.annualFreeFundsTax
-          ? currency.format(row.annualFreeFundsTax)
-          : "—"
-        : row.withdrawal
-          ? percent.format(row.effectiveWithdrawalTaxRate)
-          : "—";
+    const inventoryTax =
+      freeFundsTaxation === "inventory" && row.phase !== "Slut"
+        ? currency.format(row.annualFreeFundsTax)
+        : "—";
+    const effectiveTax = row.withdrawal
+      ? percent.format(row.effectiveWithdrawalTaxRate)
+      : "—";
 
     return `
       <tr data-phase="${row.phase}">
@@ -507,7 +498,8 @@
         <td>${row.contribution ? currency.format(row.contribution) : "—"}</td>
         <td>${row.withdrawal ? currency.format(row.withdrawal) : "—"}</td>
         <td>${row.withdrawal ? currency.format(row.netWithdrawal) : "—"}</td>
-        <td>${taxValue}</td>
+        <td>${inventoryTax}</td>
+        <td>${effectiveTax}</td>
         <td>${row.withdrawalSource}</td>
       </tr>`;
   }

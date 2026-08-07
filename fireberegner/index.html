@@ -652,12 +652,6 @@
             <details class="projection-card">
               <summary>Se op- og nedsparing år for år</summary>
               <div class="table-wrap">
-                <p id="projection-note" class="projection-note">
-                  Datoerne er årlige beregningstidspunkter fra dagens dato.
-                  Effektiv skat viser skattesatsen for årets udbetaling.
-                  Før skat viser den samlede hævning fra formuen. Efter skat
-                  viser beløbet efter beregnet skat.
-                </p>
                 <table>
                   <thead>
                     <tr>
@@ -672,13 +666,24 @@
                       <th>Indbetaling</th>
                       <th>Udbetaling før skat</th>
                       <th>Udbetaling efter skat</th>
-                      <th id="projection-tax-heading">Effektiv skat</th>
+                      <th>Lagerskat</th>
+                      <th>Effektiv skat</th>
                       <th>Udbetaling fra</th>
                     </tr>
                   </thead>
                   <tbody id="projection-body"></tbody>
                 </table>
               </div>
+              <p id="projection-note" class="projection-note">
+                Datoerne er årlige beregningstidspunkter fra dagens dato. Før
+                skat viser den samlede hævning fra formuen. Efter skat viser
+                beløbet efter beregnet skat. Lagerskat viser skatten af årets
+                positive afkast på frie midler og er trukket fra formuen frem
+                mod næste dato. Ved realisationsbeskatning vises ingen
+                lagerskat. Effektiv skat viser skatten på årets samlede
+                udbetaling som procent af udbetalingen før skat. Lagerskat
+                indgår ikke i denne procentsats.
+              </p>
             </details>
           </section>
 
