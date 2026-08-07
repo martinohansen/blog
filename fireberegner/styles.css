@@ -1495,6 +1495,16 @@ td:last-child {
   margin: calc(var(--space-1) * -1) var(--space-1) 0;
 }
 
+.disclaimer .source-link {
+  color: inherit;
+  margin-left: var(--space-1);
+  text-underline-offset: 3px;
+}
+
+.disclaimer .source-link:hover {
+  color: var(--ink);
+}
+
 .visually-hidden {
   clip: rect(0 0 0 0);
   clip-path: inset(50%);
@@ -1669,4 +1679,5 @@ input:focus-visible {
     box-shadow: none;
     margin-bottom: 16px;
   }
+
 }

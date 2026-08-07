@@ -1555,6 +1555,15 @@ function App() {
             Når Netto er valgt, kan du skifte mellem Enlig/Ægtepar for 50.000/100.000 kr.-grænsen.
             Afdrag er ikke fradragsberettiget.
           </p>
+          <p className="source-link">
+            <a
+              href="https://heymartin.net/git/?p=www.git;a=tree;f=realkreditberegner;hb=HEAD"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Kildekode
+            </a>
+          </p>
         </div>
       </div>
     </div>

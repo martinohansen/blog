@@ -254,6 +254,19 @@ input[type="range"]::-moz-range-thumb {
   margin: 6px 0;
 }
 
+.source-link {
+  margin-top: 8px;
+}
+
+.source-link a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+.source-link a:hover {
+  color: #1d1d1f;
+}
+
 .lbl {
   color: #86868b;
   font-size: 11px;
