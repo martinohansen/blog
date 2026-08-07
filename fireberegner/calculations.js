@@ -491,6 +491,15 @@
       }
     });
 
+    if (
+      inventoryShare < 1 &&
+      inputs.freeFundsCostBasis > inputs.freeFundsBalance
+    ) {
+      throw new Error(
+        "Anskaffelsessummen må ikke være højere end værdien af de frie midler.",
+      );
+    }
+
     taxes.forEach((key) => {
       if (!Number.isFinite(inputs[key]) || inputs[key] < 0 || inputs[key] > 1) {
         throw new Error("Skattesatser skal være mellem 0 og 100 %.");
@@ -516,13 +525,15 @@
       throw new Error("Skattesatser skal være mellem 0 og 100 %.");
     }
 
+    if (!Number.isFinite(inputs.returnRate) || inputs.returnRate < 0) {
+      throw new Error("Det forventede afkast skal være 0 % eller højere.");
+    }
+
     if (
-      !Number.isFinite(inputs.returnRate) ||
-      inputs.returnRate <= -1 ||
       !Number.isFinite(inputs.inflationRate) ||
       inputs.inflationRate <= -1
     ) {
-      throw new Error("Afkast og inflation skal være større end -100 %.");
+      throw new Error("Inflationen skal være større end -100 %.");
     }
   }
 

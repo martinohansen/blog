@@ -83,6 +83,7 @@ const result = calculateFire(
     ratePensionBalance: 730000,
     ageSavingsBalance: 45000,
     freeFundsBalance: 140000,
+    freeFundsCostBasis: 140000,
     askBalance: 200000,
     annualRatePensionContribution: 68700,
     annualAgeSavingsContribution: 9900,
@@ -188,6 +189,21 @@ assert.throws(
 );
 assert.throws(
   () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        freeFundsCostBasis: standardInputs.freeFundsBalance + 1,
+      },
+      asOfDate,
+    ),
+  /Anskaffelsessummen må ikke være højere/,
+);
+assert.throws(
+  () => calculateFire({ ...standardInputs, returnRate: -0.001 }, asOfDate),
+  /forventede afkast skal være 0 % eller højere/,
+);
+assert.throws(
+  () =>
     calculateFire({ ...standardInputs, pensionWithdrawalTax: 1.01 }, asOfDate),
   /Skattesatser skal være mellem 0 og 100 %/,
 );
@@ -258,6 +274,7 @@ const zeroAssets = calculateFire(
     ratePensionBalance: 0,
     ageSavingsBalance: 0,
     freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
     askBalance: 0,
     annualRatePensionContribution: 0,
     annualAgeSavingsContribution: 0,
@@ -286,6 +303,7 @@ const exactDepletion = calculateFire(
     ratePensionBalance: 0,
     ageSavingsBalance: 200,
     freeFundsBalance: 500,
+    freeFundsCostBasis: 500,
     askBalance: 0,
     annualRatePensionContribution: 0,
     annualAgeSavingsContribution: 0,
@@ -338,6 +356,7 @@ const annualFire = calculateFire(
     ratePensionBalance: 0,
     ageSavingsBalance: 0,
     freeFundsBalance: 1150,
+    freeFundsCostBasis: 1150,
     askBalance: 0,
     annualRatePensionContribution: 0,
     annualAgeSavingsContribution: 0,
@@ -367,6 +386,7 @@ const annualPensionStop = calculateFire(
     ratePensionBalance: 0,
     ageSavingsBalance: 0,
     freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
     askBalance: 0,
     annualRatePensionContribution: 150,
     annualAgeSavingsContribution: 0,
@@ -543,6 +563,7 @@ const annualTransitions = calculateFire(
     ratePensionBalance: 0,
     ageSavingsBalance: 100,
     freeFundsBalance: 100,
+    freeFundsCostBasis: 100,
     askBalance: 0,
     annualRatePensionContribution: 0,
     annualAgeSavingsContribution: 100,
@@ -569,6 +590,7 @@ const startOfYearWithdrawals = calculateFire(
     ratePensionBalance: 0,
     ageSavingsBalance: 200,
     freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
     askBalance: 0,
     annualRatePensionContribution: 0,
     annualAgeSavingsContribution: 0,
@@ -602,6 +624,7 @@ function calculateExactlyFundedPension(returnRate) {
     ratePensionBalance: 0,
     ageSavingsBalance: 0,
     freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
     askBalance: 0,
     annualRatePensionContribution: 0,
     annualAgeSavingsContribution: 0,
@@ -618,7 +641,7 @@ function calculateExactlyFundedPension(returnRate) {
   return calculateFire({ ...baseInputs, ageSavingsBalance }, asOfDate);
 }
 
-[0, 0.05, -0.02].map(calculateExactlyFundedPension).forEach((calculation) => {
+[0, 0.05].map(calculateExactlyFundedPension).forEach((calculation) => {
   assert.ok(calculation.pensionCoastRow);
   assert.equal(calculation.isFullyFunded, true);
   assert.equal(
@@ -638,6 +661,7 @@ const freeFundedFire = calculateFire(
     ratePensionBalance: 1,
     ageSavingsBalance: 0,
     freeFundsBalance: 2000,
+    freeFundsCostBasis: 2000,
     askBalance: 0,
     annualRatePensionContribution: 10,
     annualAgeSavingsContribution: 0,
@@ -819,35 +843,6 @@ const noGainSale = calculateFire(
   asOfDate,
 );
 assert.equal(noGainSale.totalFreeFundsTax, 0);
-
-const lossSale = calculateFire(
-  {
-    ...standardInputs,
-    currentAge: 30,
-    retirementAge: 31,
-    payoutYears: 1,
-    desiredAnnualWithdrawal: 50,
-    ratePensionBalance: 0,
-    ageSavingsBalance: 0,
-    freeFundsBalance: 100,
-    freeFundsCostBasis: 200,
-    askBalance: 0,
-    annualRatePensionContribution: 0,
-    annualAgeSavingsContribution: 0,
-    annualFreeFundsContribution: 0,
-    returnRate: 0,
-    inflationRate: 0,
-  },
-  asOfDate,
-);
-assert.ok(
-  lossSale.planRows
-    .filter((row) => row.withdrawal > 0)
-    .every(
-      (row) => row.realizedFreeFundsGain < 0 && row.withdrawalTax === 0,
-    ),
-);
-assertClose(lossSale.finalRow.freeFundsCostBasis, 0);
 
 const contributionCostBasis = calculateFire(
   {
@@ -1525,6 +1520,7 @@ function randomBetween(minimum, maximum) {
 for (let scenario = 0; scenario < 2000; scenario += 1) {
   const currentAge = Math.floor(randomBetween(18, 71));
   const retirementAge = currentAge + Math.floor(randomBetween(1, 51));
+  const freeFundsBalance = randomBetween(0, 5000000);
   const randomized = calculateFire(
     {
       currentAge,
@@ -1533,8 +1529,8 @@ for (let scenario = 0; scenario < 2000; scenario += 1) {
       desiredAnnualWithdrawal: randomBetween(0, 1000000),
       ratePensionBalance: randomBetween(0, 5000000),
       ageSavingsBalance: randomBetween(0, 1000000),
-      freeFundsBalance: randomBetween(0, 5000000),
-      freeFundsCostBasis: randomBetween(0, 7500000),
+      freeFundsBalance,
+      freeFundsCostBasis: randomBetween(0, freeFundsBalance),
       askBalance: randomBetween(0, 2000000),
       annualRatePensionContribution: randomBetween(0, 150000),
       annualAgeSavingsContribution: randomBetween(0, 50000),
@@ -1543,7 +1539,7 @@ for (let scenario = 0; scenario < 2000; scenario += 1) {
       ratePensionContributionTaxRelief: randomBetween(0, 0.6),
       pensionWithdrawalTax: randomBetween(0, 0.6),
       askTax: randomBetween(0, 0.5),
-      returnRate: randomBetween(-0.2, 0.3),
+      returnRate: randomBetween(0, 0.3),
       inflationRate: randomBetween(-0.1, 0.15),
       withdrawalAfterTax: random() >= 0.5,
       contributionsFollowInflation: random() >= 0.5,
