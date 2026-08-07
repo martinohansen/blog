@@ -17,9 +17,6 @@
     "#free-funds-cost-basis-field",
   );
   const freeFundsCostBasisInput = form.elements.freeFundsCostBasis;
-  const freeFundsTaxDisclaimer = document.querySelector(
-    "#free-funds-tax-disclaimer",
-  );
   const optimizeButton = document.querySelector("#optimize-contributions");
   const optimizeButtonLabel = optimizeButton.querySelector("span");
   const optimizationResult = document.querySelector("#optimization-result");
@@ -348,9 +345,6 @@
     freeFundsCostBasisField.querySelector("i").title = usesInventoryTax
       ? "Anskaffelsessummen bruges ikke ved lagerbeskatning."
       : "Den skattemæssige købspris for de investeringer, du stadig ejer. Beløbet må gerne være højere end den aktuelle værdi, hvis investeringerne har tabt værdi.";
-    freeFundsTaxDisclaimer.textContent = usesInventoryTax
-      ? "Frie midler antages at være lagerbeskattede aktier. Skat beregnes årligt af positive afkast og trækkes fra formuen hvert år."
-      : "Frie midler antages at være realisationsbeskattede aktier. Skat beregnes af gevinsten ved salg.";
     setText(
       "total-free-funds-tax-label",
       usesInventoryTax
