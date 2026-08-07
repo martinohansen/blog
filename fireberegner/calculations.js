@@ -134,18 +134,14 @@
   }
 
   function allocateForPhase(
-    balances,
-    rates,
+    capacities,
     desiredWithdrawal,
-    periods,
     beforeRetirement,
   ) {
     if (beforeRetirement) {
       const freeIndexes = [FREE_FUNDS, ASK];
       const allocation = allocateWithdrawals(
-        freeIndexes.map((index) =>
-          annualCapacity(balances[index], rates[index], periods),
-        ),
+        freeIndexes.map((index) => capacities[index]),
         desiredWithdrawal,
       );
 
@@ -158,15 +154,11 @@
     const pensionIndexes = [RATE_PENSION, AGE_SAVINGS];
     const freeIndexes = [FREE_FUNDS, ASK];
     const pensionAllocation = allocateWithdrawals(
-      pensionIndexes.map((index) =>
-        annualCapacity(balances[index], rates[index], periods),
-      ),
+      pensionIndexes.map((index) => capacities[index]),
       desiredWithdrawal,
     );
     const freeAllocation = allocateWithdrawals(
-      freeIndexes.map((index) =>
-        annualCapacity(balances[index], rates[index], periods),
-      ),
+      freeIndexes.map((index) => capacities[index]),
       desiredWithdrawal - pensionAllocation.total,
     );
 
@@ -239,9 +231,8 @@
 
   function allocateForNetWithdrawal(
     balances,
-    rates,
+    capacities,
     desiredNetWithdrawal,
-    periods,
     beforeRetirement,
     freeFundsCostBasis,
     pensionWithdrawalTax,
@@ -249,8 +240,8 @@
   ) {
     const pensionIndexes = [RATE_PENSION, AGE_SAVINGS];
     const freeIndexes = [FREE_FUNDS, ASK];
-    const pensionCapacities = pensionIndexes.map((index) =>
-      annualCapacity(balances[index], rates[index], periods),
+    const pensionCapacities = pensionIndexes.map(
+      (index) => capacities[index],
     );
     const totalPensionCapacity = pensionCapacities.reduce(
       (total, capacity) => total + capacity,
@@ -280,9 +271,7 @@
       0,
       desiredNetWithdrawal - pensionNetWithdrawal,
     );
-    const freeCapacities = freeIndexes.map((index) =>
-      annualCapacity(balances[index], rates[index], periods),
-    );
+    const freeCapacities = freeIndexes.map((index) => capacities[index]);
     const freeGrossWithdrawal = grossWithdrawalForNetTarget(
       remainingNetWithdrawal,
       freeCapacities[0],
@@ -547,6 +536,44 @@
       return calculateShareIncomeTax(balance * inputs.returnRate);
     }
 
+    function inventoryAnnualCapacity(balance, periods) {
+      if (balance <= 0 || periods <= 0) {
+        return 0;
+      }
+
+      let affordable = 0;
+      let unaffordable = balance;
+
+      for (let iteration = 0; iteration < 60; iteration += 1) {
+        const withdrawal = (affordable + unaffordable) / 2;
+        let remaining = balance;
+        let funded = true;
+
+        for (let period = 0; period < periods; period += 1) {
+          if (remaining + MONEY_TOLERANCE < withdrawal) {
+            funded = false;
+            break;
+          }
+
+          remaining = Math.max(0, remaining - withdrawal);
+          const tax = inventoryTaxForBalance(remaining);
+          remaining =
+            (remaining * (1 + inputs.returnRate) - tax) /
+            (1 + inputs.inflationRate);
+          assertFinite(remaining, tax);
+        }
+
+        if (funded) {
+          affordable = withdrawal;
+        } else {
+          unaffordable = withdrawal;
+        }
+      }
+
+      assertFinite(affordable);
+      return affordable;
+    }
+
     function freeFundsRateForBalance(balance) {
       if (!usesInventoryTax || balance <= 0) {
         return realFreeFundsReturn;
@@ -568,6 +595,16 @@
         freeFundsRateForBalance(balances[FREE_FUNDS]),
         realAskReturn,
       ];
+    }
+
+    function capacitiesForBalances(balances, periods) {
+      const currentRates = ratesForBalances(balances);
+
+      return balances.map((balance, index) =>
+        usesInventoryTax && index === FREE_FUNDS
+          ? inventoryAnnualCapacity(balance, periods)
+          : annualCapacity(balance, currentRates[index], periods),
+      );
     }
 
     function growBalancesWithTax(balances) {
@@ -681,23 +718,20 @@
         const periods = beforeRetirement
           ? yearsToRetirement - year
           : finalYear - year;
-        const currentRates = ratesForBalances(balances);
+        const capacities = capacitiesForBalances(balances, periods);
         const allocation = inputs.withdrawalAfterTax
           ? allocateForNetWithdrawal(
               balances,
-              currentRates,
+              capacities,
               inputs.desiredAnnualWithdrawal,
-              periods,
               beforeRetirement,
               freeFundsCostBasis,
               pensionWithdrawalTax,
               freeFundsTaxation,
             )
           : allocateForPhase(
-              balances,
-              currentRates,
+              capacities,
               inputs.desiredAnnualWithdrawal,
-              periods,
               beforeRetirement,
             );
         const date = annualDate(asOfDate, year);
@@ -858,10 +892,8 @@
         false,
       );
       const bridgeCapacityAllocation = allocateForPhase(
-        balances,
-        ratesForBalances(balances),
+        capacitiesForBalances(balances, bridgeYears),
         Number.MAX_VALUE,
-        bridgeYears,
         true,
       );
       const bridgeCapacitySale = calculateFreeFundsSale(

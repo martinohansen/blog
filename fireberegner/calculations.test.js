@@ -942,6 +942,30 @@ assertClose(
 assertClose(inventoryTaxBelowThreshold.totalFreeFundsTax, 2700);
 assertClose(inventoryTaxBelowThreshold.effectiveFreeFundsTaxRate, 0.27);
 
+const progressiveInventoryCapacity = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 9,
+    desiredAnnualWithdrawal: 134000,
+    ratePensionBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 1000000,
+    freeFundsCostBasis: 0,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    returnRate: 0.1,
+    inflationRate: 0,
+    freeFundsTaxation: FREE_FUNDS_TAXATION.inventory,
+  },
+  asOfDate,
+);
+assert.equal(progressiveInventoryCapacity.fireRow.age, 30);
+assert.equal(progressiveInventoryCapacity.isFullyFunded, true);
+
 const inventoryAfterTaxTarget = calculateFire(
   {
     ...inventoryTaxInputs,
