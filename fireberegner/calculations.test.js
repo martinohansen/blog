@@ -3,6 +3,7 @@ const {
   calculateFire,
   optimizeAnnualContributions,
   CONTRIBUTION_LIMITS,
+  FREE_FUNDS_TAXATION,
 } = require("./calculations.js");
 
 const asOfDate = new Date(2026, 7, 4);
@@ -205,6 +206,14 @@ assert.throws(
       asOfDate,
     ),
   /gældende 2026-loft/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      { ...standardInputs, freeFundsTaxation: "unsupported" },
+      asOfDate,
+    ),
+  /realisations- eller lagerbeskatning/,
 );
 
 const lowAgeSavingsLimit = calculateFire(
@@ -883,6 +892,86 @@ const inflationAdjustedSale = inflationAdjustedCostBasis.planRows.find(
 assertClose(inflationAdjustedSale.freeFundsCostBasis, 100 / 1.02);
 assertClose(inflationAdjustedSale.realizedFreeFundsGain, 9.54545454545456);
 assertClose(inflationAdjustedSale.withdrawalTax, 2.57727272727273);
+
+const inventoryTaxInputs = {
+  ...standardInputs,
+  currentAge: 30,
+  retirementAge: 31,
+  payoutYears: 1,
+  desiredAnnualWithdrawal: 2000000,
+  ratePensionBalance: 0,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 1000000,
+  freeFundsCostBasis: 700000,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 0,
+  returnRate: 0.1,
+  inflationRate: 0,
+  freeFundsTaxation: FREE_FUNDS_TAXATION.inventory,
+};
+const inventoryTax = calculateFire(inventoryTaxInputs, asOfDate);
+const inventoryWithdrawal = inventoryTax.planRows.find(
+  (row) => row.withdrawal > 0,
+);
+assert.equal(inventoryTax.freeFundsTaxation, FREE_FUNDS_TAXATION.inventory);
+assertClose(inventoryWithdrawal.freeFunds, 1069910);
+assertClose(inventoryWithdrawal.withdrawalTax, 0);
+assertClose(inventoryWithdrawal.realizedFreeFundsGain, 0);
+assertClose(inventoryWithdrawal.freeFundsCostBasis, 0);
+assertClose(inventoryTax.planRows[0].annualFreeFundsTax, 30090);
+assertClose(inventoryWithdrawal.annualFreeFundsTax, 0);
+assertClose(inventoryTax.totalFreeFundsTax, 30090);
+assertClose(inventoryTax.totalFreeFundsTaxableGain, 100000);
+assertClose(inventoryTax.effectiveFreeFundsTaxRate, 0.3009);
+
+const inventoryTaxBelowThreshold = calculateFire(
+  {
+    ...inventoryTaxInputs,
+    freeFundsBalance: 100000,
+    desiredAnnualWithdrawal: 200000,
+  },
+  asOfDate,
+);
+assertClose(
+  inventoryTaxBelowThreshold.planRows.find((row) => row.withdrawal > 0)
+    .freeFunds,
+  107300,
+);
+assertClose(inventoryTaxBelowThreshold.totalFreeFundsTax, 2700);
+assertClose(inventoryTaxBelowThreshold.effectiveFreeFundsTaxRate, 0.27);
+
+const inventoryAfterTaxTarget = calculateFire(
+  {
+    ...inventoryTaxInputs,
+    freeFundsBalance: 200000,
+    freeFundsCostBasis: 0,
+    desiredAnnualWithdrawal: 100000,
+    returnRate: 0,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+);
+const inventoryAfterTaxWithdrawal = inventoryAfterTaxTarget.planRows.find(
+  (row) => row.withdrawal > 0,
+);
+assertClose(inventoryAfterTaxWithdrawal.withdrawal, 100000);
+assertClose(inventoryAfterTaxWithdrawal.netWithdrawal, 100000);
+assertClose(inventoryAfterTaxTarget.totalFreeFundsTax, 0);
+
+const inventoryWithDifferentCostBasis = calculateFire(
+  { ...inventoryTaxInputs, freeFundsCostBasis: 0 },
+  asOfDate,
+);
+assertClose(
+  inventoryWithDifferentCostBasis.finalRow.freeFunds,
+  inventoryTax.finalRow.freeFunds,
+);
+assertClose(
+  inventoryWithDifferentCostBasis.totalFreeFundsTax,
+  inventoryTax.totalFreeFundsTax,
+);
 
 const afterTaxPension = calculateFire(
   {

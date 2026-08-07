@@ -148,7 +148,7 @@
                       value="250.000"
                       required
                   /></label>
-                  <label class="field"
+                  <label id="free-funds-cost-basis-field" class="field"
                     ><span
                       >Anskaffelsessum
                       <i
@@ -458,6 +458,22 @@
                       /><b>%</b></span
                     ></label
                   >
+                  <label class="inflation-field">
+                    <span
+                      >Beskatning af frie midler
+                      <i
+                        title="Realisationsbeskatning beregner skat af gevinsten ved salg. Lagerbeskatning beregner skat af årets positive afkast og trækker skatten fra formuen hvert år."
+                        >i</i
+                      ></span
+                    >
+                    <span class="inflation-input">
+                      <b id="free-funds-taxation-state"
+                        >Realisationsbeskatning</b
+                      >
+                      <input name="freeFundsTaxation" type="checkbox" />
+                      <span class="inflation-switch" aria-hidden="true"></span>
+                    </span>
+                  </label>
                 </div>
               </details>
             </div>
@@ -628,7 +644,7 @@
             <details class="projection-card">
               <summary>Se op- og nedsparing år for år</summary>
               <div class="table-wrap">
-                <p class="projection-note">
+                <p id="projection-note" class="projection-note">
                   Datoerne er årlige beregningstidspunkter fra dagens dato.
                   Udbetaling er det samlede bruttobeløb fra formuen. Når
                   hævningsbeløbet er efter skat, kan bruttoudbetalingen være
@@ -647,7 +663,7 @@
                       <th>Samlet formue</th>
                       <th>Indbetaling</th>
                       <th>Udbetaling</th>
-                      <th>Effektiv skat</th>
+                      <th id="projection-tax-heading">Effektiv skat</th>
                       <th>Udbetaling fra</th>
                     </tr>
                   </thead>
@@ -677,7 +693,9 @@
                 <dd id="real-free-return"></dd>
               </div>
               <div>
-                <dt>Samlet skat på hævninger fra frie midler</dt>
+                <dt id="total-free-funds-tax-label">
+                  Samlet skat på hævninger fra frie midler
+                </dt>
                 <dd id="total-free-funds-tax"></dd>
               </div>
               <div>
@@ -685,7 +703,9 @@
                 <dd id="total-pension-withdrawal-tax"></dd>
               </div>
               <div>
-                <dt>Effektiv skat på hævninger fra frie midler</dt>
+                <dt id="effective-free-funds-tax-label">
+                  Effektiv skat på hævninger fra frie midler
+                </dt>
                 <dd id="effective-free-funds-tax-rate"></dd>
               </div>
               <div>
@@ -766,10 +786,13 @@
           <p class="disclaimer">
             Beregningen bruger faste, reale afkast og viser alle beløb i dagens
             kroner. Indbetalinger fordeles løbende over året, og hævninger sker
-            ved starten af hver udbetalingsperiode. Frie midler antages at være
-            realisationsbeskattede aktier. Beregningen bruger 2026-satserne for
-            en enlig uden anden aktieindkomst og medregner ikke udbytter,
-            lagerbeskattede værdipapirer eller fremførte tab. ASK beskattes kun
+            ved starten af hver udbetalingsperiode.
+            <span id="free-funds-tax-disclaimer"
+              >Frie midler antages at være realisationsbeskattede aktier. Skat
+              beregnes af gevinsten ved salg.</span
+            >
+            Beregningen bruger 2026-satserne for en enlig uden anden
+            aktieindkomst og medregner ikke udbytter eller fremførte tab. ASK beskattes kun
             af fremtidige afkast fra den indtastede startværdi. Beregningen
             medregner ikke allerede optjent ASK-skat. Ratepensionsudbetalinger
             beskattes med den indtastede effektive sats. Nettoudgiften til

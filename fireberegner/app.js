@@ -10,6 +10,16 @@
     "#pension-redirect-state",
   );
   const withdrawalTaxState = document.querySelector("#withdrawal-tax-state");
+  const freeFundsTaxationState = document.querySelector(
+    "#free-funds-taxation-state",
+  );
+  const freeFundsCostBasisField = document.querySelector(
+    "#free-funds-cost-basis-field",
+  );
+  const freeFundsCostBasisInput = form.elements.freeFundsCostBasis;
+  const freeFundsTaxDisclaimer = document.querySelector(
+    "#free-funds-tax-disclaimer",
+  );
   const optimizeButton = document.querySelector("#optimize-contributions");
   const optimizeButtonLabel = optimizeButton.querySelector("span");
   const optimizationResult = document.querySelector("#optimization-result");
@@ -244,6 +254,9 @@
       ),
       pensionWithdrawalTax: readNumber("pensionWithdrawalTax", 100),
       askTax: readNumber("askTax", 100),
+      freeFundsTaxation: form.elements.freeFundsTaxation.checked
+        ? "inventory"
+        : "realization",
       returnRate: readNumber("returnRate", 100),
       inflationRate: readNumber("inflationRate", 100),
       withdrawalAfterTax: form.elements.withdrawalAfterTax.checked,
@@ -288,6 +301,57 @@
     withdrawalTaxState.textContent = form.elements.withdrawalAfterTax.checked
       ? "Efter skat"
       : "Før skat";
+  }
+
+  function renderFreeFundsTaxation() {
+    const usesInventoryTax = form.elements.freeFundsTaxation.checked;
+
+    freeFundsTaxationState.textContent = usesInventoryTax
+      ? "Lagerbeskatning"
+      : "Realisationsbeskatning";
+    freeFundsCostBasisInput.disabled = usesInventoryTax;
+    freeFundsCostBasisInput.required = !usesInventoryTax;
+    freeFundsCostBasisField.classList.toggle(
+      "field-disabled",
+      usesInventoryTax,
+    );
+    freeFundsCostBasisField.setAttribute(
+      "aria-disabled",
+      String(usesInventoryTax),
+    );
+    freeFundsCostBasisField
+      .querySelectorAll(".amount-step-button")
+      .forEach((button) => {
+        button.disabled = usesInventoryTax;
+      });
+    freeFundsCostBasisField.querySelector("i").title = usesInventoryTax
+      ? "Anskaffelsessummen bruges ikke ved lagerbeskatning."
+      : "Den skattemæssige købspris for de investeringer, du stadig ejer. Beløbet må gerne være højere end den aktuelle værdi, hvis investeringerne har tabt værdi.";
+    freeFundsTaxDisclaimer.textContent = usesInventoryTax
+      ? "Frie midler antages at være lagerbeskattede aktier. Skat beregnes årligt af positive afkast og trækkes fra formuen hvert år."
+      : "Frie midler antages at være realisationsbeskattede aktier. Skat beregnes af gevinsten ved salg.";
+    setText(
+      "total-free-funds-tax-label",
+      usesInventoryTax
+        ? "Samlet lagerbeskatning af frie midler"
+        : "Samlet skat på hævninger fra frie midler",
+    );
+    setText(
+      "effective-free-funds-tax-label",
+      usesInventoryTax
+        ? "Effektiv skat af positivt afkast på frie midler"
+        : "Effektiv skat på hævninger fra frie midler",
+    );
+    setText(
+      "projection-tax-heading",
+      usesInventoryTax ? "Lagerskat" : "Effektiv skat",
+    );
+    setText(
+      "projection-note",
+      usesInventoryTax
+        ? "Datoerne er årlige beregningstidspunkter fra dagens dato. Lagerskat er skatten af afkastet frem til næste dato og er allerede trukket fra næste års formue. Udbetaling er det samlede bruttobeløb fra formuen."
+        : "Datoerne er årlige beregningstidspunkter fra dagens dato. Udbetaling er det samlede bruttobeløb fra formuen. Når hævningsbeløbet er efter skat, kan bruttoudbetalingen være højere end det ønskede beløb.",
+    );
   }
 
   function hideOptimizationResult() {
@@ -420,7 +484,16 @@
     applyOptimizationButton.disabled = true;
   }
 
-  function rowMarkup(row) {
+  function rowMarkup(row, freeFundsTaxation) {
+    const taxValue =
+      freeFundsTaxation === "inventory"
+        ? row.annualFreeFundsTax
+          ? currency.format(row.annualFreeFundsTax)
+          : "—"
+        : row.withdrawal
+          ? percent.format(row.effectiveWithdrawalTaxRate)
+          : "—";
+
     return `
       <tr data-phase="${row.phase}">
         <td>${dateFormat.format(row.date)}</td>
@@ -433,7 +506,7 @@
         <td>${currency.format(row.totalBalance)}</td>
         <td>${row.contribution ? currency.format(row.contribution) : "—"}</td>
         <td>${row.withdrawal ? currency.format(row.withdrawal) : "—"}</td>
-        <td>${row.withdrawal ? percent.format(row.effectiveWithdrawalTaxRate) : "—"}</td>
+        <td>${taxValue}</td>
         <td>${row.withdrawalSource}</td>
       </tr>`;
   }
@@ -854,7 +927,7 @@
     );
     setText(
       "effective-free-funds-tax-rate",
-      percent.format(calculation.effectiveFreeFundsWithdrawalTaxRate),
+      percent.format(calculation.effectiveFreeFundsTaxRate),
     );
     setText(
       "annual-net-contribution-budget",
@@ -918,7 +991,9 @@
       ),
     );
 
-    tableBody.innerHTML = calculation.planRows.map(rowMarkup).join("");
+    tableBody.innerHTML = calculation.planRows
+      .map((row) => rowMarkup(row, inputs.freeFundsTaxation))
+      .join("");
     markContributionLimit(
       "annualRatePensionContribution",
       calculation.ratePensionContributionLimitExceeded,
@@ -966,6 +1041,9 @@
     if (event.target === form.elements.withdrawalAfterTax) {
       renderWithdrawalTaxState();
     }
+    if (event.target.name === "freeFundsTaxation") {
+      renderFreeFundsTaxation();
+    }
     update(event);
   });
   optimizeButton.addEventListener("click", runContributionOptimization);
@@ -979,6 +1057,7 @@
   renderInflationState();
   renderPensionRedirectState();
   renderWithdrawalTaxState();
+  renderFreeFundsTaxation();
 
   update();
 })();

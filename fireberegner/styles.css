@@ -236,6 +236,11 @@ fieldset + fieldset {
   padding-top: 0;
 }
 
+#savings-section {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
 legend,
 .assumptions summary {
   font-size: var(--text-heading-sm-size);
@@ -292,6 +297,14 @@ legend,
   justify-content: center;
   vertical-align: 0.1em;
   width: 13px;
+}
+
+.field-disabled {
+  opacity: 0.48;
+}
+
+.field-disabled .amount-step-button {
+  cursor: not-allowed;
 }
 
 @media (min-width: 1280px) {
@@ -413,6 +426,12 @@ legend,
   background: #dce9e2;
 }
 
+.amount-step-button:disabled,
+.amount-step-button:disabled:hover {
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
 .amount-step-button:focus-visible {
   outline: 2px solid var(--green);
   outline-offset: -2px;
@@ -532,6 +551,10 @@ legend,
 
 .optimization-disclosure {
   border-bottom: 1px solid var(--line);
+}
+
+#savings-section + .optimization-disclosure {
+  padding-top: var(--space-2);
 }
 
 .optimization-disclosure[open] > summary {
