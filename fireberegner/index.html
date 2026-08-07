@@ -462,26 +462,24 @@
                       /><b>%</b></span
                     ></label
                   >
-                  <label class="inflation-field">
-                    <span
-                      >Beskatning af frie midler
+                  <label class="field"
+                    ><span
+                      >Andel lagerbeskattede frie midler
                       <i
-                        title="Realisationsbeskatning beregner skat af gevinsten ved salg. Lagerbeskatning beregner skat af årets positive afkast og trækker skatten fra formuen hvert år."
+                        title="Procentdelen anvendes på den nuværende formue, anskaffelsessummen og fremtidige indbetalinger. Resten behandles som realisationsbeskattede aktier."
                         >i</i
                       ></span
-                    >
-                    <span class="inflation-input">
-                      <b id="free-funds-taxation-state"
-                        >Lagerbeskatning</b
-                      >
-                      <input
-                        name="freeFundsTaxation"
-                        type="checkbox"
-                        checked
-                      />
-                      <span class="inflation-switch" aria-hidden="true"></span>
-                    </span>
-                  </label>
+                    ><span class="input-suffix"
+                      ><input
+                        name="freeFundsInventoryShare"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value="100"
+                        required
+                      /><b>%</b></span
+                  ></label>
                 </div>
               </details>
             </div>
@@ -678,9 +676,9 @@
                 Datoerne er årlige beregningstidspunkter fra dagens dato. Før
                 skat viser den samlede hævning fra formuen. Efter skat viser
                 beløbet efter beregnet skat. Lagerskat viser skatten af årets
-                positive afkast på frie midler og er trukket fra formuen frem
-                mod næste dato. Ved realisationsbeskatning vises ingen
-                lagerskat. Effektiv skat viser skatten på årets samlede
+                positive afkast på den lagerbeskattede andel af frie midler og
+                er trukket fra formuen frem mod næste dato. Effektiv skat viser
+                skatten på årets samlede
                 udbetaling som procent af udbetalingen før skat. Lagerskat
                 indgår ikke i denne procentsats.
               </p>
@@ -803,10 +801,12 @@
             en tilnærmelse til løbende indbetalinger. Det giver årets
             indbetalinger et halvt års beregnet afkast. Hævninger sker ved
             starten af hver udbetalingsperiode.
-            Frie midler kan beregnes med realisations- eller lagerbeskatning.
-            Ved realisationsbeskatning beregnes skat af gevinsten ved salg.
-            Ved lagerbeskatning beregnes skat årligt af positive afkast og
-            trækkes fra formuen.
+            Den valgte procentdel af frie midler lagerbeskattes. Resten
+            realisationsbeskattes. Fordelingen anvendes på startformuen,
+            anskaffelsessummen og fremtidige indbetalinger. Ved
+            realisationsbeskatning beregnes skat af gevinsten ved salg. Ved
+            lagerbeskatning beregnes skat årligt af positive afkast og trækkes
+            fra formuen.
             Beregningen bruger 2026-satserne for en enlig uden anden
             aktieindkomst og medregner ikke udbytter eller fremførte tab. ASK beskattes kun
             af fremtidige afkast fra den indtastede startværdi. Beregningen

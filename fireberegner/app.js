@@ -10,9 +10,6 @@
     "#pension-redirect-state",
   );
   const withdrawalTaxState = document.querySelector("#withdrawal-tax-state");
-  const freeFundsTaxationState = document.querySelector(
-    "#free-funds-taxation-state",
-  );
   const freeFundsCostBasisField = document.querySelector(
     "#free-funds-cost-basis-field",
   );
@@ -251,9 +248,10 @@
       ),
       pensionWithdrawalTax: readNumber("pensionWithdrawalTax", 100),
       askTax: readNumber("askTax", 100),
-      freeFundsTaxation: form.elements.freeFundsTaxation.checked
-        ? "inventory"
-        : "realization",
+      freeFundsInventoryShare: readNumber(
+        "freeFundsInventoryShare",
+        100,
+      ),
       returnRate: readNumber("returnRate", 100),
       inflationRate: readNumber("inflationRate", 100),
       withdrawalAfterTax: form.elements.withdrawalAfterTax.checked,
@@ -297,7 +295,7 @@
   function renderProjectionTableState() {
     setText(
       "projection-note",
-      "Datoerne er årlige beregningstidspunkter fra dagens dato. Før skat viser den samlede hævning fra formuen. Efter skat viser beløbet efter beregnet skat. Lagerskat viser skatten af årets positive afkast på frie midler og er trukket fra formuen frem mod næste dato. Ved realisationsbeskatning vises ingen lagerskat. Effektiv skat viser skatten på årets samlede udbetaling som procent af udbetalingen før skat. Lagerskat indgår ikke i denne procentsats.",
+      "Datoerne er årlige beregningstidspunkter fra dagens dato. Før skat viser den samlede hævning fra formuen. Efter skat viser beløbet efter beregnet skat. Lagerskat viser skatten af årets positive afkast på den lagerbeskattede andel af frie midler og er trukket fra formuen frem mod næste dato. Effektiv skat viser skatten på årets samlede udbetaling som procent af udbetalingen før skat. Lagerskat indgår ikke i denne procentsats.",
     );
   }
 
@@ -308,40 +306,41 @@
   }
 
   function renderFreeFundsTaxation() {
-    const usesInventoryTax = form.elements.freeFundsTaxation.checked;
+    const inventoryShare = readNumber("freeFundsInventoryShare", 100);
+    const isFullyInventoryTaxed = inventoryShare >= 1;
+    const isFullyRealizationTaxed = inventoryShare <= 0;
 
-    freeFundsTaxationState.textContent = usesInventoryTax
-      ? "Lagerbeskatning"
-      : "Realisationsbeskatning";
-    freeFundsCostBasisInput.disabled = usesInventoryTax;
-    freeFundsCostBasisInput.required = !usesInventoryTax;
+    freeFundsCostBasisInput.disabled = isFullyInventoryTaxed;
+    freeFundsCostBasisInput.required = !isFullyInventoryTaxed;
     freeFundsCostBasisField.classList.toggle(
       "field-disabled",
-      usesInventoryTax,
+      isFullyInventoryTaxed,
     );
     freeFundsCostBasisField.setAttribute(
       "aria-disabled",
-      String(usesInventoryTax),
+      String(isFullyInventoryTaxed),
     );
     freeFundsCostBasisField
       .querySelectorAll(".amount-step-button")
       .forEach((button) => {
-        button.disabled = usesInventoryTax;
+        button.disabled = isFullyInventoryTaxed;
       });
-    freeFundsCostBasisField.querySelector("i").title = usesInventoryTax
-      ? "Anskaffelsessummen bruges ikke ved lagerbeskatning."
-      : "Den skattemæssige købspris for de investeringer, du stadig ejer. Beløbet må gerne være højere end den aktuelle værdi, hvis investeringerne har tabt værdi.";
+    freeFundsCostBasisField.querySelector("i").title = isFullyInventoryTaxed
+      ? "Anskaffelsessummen bruges ikke, når alle frie midler er lagerbeskattede."
+      : "Den indtastede anskaffelsessum fordeles med samme procent som formuen. Kun den realisationsbeskattede del bruges i skatteberegningen.";
     setText(
       "total-free-funds-tax-label",
-      usesInventoryTax
+      isFullyInventoryTaxed
         ? "Samlet lagerbeskatning af frie midler"
-        : "Samlet skat på hævninger fra frie midler",
+        : isFullyRealizationTaxed
+          ? "Samlet skat på hævninger fra frie midler"
+          : "Samlet skat på frie midler",
     );
     setText(
       "effective-free-funds-tax-label",
-      usesInventoryTax
-        ? "Effektiv skat af positivt afkast på frie midler"
-        : "Effektiv skat på hævninger fra frie midler",
+      isFullyRealizationTaxed
+        ? "Effektiv skat på hævninger fra frie midler"
+        : "Effektiv skat af beskattet afkast på frie midler",
     );
     renderProjectionTableState();
   }
@@ -476,9 +475,9 @@
     applyOptimizationButton.disabled = true;
   }
 
-  function rowMarkup(row, freeFundsTaxation) {
+  function rowMarkup(row, freeFundsInventoryShare) {
     const inventoryTax =
-      freeFundsTaxation === "inventory" && row.phase !== "Slut"
+      freeFundsInventoryShare > 0 && row.phase !== "Slut"
         ? currency.format(row.annualFreeFundsTax)
         : "—";
     const effectiveTax = row.withdrawal
@@ -985,7 +984,7 @@
     );
 
     tableBody.innerHTML = calculation.planRows
-      .map((row) => rowMarkup(row, inputs.freeFundsTaxation))
+      .map((row) => rowMarkup(row, inputs.freeFundsInventoryShare))
       .join("");
     markContributionLimit(
       "annualRatePensionContribution",
@@ -1034,7 +1033,7 @@
     if (event.target === form.elements.withdrawalAfterTax) {
       renderWithdrawalTaxState();
     }
-    if (event.target.name === "freeFundsTaxation") {
+    if (event.target.name === "freeFundsInventoryShare") {
       renderFreeFundsTaxation();
     }
     update(event);

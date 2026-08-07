@@ -920,6 +920,77 @@ const inventoryTaxInputs = {
   inflationRate: 0,
   freeFundsTaxation: FREE_FUNDS_TAXATION.inventory,
 };
+
+const mixedTaxBaseInputs = {
+  ...standardInputs,
+  currentAge: 30,
+  retirementAge: 31,
+  payoutYears: 1,
+  desiredAnnualWithdrawal: 1000000,
+  ratePensionBalance: 0,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 100000,
+  freeFundsCostBasis: 100000,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 0,
+  returnRate: 0.1,
+  inflationRate: 0,
+};
+const fullyRealizationTaxed = calculateFire(
+  { ...mixedTaxBaseInputs, freeFundsInventoryShare: 0 },
+  asOfDate,
+);
+const evenlyMixedTaxed = calculateFire(
+  { ...mixedTaxBaseInputs, freeFundsInventoryShare: 0.5 },
+  asOfDate,
+);
+const fullyInventoryTaxed = calculateFire(
+  { ...mixedTaxBaseInputs, freeFundsInventoryShare: 1 },
+  asOfDate,
+);
+const mixedAge31 = evenlyMixedTaxed.planRows.find((row) => row.age === 31);
+
+assert.equal(
+  fullyRealizationTaxed.freeFundsTaxation,
+  FREE_FUNDS_TAXATION.realization,
+);
+assert.equal(evenlyMixedTaxed.freeFundsTaxation, FREE_FUNDS_TAXATION.mixed);
+assert.equal(
+  fullyInventoryTaxed.freeFundsTaxation,
+  FREE_FUNDS_TAXATION.inventory,
+);
+assertClose(
+  fullyRealizationTaxed.planRows.find((row) => row.age === 31).freeFunds,
+  110000,
+);
+assertClose(mixedAge31.freeFundsRealization, 55000);
+assertClose(mixedAge31.freeFundsInventory, 53650);
+assertClose(mixedAge31.freeFunds, 108650);
+assertClose(evenlyMixedTaxed.planRows[0].annualFreeFundsTax, 1350);
+assertClose(mixedAge31.freeFundsCostBasis, 50000);
+assertClose(
+  fullyInventoryTaxed.planRows.find((row) => row.age === 31).freeFunds,
+  107300,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      { ...mixedTaxBaseInputs, freeFundsInventoryShare: -0.01 },
+      asOfDate,
+    ),
+  /mellem 0 og 100 %/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      { ...mixedTaxBaseInputs, freeFundsInventoryShare: 1.01 },
+      asOfDate,
+    ),
+  /mellem 0 og 100 %/,
+);
+
 const inventoryTax = calculateFire(inventoryTaxInputs, asOfDate);
 const inventoryWithdrawal = inventoryTax.planRows.find(
   (row) => row.withdrawal > 0,
