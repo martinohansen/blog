@@ -53,6 +53,16 @@ function assertFiniteResult(calculation) {
   assert.ok(calculation.totalFreeFundsTax >= 0);
   assert.ok(calculation.effectiveFreeFundsWithdrawalTaxRate >= 0);
   assert.ok(calculation.effectiveFreeFundsWithdrawalTaxRate <= 0.42);
+  calculation.planRows.forEach((row) => {
+    assert.ok(row.ratePensionNonDeductibleBasis >= 0);
+    assert.ok(row.taxFreeRatePensionWithdrawal >= 0);
+    assert.ok(row.taxableRatePensionWithdrawal >= 0);
+    assert.ok(
+      row.taxFreeRatePensionWithdrawal +
+        row.taxableRatePensionWithdrawal <=
+        row.withdrawal + 0.01,
+    );
+  });
 }
 
 const standardInputs = {
@@ -239,7 +249,7 @@ assert.throws(
 const lowAgeSavingsLimit = calculateFire(
   {
     ...standardInputs,
-    annualRatePensionContribution: 68701,
+    annualRatePensionContribution: 68700,
     annualAgeSavingsContribution: 10000,
   },
   asOfDate,
@@ -261,7 +271,51 @@ assert.equal(
   lowAgeSavingsLimit.ratePensionContributionLimit,
   CONTRIBUTION_LIMITS.ratePension,
 );
-assert.equal(lowAgeSavingsLimit.ratePensionContributionLimitExceeded, true);
+assert.equal(lowAgeSavingsLimit.ratePensionContributionLimitExceeded, false);
+assert.throws(
+  () =>
+    calculateFire(
+      { ...standardInputs, annualRatePensionContribution: 68701 },
+      asOfDate,
+    ),
+  /fradragsberettigede ratepensionsindbetaling.*68\.700 kr/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        annualRatePensionContribution: 60000,
+        annualNonDeductibleRatePensionContribution: 1,
+      },
+      asOfDate,
+    ),
+  /uden fradragsret.*samlede rateloft.*udnyttet/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        annualRatePensionContribution: 60000,
+        annualRatePensionDeductionLimitUsedElsewhere: 8701,
+      },
+      asOfDate,
+    ),
+  /højst være 59\.999 kr/,
+);
+const combinedRateLimitExhausted = calculateFire(
+  {
+    ...standardInputs,
+    annualRatePensionContribution: 60000,
+    annualRatePensionDeductionLimitUsedElsewhere: 8700,
+    annualNonDeductibleRatePensionContribution: 1000,
+    ratePensionContributionTaxRelief: 0.37,
+  },
+  asOfDate,
+);
+assertClose(combinedRateLimitExhausted.remainingRatePensionDeductionLimit, 60000);
+assertClose(combinedRateLimitExhausted.annualNetContributionBudget, 108200);
 assert.equal(
   highAgeSavingsLimit.ageSavingsContributionLimit,
   CONTRIBUTION_LIMITS.ageSavingsHigh,
@@ -1573,6 +1627,7 @@ const optimizationInputs = {
 function netContributionBudget(contributions, taxRelief) {
   return (
     contributions.annualRatePensionContribution * (1 - taxRelief) +
+    (contributions.annualNonDeductibleRatePensionContribution ?? 0) +
     contributions.annualAgeSavingsContribution +
     contributions.annualFreeFundsContribution
   );
@@ -1641,7 +1696,7 @@ assert.deepEqual(
 const overLimitOptimization = optimizeAnnualContributions(
   {
     ...optimizationInputs,
-    annualRatePensionContribution: 100000,
+    annualRatePensionContribution: 68700,
     annualAgeSavingsContribution: 20000,
     annualFreeFundsContribution: 0,
   },
@@ -1661,7 +1716,7 @@ assertClose(
     overLimitOptimization.recommended,
     optimizationInputs.ratePensionContributionTaxRelief,
   ),
-  83000,
+  63281,
 );
 
 const highLimitOptimization = optimizeAnnualContributions(
@@ -1825,6 +1880,386 @@ for (
   }
 }
 
+const nonDeductibleAccumulationInputs = {
+  ...standardInputs,
+  currentAge: 30,
+  retirementAge: 31,
+  payoutYears: 10,
+  desiredAnnualWithdrawal: 1000000000,
+  ratePensionBalance: 100,
+  ratePensionNonDeductibleBasis: 20,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 0,
+  freeFundsCostBasis: 0,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualRatePensionDeductionLimitUsedElsewhere:
+    CONTRIBUTION_LIMITS.ratePension,
+  annualNonDeductibleRatePensionContribution: 100,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 0,
+  pensionTax: 0,
+  pensionWithdrawalTax: 0.5,
+  ratePensionContributionTaxRelief: 0.5,
+  askTax: 0,
+  returnRate: 0,
+  inflationRate: 0.1,
+  withdrawalAfterTax: true,
+  redirectPensionContributionsToFreeFunds: false,
+};
+const inflationLinkedNonDeductible = calculateFire(
+  {
+    ...nonDeductibleAccumulationInputs,
+    contributionsFollowInflation: true,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const fixedNominalNonDeductible = calculateFire(
+  {
+    ...nonDeductibleAccumulationInputs,
+    contributionsFollowInflation: false,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const inflationLinkedRetirement = inflationLinkedNonDeductible.planRows.find(
+  (row) => row.age === 31,
+);
+const fixedNominalRetirement = fixedNominalNonDeductible.planRows.find(
+  (row) => row.age === 31,
+);
+assertClose(
+  inflationLinkedRetirement.ratePensionNonDeductibleBasis,
+  20 / 1.1 + 100 / Math.sqrt(1.1),
+);
+assertClose(
+  fixedNominalRetirement.ratePensionNonDeductibleBasis,
+  120 / 1.1,
+);
+assertClose(inflationLinkedNonDeductible.annualNetContributionBudget, 100);
+
+const nonDeductiblePayoutInputs = {
+  ...nonDeductibleAccumulationInputs,
+  desiredAnnualWithdrawal: 70,
+  ratePensionBalance: 1000,
+  ratePensionNonDeductibleBasis: 400,
+  annualNonDeductibleRatePensionContribution: 0,
+  inflationRate: 0,
+};
+const nonDeductiblePayout = calculateFire(
+  nonDeductiblePayoutInputs,
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const nonDeductiblePayoutRows = nonDeductiblePayout.planRows.filter(
+  (row) => row.phase === "Pension" && row.withdrawal > 0,
+);
+assert.equal(nonDeductiblePayoutRows.length, 10);
+nonDeductiblePayoutRows.forEach((row, index) => {
+  assertClose(row.withdrawal, 100);
+  assertClose(row.taxFreeRatePensionWithdrawal, 40);
+  assertClose(row.taxableRatePensionWithdrawal, 60);
+  assertClose(row.pensionWithdrawalTax, 30);
+  assertClose(row.netWithdrawal, 70);
+  assertClose(row.ratePensionNonDeductibleBasis, 400 - index * 40);
+});
+assertClose(nonDeductiblePayout.totalPensionWithdrawalTax, 300);
+assertClose(nonDeductiblePayout.finalRow.ratePension, 0);
+assertClose(nonDeductiblePayout.finalRow.ratePensionNonDeductibleBasis, 0);
+assertClose(nonDeductiblePayout.requiredAtRetirement, 1000);
+
+const inflationVaryingAllowanceInputs = {
+  ...nonDeductiblePayoutInputs,
+  desiredAnnualWithdrawal: 70,
+  ratePensionBalance: 1000,
+  ratePensionNonDeductibleBasis: 400,
+  pensionTax: 0,
+  returnRate: 0.12,
+  inflationRate: 0.1,
+};
+const inflationVaryingAllowance = calculateFire(
+  inflationVaryingAllowanceInputs,
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const inflationRetirementRow = inflationVaryingAllowance.planRows.find(
+  (row) => row.age === inflationVaryingAllowanceInputs.retirementAge,
+);
+const inflationRateShare =
+  inflationRetirementRow.ratePension /
+  (inflationRetirementRow.ratePension + inflationRetirementRow.ageSavings);
+const firstRealTaxFreeAllowance =
+  inflationRetirementRow.ratePensionNonDeductibleBasis /
+  inflationVaryingAllowanceInputs.payoutYears;
+let independentlySummedPensionTarget = 0;
+for (
+  let period = 0;
+  period < inflationVaryingAllowanceInputs.payoutYears;
+  period += 1
+) {
+  const realTaxFreeAllowance =
+    firstRealTaxFreeAllowance /
+    Math.pow(1 + inflationVaryingAllowanceInputs.inflationRate, period);
+  const grossWithdrawal =
+    (inflationVaryingAllowanceInputs.desiredAnnualWithdrawal -
+      inflationVaryingAllowanceInputs.pensionWithdrawalTax *
+        realTaxFreeAllowance) /
+    (1 -
+      inflationVaryingAllowanceInputs.pensionWithdrawalTax *
+        inflationRateShare);
+  independentlySummedPensionTarget +=
+    grossWithdrawal /
+    Math.pow(1 + inflationVaryingAllowance.realPensionReturn, period);
+}
+assertClose(
+  inflationVaryingAllowance.requiredAtRetirement,
+  independentlySummedPensionTarget,
+);
+assert.ok(
+  inflationVaryingAllowance.requiredAtRetirement >
+    (inflationVaryingAllowanceInputs.desiredAnnualWithdrawal -
+      inflationVaryingAllowanceInputs.pensionWithdrawalTax *
+        firstRealTaxFreeAllowance) /
+      (1 -
+        inflationVaryingAllowanceInputs.pensionWithdrawalTax *
+          inflationRateShare) *
+      inflationVaryingAllowanceInputs.payoutYears,
+);
+
+const exactInflationBasisCoast = calculateFire(
+  {
+    ...inflationVaryingAllowanceInputs,
+    ratePensionBalance:
+      independentlySummedPensionTarget /
+      (1 + inflationVaryingAllowance.realPensionReturn),
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.equal(exactInflationBasisCoast.pensionCoastRow.age, 30);
+assert.equal(exactInflationBasisCoast.isFullyFunded, true);
+assertClose(exactInflationBasisCoast.finalRow.ratePension, 0, 0.02);
+const exactInflationPayoutRows = exactInflationBasisCoast.planRows.filter(
+  (row) => row.phase === "Pension" && row.withdrawal > 0,
+);
+assert.ok(
+  exactInflationPayoutRows[1].taxFreeRatePensionWithdrawal <
+    exactInflationPayoutRows[0].taxFreeRatePensionWithdrawal,
+);
+
+const beforeTaxNonDeductiblePayout = calculateFire(
+  {
+    ...nonDeductiblePayoutInputs,
+    desiredAnnualWithdrawal: 100,
+    withdrawalAfterTax: false,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const firstBeforeTaxNonDeductiblePayout =
+  beforeTaxNonDeductiblePayout.planRows.find(
+    (row) => row.phase === "Pension",
+  );
+assertClose(firstBeforeTaxNonDeductiblePayout.withdrawal, 100);
+assertClose(firstBeforeTaxNonDeductiblePayout.taxFreeRatePensionWithdrawal, 40);
+assertClose(firstBeforeTaxNonDeductiblePayout.taxableRatePensionWithdrawal, 60);
+assertClose(firstBeforeTaxNonDeductiblePayout.pensionWithdrawalTax, 30);
+assertClose(firstBeforeTaxNonDeductiblePayout.netWithdrawal, 70);
+assertClose(beforeTaxNonDeductiblePayout.requiredAtRetirement, 1000);
+
+const nonDeductiblePalGrowth = calculateFire(
+  {
+    ...nonDeductibleAccumulationInputs,
+    ratePensionNonDeductibleBasis: 20,
+    pensionTax: 0.2,
+    returnRate: 0.1,
+    inflationRate: 0,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const nonDeductiblePalRetirement = nonDeductiblePalGrowth.planRows.find(
+  (row) => row.age === 31,
+);
+assertClose(
+  nonDeductiblePalRetirement.ratePension,
+  100 * 1.08 + 100 * Math.sqrt(1.08),
+);
+assertClose(nonDeductiblePalRetirement.ratePensionNonDeductibleBasis, 120);
+
+const zeroPensionTaxWithBasis = calculateFire(
+  { ...nonDeductiblePayoutInputs, desiredAnnualWithdrawal: 100,
+    pensionWithdrawalTax: 0 },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assertClose(zeroPensionTaxWithBasis.totalPensionWithdrawalTax, 0);
+assert.equal(zeroPensionTaxWithBasis.isFullyFunded, true);
+
+const fullPensionTaxWithBasis = calculateFire(
+  {
+    ...nonDeductiblePayoutInputs,
+    desiredAnnualWithdrawal: 41,
+    pensionWithdrawalTax: 1,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const firstFullTaxPayout = fullPensionTaxWithBasis.planRows.find(
+  (row) => row.phase === "Pension",
+);
+assert.equal(fullPensionTaxWithBasis.requiredAtRetirement, null);
+assert.equal(fullPensionTaxWithBasis.isFullyFunded, false);
+assertClose(firstFullTaxPayout.taxFreeRatePensionWithdrawal, 40);
+assertClose(firstFullTaxPayout.taxableRatePensionWithdrawal, 60);
+assertClose(firstFullTaxPayout.pensionWithdrawalTax, 60);
+assertClose(firstFullTaxPayout.netWithdrawal, 40);
+
+const ageSavingsExcessRedirect = calculateFire(
+  {
+    ...nonDeductibleAccumulationInputs,
+    payoutYears: 1,
+    ratePensionBalance: 0,
+    ratePensionNonDeductibleBasis: 0,
+    annualNonDeductibleRatePensionContribution: 0,
+    annualAgeSavingsContribution: 12000,
+    inflationRate: 0,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const ageSavingsRedirectRetirement = ageSavingsExcessRedirect.planRows.find(
+  (row) => row.age === 31,
+);
+assertClose(ageSavingsRedirectRetirement.ageSavings, 9900);
+assertClose(ageSavingsRedirectRetirement.freeFunds, 2100);
+assertClose(ageSavingsExcessRedirect.annualAgeSavingsContributionRedirected, 2100);
+assertClose(ageSavingsExcessRedirect.effectiveAnnualAgeSavingsContribution, 9900);
+assertClose(ageSavingsExcessRedirect.annualNetContributionBudget, 12000);
+
+const highAgeSavingsExcessRedirect = calculateFire(
+  {
+    ...nonDeductibleAccumulationInputs,
+    payoutYears: 1,
+    ratePensionBalance: 0,
+    ratePensionNonDeductibleBasis: 0,
+    annualNonDeductibleRatePensionContribution: 0,
+    annualAgeSavingsContribution: 65000,
+    ageSavingsContributionLimit: CONTRIBUTION_LIMITS.ageSavingsHigh,
+    inflationRate: 0,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+const highAgeSavingsRedirectRetirement =
+  highAgeSavingsExcessRedirect.planRows.find((row) => row.age === 31);
+assertClose(highAgeSavingsRedirectRetirement.ageSavings, 64200);
+assertClose(highAgeSavingsRedirectRetirement.freeFunds, 800);
+assertClose(
+  highAgeSavingsExcessRedirect.annualAgeSavingsContributionRedirected,
+  800,
+);
+
+const redirectedAfterCoast = calculateFire(
+  {
+    ...nonDeductibleAccumulationInputs,
+    retirementAge: 35,
+    ratePensionBalance: 1000000000,
+    ratePensionNonDeductibleBasis: 0,
+    annualRatePensionContribution: 100,
+    annualRatePensionDeductionLimitUsedElsewhere: 68600,
+    annualNonDeductibleRatePensionContribution: 20,
+    annualAgeSavingsContribution: 12000,
+    annualFreeFundsContribution: 30,
+    desiredAnnualWithdrawal: 100,
+    inflationRate: 0,
+    withdrawalAfterTax: false,
+    redirectPensionContributionsToFreeFunds: true,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.equal(redirectedAfterCoast.pensionCoastRow.age, 30);
+const firstPostCoastRow = redirectedAfterCoast.planRows.find(
+  (row) => row.age === 31,
+);
+assertClose(firstPostCoastRow.freeFunds, 12100);
+assertClose(firstPostCoastRow.ageSavings, 0);
+assertClose(firstPostCoastRow.ratePensionNonDeductibleBasis, 0);
+assertClose(redirectedAfterCoast.annualNetContributionBudget, 12100);
+
+const fireBasisInputs = {
+  ...nonDeductibleAccumulationInputs,
+  retirementAge: 40,
+  desiredAnnualWithdrawal: 100,
+  ratePensionBalance: 1100,
+  ratePensionNonDeductibleBasis: 0,
+  freeFundsBalance: 200,
+  freeFundsCostBasis: 200,
+  annualNonDeductibleRatePensionContribution: 0,
+  annualFreeFundsContribution: 50,
+  inflationRate: 0,
+};
+const taxableFirePension = calculateFire(fireBasisInputs, asOfDate, {
+  includeBridgeCapacity: false,
+});
+const taxFreeBasisFirePension = calculateFire(
+  { ...fireBasisInputs, ratePensionNonDeductibleBasis: 1100 },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.equal(taxableFirePension.pensionCoastRow, null);
+assert.equal(taxFreeBasisFirePension.pensionCoastRow.age, 30);
+assert.equal(taxableFirePension.fireRow.age, 39);
+assert.equal(taxFreeBasisFirePension.fireRow.age, 36);
+
+const fixedNonDeductibleOptimization = optimizeAnnualContributions(
+  {
+    ...optimizationInputs,
+    annualRatePensionDeductionLimitUsedElsewhere: 8700,
+    annualNonDeductibleRatePensionContribution: 5000,
+  },
+  asOfDate,
+);
+assertClose(
+  fixedNonDeductibleOptimization.annualNetBudget,
+  netContributionBudget(
+    {
+      ...optimizationInputs,
+      annualNonDeductibleRatePensionContribution: 5000,
+    },
+    optimizationInputs.ratePensionContributionTaxRelief,
+  ),
+);
+assertClose(
+  fixedNonDeductibleOptimization.optimizableAnnualNetBudget,
+  fixedNonDeductibleOptimization.annualNetBudget - 5000,
+);
+assertClose(
+  fixedNonDeductibleOptimization.current
+    .annualNonDeductibleRatePensionContribution,
+  5000,
+);
+assertClose(
+  fixedNonDeductibleOptimization.recommended
+    .annualNonDeductibleRatePensionContribution,
+  5000,
+);
+assertClose(fixedNonDeductibleOptimization.limits.ratePension, 60000);
+assertClose(
+  fixedNonDeductibleOptimization.recommended
+    .annualRatePensionContribution,
+  60000,
+);
+assertClose(
+  netContributionBudget(
+    fixedNonDeductibleOptimization.recommended,
+    optimizationInputs.ratePensionContributionTaxRelief,
+  ),
+  fixedNonDeductibleOptimization.annualNetBudget,
+);
+
 let randomState = 0x51f15e;
 function random() {
   randomState = (1664525 * randomState + 1013904223) >>> 0;
@@ -1838,19 +2273,32 @@ function randomBetween(minimum, maximum) {
 for (let scenario = 0; scenario < 2000; scenario += 1) {
   const currentAge = Math.floor(randomBetween(18, 71));
   const retirementAge = currentAge + Math.floor(randomBetween(1, 51));
+  const ratePensionBalance = randomBetween(0, 5000000);
   const freeFundsBalance = randomBetween(0, 5000000);
+  const annualRatePensionContribution = randomBetween(
+    0,
+    CONTRIBUTION_LIMITS.ratePension,
+  );
   const randomized = calculateFire(
     {
       currentAge,
       retirementAge,
       payoutYears: Math.floor(randomBetween(10, 31)),
       desiredAnnualWithdrawal: randomBetween(0, 1000000),
-      ratePensionBalance: randomBetween(0, 5000000),
+      ratePensionBalance,
+      ratePensionNonDeductibleBasis: randomBetween(
+        0,
+        ratePensionBalance * 1.5,
+      ),
       ageSavingsBalance: randomBetween(0, 1000000),
       freeFundsBalance,
       freeFundsCostBasis: randomBetween(0, freeFundsBalance),
       askBalance: randomBetween(0, 2000000),
-      annualRatePensionContribution: randomBetween(0, 150000),
+      annualRatePensionContribution,
+      annualRatePensionDeductionLimitUsedElsewhere:
+        CONTRIBUTION_LIMITS.ratePension -
+        annualRatePensionContribution,
+      annualNonDeductibleRatePensionContribution: randomBetween(0, 80000),
       annualAgeSavingsContribution: randomBetween(0, 50000),
       annualFreeFundsContribution: randomBetween(0, 250000),
       pensionTax: randomBetween(0, 0.5),

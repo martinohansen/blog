@@ -133,6 +133,21 @@
                       required
                   /></label>
                   <label class="field"
+                    ><span
+                      >Heraf uden fradrag
+                      <i
+                        title="Dokumenterede indbetalinger til ratepensionen, som du ikke har fået fradrags- eller bortseelsesret for. Beløbet kan udbetales skattefrit, men afkastet beskattes. Beregneren fordeler hovedstolen i lige store nominelle dele over den faste udbetalingsperiode."
+                        >i</i
+                      ></span
+                    ><input
+                      name="ratePensionNonDeductibleBasis"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="0"
+                      required
+                  /></label>
+                  <label class="field"
                     ><span>Aldersopsparing</span
                     ><input
                       name="ageSavingsBalance"
@@ -188,9 +203,9 @@
                 <div class="form-grid savings-grid">
                   <label class="field"
                     ><span
-                      >Ratepension
+                      >Ratepension med fradrag
                       <i
-                        title="Beløbet er den faktiske indbetaling på ratepensionen. Nettoudgiften afhænger af skatteværdien under Forudsætninger. Optimeringen bruger 2026-loftet på 68.700 kr."
+                        title="Beløbet får den valgte skatteværdi og kan højst være 68.700 kr. i 2026."
                         >i</i
                       ></span
                     ><input
@@ -198,7 +213,39 @@
                       type="text"
                       inputmode="numeric"
                       data-number-format="integer"
+                      max="68700"
                       value="60.000"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span
+                      >Rateloft brugt andetsteds
+                      <i
+                        title="Den del af 2026-rateloftet, som arbejdsgiverbidrag, andre rateordninger eller ophørende alderspensioner allerede bruger. Beløbet bruges kun til at kontrollere fradragsretten og lægges ikke til formuen eller nettobudgettet i denne beregning."
+                        >i</i
+                      ></span
+                    ><input
+                      name="annualRatePensionDeductionLimitUsedElsewhere"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      max="68700"
+                      value="0"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span
+                      >Ratepension uden fradrag
+                      <i
+                        title="En indbetaling over det samlede rateloft uden fradrags- eller bortseelsesret. Hele rateloftet skal først være brugt af denne og andre ordninger. Beregneren fordeler hovedstolen skattefrit i lige store nominelle dele over den faste udbetalingsperiode, mens afkastet beskattes ved udbetaling. Gem dokumentation."
+                        >i</i
+                      ></span
+                    ><input
+                      name="annualNonDeductibleRatePensionContribution"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="0"
                       required
                   /></label>
                   <label class="field"
@@ -262,6 +309,12 @@
                     </span>
                   </label>
                 </div>
+                <p
+                  id="age-savings-redirect-message"
+                  class="contribution-adjustment-message"
+                  role="status"
+                  hidden
+                ></p>
               </fieldset>
 
               <details
@@ -324,7 +377,7 @@
                     </div>
                     <dl>
                       <div class="optimization-row optimization-row-pension">
-                        <dt><i aria-hidden="true"></i>Ratepension</dt>
+                        <dt><i aria-hidden="true"></i>Ratepension med fradrag</dt>
                         <dd id="optimization-current-rate"></dd>
                         <span aria-hidden="true">→</span>
                         <dd id="optimization-recommended-rate"></dd>

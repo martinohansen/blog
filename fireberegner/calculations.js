@@ -53,6 +53,7 @@
   function contributionNetBudget(contributions, taxRelief) {
     const budget =
       contributions.annualRatePensionContribution * (1 - taxRelief) +
+      (contributions.annualNonDeductibleRatePensionContribution ?? 0) +
       contributions.annualAgeSavingsContribution +
       contributions.annualFreeFundsContribution;
     assertFinite(budget);
@@ -251,6 +252,7 @@
     beforeRetirement,
     freeFundsCostBasis,
     pensionWithdrawalTax,
+    taxFreeRatePensionAllowance = 0,
   ) {
     const pensionIndexes = [RATE_PENSION, AGE_SAVINGS];
     const freeIndexes = [
@@ -265,25 +267,38 @@
       (total, capacity) => total + capacity,
       0,
     );
-    const netPensionCapacity =
-      pensionCapacities[RATE_PENSION] * (1 - pensionWithdrawalTax) +
-      pensionCapacities[AGE_SAVINGS];
-    const pensionNetPerGross =
+    const ratePensionShare =
       totalPensionCapacity > 0
-        ? netPensionCapacity / totalPensionCapacity
+        ? pensionCapacities[RATE_PENSION] / totalPensionCapacity
         : 0;
-    const desiredGrossPensionWithdrawal =
-      pensionNetPerGross > 0
-        ? desiredNetWithdrawal / pensionNetPerGross
-        : 0;
+    const grossBeforeTax =
+      ratePensionShare > 0
+        ? taxFreeRatePensionAllowance / ratePensionShare
+        : Number.POSITIVE_INFINITY;
+    const taxableNetFraction =
+      1 - pensionWithdrawalTax * ratePensionShare;
+    let desiredGrossPensionWithdrawal = desiredNetWithdrawal;
+    if (desiredNetWithdrawal > grossBeforeTax) {
+      desiredGrossPensionWithdrawal =
+        taxableNetFraction > CALCULATION_TOLERANCE
+          ? (desiredNetWithdrawal -
+              pensionWithdrawalTax * taxFreeRatePensionAllowance) /
+            taxableNetFraction
+          : totalPensionCapacity;
+    }
     const pensionAllocation = beforeRetirement
       ? { amounts: [0, 0], total: 0 }
       : allocateWithdrawals(
           pensionCapacities,
           desiredGrossPensionWithdrawal,
         );
+    const taxableRatePensionWithdrawal = Math.max(
+      0,
+      pensionAllocation.amounts[RATE_PENSION] -
+        taxFreeRatePensionAllowance,
+    );
     const pensionTax =
-      pensionAllocation.amounts[RATE_PENSION] * pensionWithdrawalTax;
+      taxableRatePensionWithdrawal * pensionWithdrawalTax;
     const pensionNetWithdrawal = pensionAllocation.total - pensionTax;
     const remainingNetWithdrawal = Math.max(
       0,
@@ -375,6 +390,7 @@
     date,
     balances,
     freeFundsCostBasis,
+    ratePensionNonDeductibleBasis = 0,
     values = {},
   ) {
     const totalBalance = balances.reduce(
@@ -406,6 +422,9 @@
       effectiveFreeFundsWithdrawalTaxRate: 0,
       effectiveWithdrawalTaxRate: 0,
       freeFundsCostBasis,
+      ratePensionNonDeductibleBasis,
+      taxFreeRatePensionWithdrawal: 0,
+      taxableRatePensionWithdrawal: 0,
       withdrawalSource: "—",
       withdrawalShortfall: false,
       ...values,
@@ -475,7 +494,8 @@
 
     const includesRatePension =
       inputs.ratePensionBalance > 0 ||
-      inputs.annualRatePensionContribution > 0;
+      inputs.annualRatePensionContribution > 0 ||
+      (inputs.annualNonDeductibleRatePensionContribution ?? 0) > 0;
     if (
       includesRatePension &&
       (inputs.payoutYears < 10 || inputs.payoutYears > 30)
@@ -490,6 +510,54 @@
         throw new Error("Beløb skal være 0 eller højere.");
       }
     });
+
+    const ratePensionNonDeductibleBasis =
+      inputs.ratePensionNonDeductibleBasis ?? 0;
+    const annualNonDeductibleRatePensionContribution =
+      inputs.annualNonDeductibleRatePensionContribution ?? 0;
+    const annualRatePensionDeductionLimitUsedElsewhere =
+      inputs.annualRatePensionDeductionLimitUsedElsewhere ?? 0;
+    if (
+      !Number.isFinite(ratePensionNonDeductibleBasis) ||
+      ratePensionNonDeductibleBasis < 0 ||
+      !Number.isFinite(annualNonDeductibleRatePensionContribution) ||
+      annualNonDeductibleRatePensionContribution < 0 ||
+      !Number.isFinite(annualRatePensionDeductionLimitUsedElsewhere) ||
+      annualRatePensionDeductionLimitUsedElsewhere < 0
+    ) {
+      throw new Error("Beløb skal være 0 eller højere.");
+    }
+    if (
+      annualRatePensionDeductionLimitUsedElsewhere >
+      CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE
+    ) {
+      throw new Error(
+        "Brugen af rateloftet på andre ordninger må højst være 68.700 kr. i 2026.",
+      );
+    }
+    const remainingRatePensionDeductionLimit = Math.max(
+      0,
+      CONTRIBUTION_LIMITS.ratePension -
+        annualRatePensionDeductionLimitUsedElsewhere,
+    );
+    if (
+      inputs.annualRatePensionContribution >
+      remainingRatePensionDeductionLimit + MONEY_TOLERANCE
+    ) {
+      throw new Error(
+        `Den fradragsberettigede ratepensionsindbetaling må højst være ${remainingRatePensionDeductionLimit.toLocaleString("da-DK")} kr., når andre ordninger bruger resten af 2026-loftet.`,
+      );
+    }
+    if (
+      annualNonDeductibleRatePensionContribution > MONEY_TOLERANCE &&
+      inputs.annualRatePensionContribution +
+        annualRatePensionDeductionLimitUsedElsewhere <
+        CONTRIBUTION_LIMITS.ratePension - MONEY_TOLERANCE
+    ) {
+      throw new Error(
+        "Indbetaling uden fradragsret kan kun bruges, når det samlede rateloft på 68.700 kr. er udnyttet af denne og andre ordninger.",
+      );
+    }
 
     if (
       inventoryShare < 1 &&
@@ -553,6 +621,26 @@
       inputs.ratePensionContributionTaxRelief ?? 0;
     const selectedAgeSavingsContributionLimit =
       ageSavingsContributionLimit(inputs);
+    const annualRatePensionDeductionLimitUsedElsewhere =
+      inputs.annualRatePensionDeductionLimitUsedElsewhere ?? 0;
+    const remainingRatePensionDeductionLimit = Math.max(
+      0,
+      CONTRIBUTION_LIMITS.ratePension -
+        annualRatePensionDeductionLimitUsedElsewhere,
+    );
+    const annualNonDeductibleRatePensionContribution =
+      inputs.annualNonDeductibleRatePensionContribution ?? 0;
+    const initialRatePensionNonDeductibleBasis =
+      inputs.ratePensionNonDeductibleBasis ?? 0;
+    const effectiveAnnualAgeSavingsContribution = Math.min(
+      inputs.annualAgeSavingsContribution,
+      selectedAgeSavingsContributionLimit,
+    );
+    const annualAgeSavingsContributionRedirected = Math.max(
+      0,
+      inputs.annualAgeSavingsContribution -
+        effectiveAnnualAgeSavingsContribution,
+    );
     const inventoryShare = freeFundsInventoryShare(inputs);
     const freeFundsTaxation =
       inventoryShare === 1
@@ -781,23 +869,156 @@
       return { ...growth, balances: endingBalances };
     }
 
-    function pensionNetFraction(ratePension, ageSavings) {
-      const totalPension = ratePension + ageSavings;
-
-      if (!inputs.withdrawalAfterTax || totalPension <= 0) {
-        return 1;
+    function annualTaxFreeRatePensionAllowance(
+      nonDeductibleBasis,
+      remainingPayoutYears,
+    ) {
+      if (nonDeductibleBasis <= 0 || remainingPayoutYears <= 0) {
+        return 0;
       }
 
-      return (
-        (ratePension * (1 - pensionWithdrawalTax) + ageSavings) /
-        totalPension
+      // SKAT requires the tax-free principal to be spread over the fixed
+      // payout period. This annual model approximates that rule with equal
+      // nominal allowances. Deflating the remaining basis after each year
+      // makes the allowance decrease in real terms when inflation is positive.
+      const allowance = nonDeductibleBasis / remainingPayoutYears;
+      assertFinite(allowance);
+      return allowance;
+    }
+
+    function grossPensionWithdrawalForNetTarget(
+      desiredNetWithdrawal,
+      rateShare,
+      taxFreeAllowance,
+    ) {
+      const grossBeforeTax =
+        rateShare > 0
+          ? taxFreeAllowance / rateShare
+          : Number.POSITIVE_INFINITY;
+      if (desiredNetWithdrawal <= grossBeforeTax) {
+        return desiredNetWithdrawal;
+      }
+
+      const taxableNetFraction = 1 - pensionWithdrawalTax * rateShare;
+      if (taxableNetFraction <= CALCULATION_TOLERANCE) {
+        return null;
+      }
+
+      const grossWithdrawal =
+        (desiredNetWithdrawal - pensionWithdrawalTax * taxFreeAllowance) /
+        taxableNetFraction;
+      assertFinite(grossWithdrawal);
+      return grossWithdrawal;
+    }
+
+    function pensionTargetForMix(
+      ratePension,
+      ageSavings,
+      nonDeductibleBasis,
+      desiredWithdrawal = inputs.desiredAnnualWithdrawal,
+    ) {
+      if (desiredWithdrawal <= 0) {
+        return 0;
+      }
+
+      const totalPension = ratePension + ageSavings;
+      if (totalPension <= CALCULATION_TOLERANCE) {
+        if (inputs.withdrawalAfterTax) {
+          return null;
+        }
+        return (
+          desiredWithdrawal *
+          presentValueFactor(realPensionReturn, inputs.payoutYears)
+        );
+      }
+
+      const payoutFactor = presentValueFactor(
+        realPensionReturn,
+        inputs.payoutYears,
       );
+      if (!inputs.withdrawalAfterTax) {
+        return desiredWithdrawal * payoutFactor;
+      }
+
+      const rateShare = ratePension / totalPension;
+      const initialTaxFreeAllowance = annualTaxFreeRatePensionAllowance(
+        nonDeductibleBasis,
+        inputs.payoutYears,
+      );
+      let target = 0;
+      let discountFactor = 1;
+
+      for (let period = 0; period < inputs.payoutYears; period += 1) {
+        const taxFreeAllowance =
+          initialTaxFreeAllowance /
+          Math.pow(1 + inputs.inflationRate, period);
+        const grossWithdrawal = grossPensionWithdrawalForNetTarget(
+          desiredWithdrawal,
+          rateShare,
+          taxFreeAllowance,
+        );
+        if (grossWithdrawal === null) {
+          return null;
+        }
+
+        target += grossWithdrawal / discountFactor;
+        discountFactor *= 1 + realPensionReturn;
+        assertFinite(target, discountFactor);
+      }
+
+      assertFinite(target);
+      return target;
+    }
+
+    function netPensionAnnualCapacity(
+      ratePension,
+      ageSavings,
+      nonDeductibleBasis,
+    ) {
+      const totalPension = ratePension + ageSavings;
+      const payoutFactor = presentValueFactor(
+        realPensionReturn,
+        inputs.payoutYears,
+      );
+      if (totalPension <= 0 || payoutFactor <= 0) {
+        return 0;
+      }
+
+      const grossCapacity = totalPension / payoutFactor;
+      if (!inputs.withdrawalAfterTax) {
+        return grossCapacity;
+      }
+
+      let affordable = 0;
+      let unaffordable = grossCapacity;
+      for (let iteration = 0; iteration < 60; iteration += 1) {
+        if (unaffordable - affordable <= MONEY_TOLERANCE) {
+          break;
+        }
+
+        const candidate = (affordable + unaffordable) / 2;
+        const target = pensionTargetForMix(
+          ratePension,
+          ageSavings,
+          nonDeductibleBasis,
+          candidate,
+        );
+        if (target !== null && target <= totalPension + MONEY_TOLERANCE) {
+          affordable = candidate;
+        } else {
+          unaffordable = candidate;
+        }
+      }
+
+      assertFinite(affordable);
+      return affordable;
     }
 
     function simulateDrawdown(
       startYear,
       startBalances,
       startFreeFundsCostBasis,
+      startRatePensionNonDeductibleBasis,
       {
         desiredWithdrawal = inputs.desiredAnnualWithdrawal,
         endYear = finalYear,
@@ -807,6 +1028,8 @@
     ) {
       let balances = [...startBalances];
       let freeFundsCostBasis = startFreeFundsCostBasis;
+      let ratePensionNonDeductibleBasis =
+        startRatePensionNonDeductibleBasis;
       const rows = [];
       let isFullyFunded = true;
       let firstShortfallDate = null;
@@ -819,6 +1042,15 @@
           ? yearsToRetirement - year
           : endYear - year;
         const capacities = capacitiesForBalances(balances, periods);
+        const remainingPayoutYears = beforeRetirement
+          ? 0
+          : finalYear - year;
+        const taxFreeRatePensionAllowance = beforeRetirement
+          ? 0
+          : annualTaxFreeRatePensionAllowance(
+              ratePensionNonDeductibleBasis,
+              remainingPayoutYears,
+            );
         const allocation = inputs.withdrawalAfterTax
           ? allocateForNetWithdrawal(
               balances,
@@ -827,6 +1059,7 @@
               beforeRetirement,
               freeFundsCostBasis,
               pensionWithdrawalTax,
+              taxFreeRatePensionAllowance,
             )
           : allocateForPhase(
               capacities,
@@ -844,8 +1077,17 @@
           freeFundsCostBasis,
           realizationWithdrawal,
         );
+        const taxFreeRatePensionWithdrawal = Math.min(
+          allocation.amounts[RATE_PENSION],
+          taxFreeRatePensionAllowance,
+        );
+        const taxableRatePensionWithdrawal = Math.max(
+          0,
+          allocation.amounts[RATE_PENSION] -
+            taxFreeRatePensionWithdrawal,
+        );
         const pensionWithdrawalTaxAmount =
-          allocation.amounts[RATE_PENSION] * pensionWithdrawalTax;
+          taxableRatePensionWithdrawal * pensionWithdrawalTax;
         const totalWithdrawalTax =
           freeFundsSale.tax + pensionWithdrawalTaxAmount;
         const netWithdrawal = allocation.total - totalWithdrawalTax;
@@ -892,6 +1134,7 @@
               date,
               balances,
               freeFundsCostBasis,
+              ratePensionNonDeductibleBasis,
               {
                 phase: beforeRetirement ? "FIRE" : "Pension",
                 contribution:
@@ -901,6 +1144,8 @@
                 realizedFreeFundsGain: freeFundsSale.realizedGain,
                 withdrawalTax: freeFundsSale.tax,
                 pensionWithdrawalTax: pensionWithdrawalTaxAmount,
+                taxFreeRatePensionWithdrawal,
+                taxableRatePensionWithdrawal,
                 totalWithdrawalTax,
                 netWithdrawal,
                 effectiveFreeFundsWithdrawalTaxRate,
@@ -927,7 +1172,16 @@
         annualFreeFundsTax += growth.freeFundsTax;
         annualFreeFundsTaxableGain += growth.freeFundsTaxableGain;
         freeFundsCostBasis /= 1 + inputs.inflationRate;
-        assertFinite(freeFundsCostBasis);
+        ratePensionNonDeductibleBasis =
+          Math.max(
+            0,
+            ratePensionNonDeductibleBasis -
+              taxFreeRatePensionAllowance,
+          ) / (1 + inputs.inflationRate);
+        assertFinite(
+          freeFundsCostBasis,
+          ratePensionNonDeductibleBasis,
+        );
       }
 
       if (shouldRecord) {
@@ -937,6 +1191,7 @@
             annualDate(asOfDate, endYear),
             balances,
             freeFundsCostBasis,
+            ratePensionNonDeductibleBasis,
             { phase: "Slut" },
           ),
         );
@@ -946,6 +1201,8 @@
         rows,
         finalBalances: balances,
         finalFreeFundsCostBasis: freeFundsCostBasis,
+        finalRatePensionNonDeductibleBasis:
+          ratePensionNonDeductibleBasis,
         annualFreeFundsTax,
         annualFreeFundsTaxableGain,
         isFullyFunded,
@@ -957,6 +1214,7 @@
       startYear,
       startBalances,
       startFreeFundsCostBasis,
+      startRatePensionNonDeductibleBasis,
     ) {
       const bridgeYears = yearsToRetirement - startYear;
 
@@ -983,6 +1241,7 @@
           startYear,
           startBalances,
           startFreeFundsCostBasis,
+          startRatePensionNonDeductibleBasis,
           {
             desiredWithdrawal,
             endYear: yearsToRetirement,
@@ -1015,7 +1274,12 @@
       return affordable;
     }
 
-    function evaluateMilestone(year, balances, freeFundsCostBasis) {
+    function evaluateMilestone(
+      year,
+      balances,
+      freeFundsCostBasis,
+      ratePensionNonDeductibleBasis,
+    ) {
       const bridgeYears = yearsToRetirement - year;
       const pensionGrowth = Math.pow(
         1 + realPensionReturn,
@@ -1026,42 +1290,38 @@
       const ageSavingsAtRetirement = balances[AGE_SAVINGS] * pensionGrowth;
       const pensionAtRetirement =
         ratePensionAtRetirement + ageSavingsAtRetirement;
-      const payoutFactor = presentValueFactor(
-        realPensionReturn,
-        inputs.payoutYears,
+      const ratePensionNonDeductibleBasisAtRetirement =
+        ratePensionNonDeductibleBasis /
+        Math.pow(1 + inputs.inflationRate, bridgeYears);
+      const pensionNetAnnualCapacity = netPensionAnnualCapacity(
+        ratePensionAtRetirement,
+        ageSavingsAtRetirement,
+        ratePensionNonDeductibleBasisAtRetirement,
       );
-      const pensionNetAnnualCapacity =
-        payoutFactor > 0
-          ? (ratePensionAtRetirement *
-                (inputs.withdrawalAfterTax
-                  ? 1 - pensionWithdrawalTax
-                  : 1) +
-              ageSavingsAtRetirement) /
-            payoutFactor
-          : 0;
       const coastFinanced =
-        pensionNetAnnualCapacity + CALCULATION_TOLERANCE >=
+        pensionNetAnnualCapacity + MONEY_TOLERANCE >=
         inputs.desiredAnnualWithdrawal;
-      const milestoneNetFraction = pensionNetFraction(
-        balances[RATE_PENSION],
-        balances[AGE_SAVINGS],
+      const pensionTargetAtRetirement = pensionTargetForMix(
+        ratePensionAtRetirement,
+        ageSavingsAtRetirement,
+        ratePensionNonDeductibleBasisAtRetirement,
       );
       const pensionTarget =
-        (inputs.desiredAnnualWithdrawal /
-          Math.max(CALCULATION_TOLERANCE, milestoneNetFraction)) *
-        presentValueFactor(realPensionReturn, inputs.payoutYears) /
-        pensionGrowth;
+        pensionTargetAtRetirement === null
+          ? null
+          : pensionTargetAtRetirement / pensionGrowth;
       const drawdown = simulateDrawdown(
         year,
         balances,
         freeFundsCostBasis,
+        ratePensionNonDeductibleBasis,
         { shouldRecord: false },
       );
 
       assertFinite(
         pensionAtRetirement,
         pensionNetAnnualCapacity,
-        pensionTarget,
+        pensionTarget ?? 0,
       );
       return {
         age: inputs.currentAge + year,
@@ -1074,6 +1334,7 @@
         freeFundsRealization: balances[FREE_FUNDS_REALIZATION],
         freeFundsInventory: balances[FREE_FUNDS_INVENTORY],
         freeFundsCostBasis,
+        ratePensionNonDeductibleBasis,
         ask: balances[ASK],
         bridgeYears,
         pensionTarget,
@@ -1088,6 +1349,8 @@
     let balances = [...initialBalances];
     let freeFundsCostBasis =
       inputs.freeFundsCostBasis * (1 - inventoryShare);
+    let ratePensionNonDeductibleBasis =
+      initialRatePensionNonDeductibleBasis;
     let accumulationFreeFundsTax = 0;
     let accumulationFreeFundsTaxableGain = 0;
     let contributionAtCheckpoint = 0;
@@ -1098,10 +1361,16 @@
     let drawdownStartYear = yearsToRetirement;
     let drawdownStartBalances = null;
     let drawdownStartFreeFundsCostBasis = null;
+    let drawdownStartRatePensionNonDeductibleBasis = null;
     let drawdownStartContribution = 0;
 
     for (let year = 0; year <= yearsToRetirement; year += 1) {
-      const milestone = evaluateMilestone(year, balances, freeFundsCostBasis);
+      const milestone = evaluateMilestone(
+        year,
+        balances,
+        freeFundsCostBasis,
+        ratePensionNonDeductibleBasis,
+      );
       milestoneRows.push(milestone);
 
       if (!pensionCoastRow && milestone.coastFinanced) {
@@ -1116,6 +1385,7 @@
             year,
             balances,
             freeFundsCostBasis,
+            ratePensionNonDeductibleBasis,
           );
         }
         fireRow = milestone;
@@ -1123,6 +1393,8 @@
         drawdownStartYear = year;
         drawdownStartBalances = [...balances];
         drawdownStartFreeFundsCostBasis = freeFundsCostBasis;
+        drawdownStartRatePensionNonDeductibleBasis =
+          ratePensionNonDeductibleBasis;
         drawdownStartContribution = contributionAtCheckpoint;
         break;
       }
@@ -1130,6 +1402,8 @@
       if (year === yearsToRetirement) {
         drawdownStartBalances = [...balances];
         drawdownStartFreeFundsCostBasis = freeFundsCostBasis;
+        drawdownStartRatePensionNonDeductibleBasis =
+          ratePensionNonDeductibleBasis;
         drawdownStartContribution = contributionAtCheckpoint;
         break;
       }
@@ -1140,6 +1414,7 @@
           annualDate(asOfDate, year),
           balances,
           freeFundsCostBasis,
+          ratePensionNonDeductibleBasis,
           {
             phase: "Opsparing",
             contribution: contributionAtCheckpoint,
@@ -1156,23 +1431,40 @@
             nextYear,
           )
         : 0;
+      const nonDeductibleRatePensionContribution =
+        shouldCalculatePensionContributions
+          ? contributionAtMidyear(
+              annualNonDeductibleRatePensionContribution,
+              nextYear,
+            )
+          : 0;
       const ageSavingsContribution = shouldCalculatePensionContributions
         ? contributionAtMidyear(
-            inputs.annualAgeSavingsContribution,
+            effectiveAnnualAgeSavingsContribution,
             nextYear,
           )
         : 0;
+      const ageSavingsContributionRedirected =
+        contributionAtMidyear(
+          annualAgeSavingsContributionRedirected,
+          nextYear,
+        );
       const redirectedPensionContribution =
         !pensionContributionsActive && redirectsPensionContributions
           ? ratePensionContribution *
               (1 - ratePensionContributionTaxRelief) +
+            nonDeductibleRatePensionContribution +
             ageSavingsContribution
           : 0;
       const totalFreeFundsContribution =
         contributionAtMidyear(inputs.annualFreeFundsContribution, nextYear) +
+        ageSavingsContributionRedirected +
         redirectedPensionContribution;
       const contributions = [
-        pensionContributionsActive ? ratePensionContribution : 0,
+        pensionContributionsActive
+          ? ratePensionContribution +
+            nonDeductibleRatePensionContribution
+          : 0,
         pensionContributionsActive ? ageSavingsContribution : 0,
         totalFreeFundsContribution * (1 - inventoryShare),
         totalFreeFundsContribution * inventoryShare,
@@ -1195,9 +1487,16 @@
         freeFundsCostBasis / (1 + inputs.inflationRate) +
         contributions[FREE_FUNDS_REALIZATION] /
           Math.sqrt(1 + inputs.inflationRate);
+      ratePensionNonDeductibleBasis =
+        ratePensionNonDeductibleBasis / (1 + inputs.inflationRate) +
+        (pensionContributionsActive
+          ? nonDeductibleRatePensionContribution /
+            Math.sqrt(1 + inputs.inflationRate)
+          : 0);
       assertFinite(
         contributionAtCheckpoint,
         freeFundsCostBasis,
+        ratePensionNonDeductibleBasis,
         ...balances,
       );
     }
@@ -1206,6 +1505,7 @@
       drawdownStartYear,
       drawdownStartBalances,
       drawdownStartFreeFundsCostBasis,
+      drawdownStartRatePensionNonDeductibleBasis,
       {
         shouldRecord: true,
         startingContribution: drawdownStartContribution,
@@ -1217,26 +1517,13 @@
     );
     const projectedRatePension = retirementOpeningRow?.ratePension ?? 0;
     const projectedAgeSavings = retirementOpeningRow?.ageSavings ?? 0;
-    const projectedPension = projectedRatePension + projectedAgeSavings;
-    let targetPensionNetFraction = 1;
-
-    if (inputs.desiredAnnualWithdrawal > 0 && inputs.withdrawalAfterTax) {
-      const projectedPensionNetFraction = pensionNetFraction(
-        projectedRatePension,
-        projectedAgeSavings,
-      );
-      targetPensionNetFraction =
-        projectedPension > CALCULATION_TOLERANCE &&
-        projectedPensionNetFraction > CALCULATION_TOLERANCE
-          ? projectedPensionNetFraction
-          : null;
-    }
-
-    const requiredAtRetirement =
-      targetPensionNetFraction === null
-        ? null
-        : (inputs.desiredAnnualWithdrawal / targetPensionNetFraction) *
-          presentValueFactor(realPensionReturn, inputs.payoutYears);
+    const projectedRatePensionNonDeductibleBasis =
+      retirementOpeningRow?.ratePensionNonDeductibleBasis ?? 0;
+    const requiredAtRetirement = pensionTargetForMix(
+      projectedRatePension,
+      projectedAgeSavings,
+      projectedRatePensionNonDeductibleBasis,
+    );
     const pensionTargetToday =
       requiredAtRetirement === null
         ? null
@@ -1284,6 +1571,7 @@
       {
         annualRatePensionContribution:
           inputs.annualRatePensionContribution,
+        annualNonDeductibleRatePensionContribution,
         annualAgeSavingsContribution:
           inputs.annualAgeSavingsContribution,
         annualFreeFundsContribution: inputs.annualFreeFundsContribution,
@@ -1293,9 +1581,6 @@
     const ageSavingsContributionLimitExceeded =
       inputs.annualAgeSavingsContribution >
       selectedAgeSavingsContributionLimit + MONEY_TOLERANCE;
-    const ratePensionContributionLimitExceeded =
-      inputs.annualRatePensionContribution >
-      CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE;
     assertFinite(
       requiredAtRetirement ?? 0,
       pensionTargetToday ?? 0,
@@ -1336,9 +1621,13 @@
       pensionTargetAtStop,
       annualNetContributionBudget,
       ratePensionContributionLimit: CONTRIBUTION_LIMITS.ratePension,
-      ratePensionContributionLimitExceeded,
+      remainingRatePensionDeductionLimit,
+      annualRatePensionDeductionLimitUsedElsewhere,
+      ratePensionContributionLimitExceeded: false,
       ageSavingsContributionLimit: selectedAgeSavingsContributionLimit,
       ageSavingsContributionLimitExceeded,
+      annualAgeSavingsContributionRedirected,
+      effectiveAnnualAgeSavingsContribution,
       fireRow,
       isFullyFunded: drawdown.isFullyFunded,
       firstShortfallDate: drawdown.firstShortfallDate,
@@ -1409,6 +1698,8 @@
     const currentContributions = {
       annualRatePensionContribution:
         inputs.annualRatePensionContribution,
+      annualNonDeductibleRatePensionContribution:
+        inputs.annualNonDeductibleRatePensionContribution ?? 0,
       annualAgeSavingsContribution:
         inputs.annualAgeSavingsContribution,
       annualFreeFundsContribution: inputs.annualFreeFundsContribution,
@@ -1417,24 +1708,40 @@
       inputs.ratePensionContributionTaxRelief ?? 0;
     const selectedAgeSavingsContributionLimit =
       ageSavingsContributionLimit(inputs);
+    const annualRatePensionDeductionLimitUsedElsewhere =
+      inputs.annualRatePensionDeductionLimitUsedElsewhere ?? 0;
+    const remainingRatePensionDeductionLimit = Math.max(
+      0,
+      CONTRIBUTION_LIMITS.ratePension -
+        annualRatePensionDeductionLimitUsedElsewhere,
+    );
     const annualNetBudget = contributionNetBudget(
       currentContributions,
       ratePensionContributionTaxRelief,
     );
+    const optimizableAnnualNetBudget =
+      annualNetBudget -
+      currentContributions.annualNonDeductibleRatePensionContribution;
     const ratePensionNetCost = 1 - ratePensionContributionTaxRelief;
     const maximumRatePensionContribution = Math.min(
-      CONTRIBUTION_LIMITS.ratePension,
+      remainingRatePensionDeductionLimit,
       ratePensionNetCost > 0
-        ? annualNetBudget / ratePensionNetCost
-        : CONTRIBUTION_LIMITS.ratePension,
+        ? optimizableAnnualNetBudget / ratePensionNetCost
+        : remainingRatePensionDeductionLimit,
     );
     const maximumAgeSavingsContribution = Math.min(
       selectedAgeSavingsContributionLimit,
-      annualNetBudget,
+      optimizableAnnualNetBudget,
     );
     const ratePensionCandidates = contributionCandidates(
       maximumRatePensionContribution,
       currentContributions.annualRatePensionContribution,
+    ).filter(
+      (contribution) =>
+        currentContributions.annualNonDeductibleRatePensionContribution <=
+          MONEY_TOLERANCE ||
+        contribution + MONEY_TOLERANCE >=
+          remainingRatePensionDeductionLimit,
     );
     const ageSavingsCandidates = contributionCandidates(
       maximumAgeSavingsContribution,
@@ -1442,7 +1749,7 @@
     );
     const currentContributionsAreWithinLimits =
       currentContributions.annualRatePensionContribution <=
-        CONTRIBUTION_LIMITS.ratePension &&
+        remainingRatePensionDeductionLimit &&
       currentContributions.annualAgeSavingsContribution <=
         selectedAgeSavingsContributionLimit;
 
@@ -1455,7 +1762,7 @@
     ratePensionCandidates.forEach((annualRatePensionContribution) => {
       ageSavingsCandidates.forEach((annualAgeSavingsContribution) => {
         const annualFreeFundsContribution =
-          annualNetBudget -
+          optimizableAnnualNetBudget -
           annualRatePensionContribution * ratePensionNetCost -
           annualAgeSavingsContribution;
 
@@ -1465,6 +1772,8 @@
 
         const candidate = {
           annualRatePensionContribution,
+          annualNonDeductibleRatePensionContribution:
+            currentContributions.annualNonDeductibleRatePensionContribution,
           annualAgeSavingsContribution,
           annualFreeFundsContribution: Math.max(
             0,
@@ -1538,9 +1847,12 @@
           ? null
           : contributionSnapshot(bestCandidate, bestCalculation),
       annualNetBudget,
+      optimizableAnnualNetBudget,
+      fixedAnnualNonDeductibleRatePensionContribution:
+        currentContributions.annualNonDeductibleRatePensionContribution,
       ratePensionContributionTaxRelief,
       limits: {
-        ratePension: CONTRIBUTION_LIMITS.ratePension,
+        ratePension: remainingRatePensionDeductionLimit,
         ageSavings: selectedAgeSavingsContributionLimit,
       },
       precision: CONTRIBUTION_SEARCH_STEP,
