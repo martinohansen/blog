@@ -1557,9 +1557,12 @@ function App() {
           </p>
           <p className="source-link">
             <a
+              href="https://www.buymeacoffee.com/martinlikesfilter"
+            >
+              Buy me a coffee
+            </a>
+            <a
               href="https://heymartin.net/git/?p=www.git;a=tree;f=realkreditberegner;hb=HEAD"
-              target="_blank"
-              rel="noopener noreferrer"
             >
               Kildekode
             </a>
