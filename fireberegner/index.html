@@ -133,21 +133,6 @@
                       required
                   /></label>
                   <label class="field"
-                    ><span
-                      >Heraf uden fradrag
-                      <i
-                        title="Dokumenterede indbetalinger til ratepensionen, som du ikke har fået fradrags- eller bortseelsesret for. Beløbet kan udbetales skattefrit, men afkastet beskattes. Beregneren fordeler hovedstolen i lige store nominelle dele over den faste udbetalingsperiode."
-                        >i</i
-                      ></span
-                    ><input
-                      name="ratePensionNonDeductibleBasis"
-                      type="text"
-                      inputmode="numeric"
-                      data-number-format="integer"
-                      value="0"
-                      required
-                  /></label>
-                  <label class="field"
                     ><span>Aldersopsparing</span
                     ><input
                       name="ageSavingsBalance"
@@ -203,9 +188,9 @@
                 <div class="form-grid savings-grid">
                   <label class="field"
                     ><span
-                      >Ratepension med fradrag
+                      >Samlet ratepensionsindbetaling
                       <i
-                        title="Beløbet får den valgte skatteværdi og kan højst være 68.700 kr. i 2026."
+                        title="Den samlede årlige indbetaling på tværs af private, arbejdsgiver- og andre rateordninger. Beregneren giver skatteværdi til de første 68.700 kr. i 2026 og behandler resten som indbetaling uden fradrags- eller bortseelsesret. Hele beløbet indgår som din årlige opsparing i beregningen."
                         >i</i
                       ></span
                     ><input
@@ -213,39 +198,7 @@
                       type="text"
                       inputmode="numeric"
                       data-number-format="integer"
-                      max="68700"
                       value="60.000"
-                      required
-                  /></label>
-                  <label class="field"
-                    ><span
-                      >Rateloft brugt andetsteds
-                      <i
-                        title="Den del af 2026-rateloftet, som arbejdsgiverbidrag, andre rateordninger eller ophørende alderspensioner allerede bruger. Beløbet bruges kun til at kontrollere fradragsretten og lægges ikke til formuen eller nettobudgettet i denne beregning."
-                        >i</i
-                      ></span
-                    ><input
-                      name="annualRatePensionDeductionLimitUsedElsewhere"
-                      type="text"
-                      inputmode="numeric"
-                      data-number-format="integer"
-                      max="68700"
-                      value="0"
-                      required
-                  /></label>
-                  <label class="field"
-                    ><span
-                      >Ratepension uden fradrag
-                      <i
-                        title="En indbetaling over det samlede rateloft uden fradrags- eller bortseelsesret. Hele rateloftet skal først være brugt af denne og andre ordninger. Beregneren fordeler hovedstolen skattefrit i lige store nominelle dele over den faste udbetalingsperiode, mens afkastet beskattes ved udbetaling. Gem dokumentation."
-                        >i</i
-                      ></span
-                    ><input
-                      name="annualNonDeductibleRatePensionContribution"
-                      type="text"
-                      inputmode="numeric"
-                      data-number-format="integer"
-                      value="0"
                       required
                   /></label>
                   <label class="field"
@@ -295,7 +248,7 @@
                     <span
                       >Omdiriger pension
                       <i
-                        title="Når pensionen har nået sit mål, flyttes nettoudgiften til de fremtidige pensionsindbetalinger over til frie midler. Ratepensionen reduceres med den indtastede skatteværdi."
+                        title="Når pensionen har nået sit mål, flyttes nettoudgiften til de fremtidige pensionsindbetalinger over til frie midler. Indbetalinger op til rateloftet reduceres med den indtastede skatteværdi. Beløbet over loftet flyttes krone for krone."
                         >i</i
                       ></span
                     >
@@ -309,6 +262,12 @@
                     </span>
                   </label>
                 </div>
+                <p
+                  id="rate-pension-split-message"
+                  class="contribution-adjustment-message"
+                  role="status"
+                  hidden
+                ></p>
                 <p
                   id="age-savings-redirect-message"
                   class="contribution-adjustment-message"
@@ -377,7 +336,7 @@
                     </div>
                     <dl>
                       <div class="optimization-row optimization-row-pension">
-                        <dt><i aria-hidden="true"></i>Ratepension med fradrag</dt>
+                        <dt><i aria-hidden="true"></i>Samlet ratepension</dt>
                         <dd id="optimization-current-rate"></dd>
                         <span aria-hidden="true">→</span>
                         <dd id="optimization-recommended-rate"></dd>
@@ -416,6 +375,21 @@
               >
                 <summary>Forudsætninger</summary>
                 <div class="form-grid assumptions-grid">
+                  <label class="field"
+                    ><span
+                      >Ratepension: hovedstol uden fradrag
+                      <i
+                        title="Dokumenterede indbetalinger i den nuværende ratepension, som du ikke har fået fradrags- eller bortseelsesret for. Beløbet kan udbetales skattefrit, mens afkastet beskattes. Beregneren fordeler hovedstolen i lige store nominelle dele over den faste udbetalingsperiode."
+                        >i</i
+                      ></span
+                    ><input
+                      name="ratePensionNonDeductibleBasis"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="0"
+                      required
+                  /></label>
                   <label class="field"
                     ><span
                       >Loft for aldersopsparing
@@ -865,8 +839,10 @@
             aktieindkomst og medregner ikke udbytter eller fremførte tab. ASK beskattes kun
             af fremtidige afkast fra den indtastede startværdi. Beregningen
             medregner ikke allerede optjent ASK-skat. Ratepensionsudbetalinger
-            beskattes med den indtastede effektive sats. Nettoudgiften til
-            ratepensionsindbetalinger beregnes med den indtastede skatteværdi.
+            beskattes med den indtastede effektive sats. Den indtastede
+            skatteværdi anvendes på ratepensionsindbetalinger op til
+            2026-rateloftet. Indbetalinger over loftet medregnes til fuld
+            nettoudgift og som hovedstol uden fradrag.
             Resultatet er et overslag og er ikke investerings- eller
             pensionsrådgivning.
             <span class="disclaimer-links">

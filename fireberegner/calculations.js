@@ -18,6 +18,7 @@
     mixed: "mixed",
   });
   const CONTRIBUTION_SEARCH_STEP = 1000;
+  const MAX_CONTRIBUTION_SEARCH_STEPS = 250;
   const CONTRIBUTION_LIMITS = Object.freeze({
     ratePension: 68700,
     ageSavings: 9900,
@@ -50,14 +51,52 @@
     }
   }
 
+  function ratePensionContributionParts(totalContribution) {
+    const deductibleRatePensionContribution = Math.min(
+      totalContribution,
+      CONTRIBUTION_LIMITS.ratePension,
+    );
+    const nonDeductibleRatePensionContribution = Math.max(
+      0,
+      totalContribution - deductibleRatePensionContribution,
+    );
+
+    return {
+      deductible: deductibleRatePensionContribution,
+      nonDeductible: nonDeductibleRatePensionContribution,
+    };
+  }
+
+  function ratePensionContributionNetCost(totalContribution, taxRelief) {
+    const parts = ratePensionContributionParts(totalContribution);
+    const netCost =
+      parts.deductible * (1 - taxRelief) + parts.nonDeductible;
+    assertFinite(netCost);
+    return netCost;
+  }
+
   function contributionNetBudget(contributions, taxRelief) {
     const budget =
-      contributions.annualRatePensionContribution * (1 - taxRelief) +
-      (contributions.annualNonDeductibleRatePensionContribution ?? 0) +
+      ratePensionContributionNetCost(
+        contributions.annualRatePensionContribution,
+        taxRelief,
+      ) +
       contributions.annualAgeSavingsContribution +
       contributions.annualFreeFundsContribution;
     assertFinite(budget);
     return budget;
+  }
+
+  function maximumRatePensionContributionForBudget(budget, taxRelief) {
+    const deductibleNetCost = 1 - taxRelief;
+    const netCostAtLimit =
+      CONTRIBUTION_LIMITS.ratePension * deductibleNetCost;
+
+    if (budget <= netCostAtLimit && deductibleNetCost > 0) {
+      return budget / deductibleNetCost;
+    }
+
+    return CONTRIBUTION_LIMITS.ratePension + Math.max(0, budget - netCostAtLimit);
   }
 
   function ageSavingsContributionLimit(inputs) {
@@ -494,8 +533,7 @@
 
     const includesRatePension =
       inputs.ratePensionBalance > 0 ||
-      inputs.annualRatePensionContribution > 0 ||
-      (inputs.annualNonDeductibleRatePensionContribution ?? 0) > 0;
+      inputs.annualRatePensionContribution > 0;
     if (
       includesRatePension &&
       (inputs.payoutYears < 10 || inputs.payoutYears > 30)
@@ -513,50 +551,11 @@
 
     const ratePensionNonDeductibleBasis =
       inputs.ratePensionNonDeductibleBasis ?? 0;
-    const annualNonDeductibleRatePensionContribution =
-      inputs.annualNonDeductibleRatePensionContribution ?? 0;
-    const annualRatePensionDeductionLimitUsedElsewhere =
-      inputs.annualRatePensionDeductionLimitUsedElsewhere ?? 0;
     if (
       !Number.isFinite(ratePensionNonDeductibleBasis) ||
-      ratePensionNonDeductibleBasis < 0 ||
-      !Number.isFinite(annualNonDeductibleRatePensionContribution) ||
-      annualNonDeductibleRatePensionContribution < 0 ||
-      !Number.isFinite(annualRatePensionDeductionLimitUsedElsewhere) ||
-      annualRatePensionDeductionLimitUsedElsewhere < 0
+      ratePensionNonDeductibleBasis < 0
     ) {
       throw new Error("Beløb skal være 0 eller højere.");
-    }
-    if (
-      annualRatePensionDeductionLimitUsedElsewhere >
-      CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE
-    ) {
-      throw new Error(
-        "Brugen af rateloftet på andre ordninger må højst være 68.700 kr. i 2026.",
-      );
-    }
-    const remainingRatePensionDeductionLimit = Math.max(
-      0,
-      CONTRIBUTION_LIMITS.ratePension -
-        annualRatePensionDeductionLimitUsedElsewhere,
-    );
-    if (
-      inputs.annualRatePensionContribution >
-      remainingRatePensionDeductionLimit + MONEY_TOLERANCE
-    ) {
-      throw new Error(
-        `Den fradragsberettigede ratepensionsindbetaling må højst være ${remainingRatePensionDeductionLimit.toLocaleString("da-DK")} kr., når andre ordninger bruger resten af 2026-loftet.`,
-      );
-    }
-    if (
-      annualNonDeductibleRatePensionContribution > MONEY_TOLERANCE &&
-      inputs.annualRatePensionContribution +
-        annualRatePensionDeductionLimitUsedElsewhere <
-        CONTRIBUTION_LIMITS.ratePension - MONEY_TOLERANCE
-    ) {
-      throw new Error(
-        "Indbetaling uden fradragsret kan kun bruges, når det samlede rateloft på 68.700 kr. er udnyttet af denne og andre ordninger.",
-      );
     }
 
     if (
@@ -621,15 +620,15 @@
       inputs.ratePensionContributionTaxRelief ?? 0;
     const selectedAgeSavingsContributionLimit =
       ageSavingsContributionLimit(inputs);
-    const annualRatePensionDeductionLimitUsedElsewhere =
-      inputs.annualRatePensionDeductionLimitUsedElsewhere ?? 0;
-    const remainingRatePensionDeductionLimit = Math.max(
-      0,
-      CONTRIBUTION_LIMITS.ratePension -
-        annualRatePensionDeductionLimitUsedElsewhere,
+    const annualDeductibleRatePensionContribution = Math.min(
+      inputs.annualRatePensionContribution,
+      CONTRIBUTION_LIMITS.ratePension,
     );
-    const annualNonDeductibleRatePensionContribution =
-      inputs.annualNonDeductibleRatePensionContribution ?? 0;
+    const annualNonDeductibleRatePensionContribution = Math.max(
+      0,
+      inputs.annualRatePensionContribution -
+        annualDeductibleRatePensionContribution,
+    );
     const initialRatePensionNonDeductibleBasis =
       inputs.ratePensionNonDeductibleBasis ?? 0;
     const effectiveAnnualAgeSavingsContribution = Math.min(
@@ -1425,9 +1424,10 @@
       const nextYear = year + 1;
       const shouldCalculatePensionContributions =
         pensionContributionsActive || redirectsPensionContributions;
-      const ratePensionContribution = shouldCalculatePensionContributions
+      const deductibleRatePensionContribution =
+        shouldCalculatePensionContributions
         ? contributionAtMidyear(
-            inputs.annualRatePensionContribution,
+            annualDeductibleRatePensionContribution,
             nextYear,
           )
         : 0;
@@ -1451,7 +1451,7 @@
         );
       const redirectedPensionContribution =
         !pensionContributionsActive && redirectsPensionContributions
-          ? ratePensionContribution *
+          ? deductibleRatePensionContribution *
               (1 - ratePensionContributionTaxRelief) +
             nonDeductibleRatePensionContribution +
             ageSavingsContribution
@@ -1462,7 +1462,7 @@
         redirectedPensionContribution;
       const contributions = [
         pensionContributionsActive
-          ? ratePensionContribution +
+          ? deductibleRatePensionContribution +
             nonDeductibleRatePensionContribution
           : 0,
         pensionContributionsActive ? ageSavingsContribution : 0,
@@ -1571,7 +1571,6 @@
       {
         annualRatePensionContribution:
           inputs.annualRatePensionContribution,
-        annualNonDeductibleRatePensionContribution,
         annualAgeSavingsContribution:
           inputs.annualAgeSavingsContribution,
         annualFreeFundsContribution: inputs.annualFreeFundsContribution,
@@ -1621,9 +1620,8 @@
       pensionTargetAtStop,
       annualNetContributionBudget,
       ratePensionContributionLimit: CONTRIBUTION_LIMITS.ratePension,
-      remainingRatePensionDeductionLimit,
-      annualRatePensionDeductionLimitUsedElsewhere,
-      ratePensionContributionLimitExceeded: false,
+      annualDeductibleRatePensionContribution,
+      annualNonDeductibleRatePensionContribution,
       ageSavingsContributionLimit: selectedAgeSavingsContributionLimit,
       ageSavingsContributionLimitExceeded,
       annualAgeSavingsContributionRedirected,
@@ -1653,13 +1651,24 @@
     };
   }
 
-  function contributionCandidates(maximum, current) {
+  function contributionSearchStep(maximum) {
+    return Math.max(
+      CONTRIBUTION_SEARCH_STEP,
+      Math.ceil(
+        maximum /
+          MAX_CONTRIBUTION_SEARCH_STEPS /
+          CONTRIBUTION_SEARCH_STEP,
+      ) * CONTRIBUTION_SEARCH_STEP,
+    );
+  }
+
+  function contributionCandidates(maximum, current, step) {
     const candidates = new Set([0, maximum]);
 
     for (
-      let contribution = CONTRIBUTION_SEARCH_STEP;
+      let contribution = step;
       contribution < maximum;
-      contribution += CONTRIBUTION_SEARCH_STEP
+      contribution += step
     ) {
       candidates.add(contribution);
     }
@@ -1698,8 +1707,6 @@
     const currentContributions = {
       annualRatePensionContribution:
         inputs.annualRatePensionContribution,
-      annualNonDeductibleRatePensionContribution:
-        inputs.annualNonDeductibleRatePensionContribution ?? 0,
       annualAgeSavingsContribution:
         inputs.annualAgeSavingsContribution,
       annualFreeFundsContribution: inputs.annualFreeFundsContribution,
@@ -1708,50 +1715,38 @@
       inputs.ratePensionContributionTaxRelief ?? 0;
     const selectedAgeSavingsContributionLimit =
       ageSavingsContributionLimit(inputs);
-    const annualRatePensionDeductionLimitUsedElsewhere =
-      inputs.annualRatePensionDeductionLimitUsedElsewhere ?? 0;
-    const remainingRatePensionDeductionLimit = Math.max(
-      0,
-      CONTRIBUTION_LIMITS.ratePension -
-        annualRatePensionDeductionLimitUsedElsewhere,
-    );
     const annualNetBudget = contributionNetBudget(
       currentContributions,
       ratePensionContributionTaxRelief,
     );
-    const optimizableAnnualNetBudget =
-      annualNetBudget -
-      currentContributions.annualNonDeductibleRatePensionContribution;
-    const ratePensionNetCost = 1 - ratePensionContributionTaxRelief;
-    const maximumRatePensionContribution = Math.min(
-      remainingRatePensionDeductionLimit,
-      ratePensionNetCost > 0
-        ? optimizableAnnualNetBudget / ratePensionNetCost
-        : remainingRatePensionDeductionLimit,
-    );
+    const maximumRatePensionContribution =
+      maximumRatePensionContributionForBudget(
+        annualNetBudget,
+        ratePensionContributionTaxRelief,
+      );
     const maximumAgeSavingsContribution = Math.min(
       selectedAgeSavingsContributionLimit,
-      optimizableAnnualNetBudget,
+      annualNetBudget,
+    );
+    const ratePensionSearchStep = contributionSearchStep(
+      maximumRatePensionContribution,
+    );
+    const ageSavingsSearchStep = contributionSearchStep(
+      maximumAgeSavingsContribution,
     );
     const ratePensionCandidates = contributionCandidates(
       maximumRatePensionContribution,
       currentContributions.annualRatePensionContribution,
-    ).filter(
-      (contribution) =>
-        currentContributions.annualNonDeductibleRatePensionContribution <=
-          MONEY_TOLERANCE ||
-        contribution + MONEY_TOLERANCE >=
-          remainingRatePensionDeductionLimit,
+      ratePensionSearchStep,
     );
     const ageSavingsCandidates = contributionCandidates(
       maximumAgeSavingsContribution,
       currentContributions.annualAgeSavingsContribution,
+      ageSavingsSearchStep,
     );
     const currentContributionsAreWithinLimits =
-      currentContributions.annualRatePensionContribution <=
-        remainingRatePensionDeductionLimit &&
       currentContributions.annualAgeSavingsContribution <=
-        selectedAgeSavingsContributionLimit;
+      selectedAgeSavingsContributionLimit;
 
     let bestCandidate = null;
     let bestCalculation = null;
@@ -1762,8 +1757,11 @@
     ratePensionCandidates.forEach((annualRatePensionContribution) => {
       ageSavingsCandidates.forEach((annualAgeSavingsContribution) => {
         const annualFreeFundsContribution =
-          optimizableAnnualNetBudget -
-          annualRatePensionContribution * ratePensionNetCost -
+          annualNetBudget -
+          ratePensionContributionNetCost(
+            annualRatePensionContribution,
+            ratePensionContributionTaxRelief,
+          ) -
           annualAgeSavingsContribution;
 
         if (annualFreeFundsContribution < -MONEY_TOLERANCE) {
@@ -1772,8 +1770,6 @@
 
         const candidate = {
           annualRatePensionContribution,
-          annualNonDeductibleRatePensionContribution:
-            currentContributions.annualNonDeductibleRatePensionContribution,
           annualAgeSavingsContribution,
           annualFreeFundsContribution: Math.max(
             0,
@@ -1847,15 +1843,12 @@
           ? null
           : contributionSnapshot(bestCandidate, bestCalculation),
       annualNetBudget,
-      optimizableAnnualNetBudget,
-      fixedAnnualNonDeductibleRatePensionContribution:
-        currentContributions.annualNonDeductibleRatePensionContribution,
       ratePensionContributionTaxRelief,
       limits: {
-        ratePension: remainingRatePensionDeductionLimit,
+        ratePension: CONTRIBUTION_LIMITS.ratePension,
         ageSavings: selectedAgeSavingsContributionLimit,
       },
-      precision: CONTRIBUTION_SEARCH_STEP,
+      precision: ratePensionSearchStep,
     };
   }
 

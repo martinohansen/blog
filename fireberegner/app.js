@@ -17,6 +17,9 @@
   const ageSavingsRedirectMessage = document.querySelector(
     "#age-savings-redirect-message",
   );
+  const ratePensionSplitMessage = document.querySelector(
+    "#rate-pension-split-message",
+  );
   const optimizeButton = document.querySelector("#optimize-contributions");
   const optimizeButtonLabel = optimizeButton.querySelector("span");
   const optimizationResult = document.querySelector("#optimization-result");
@@ -244,12 +247,6 @@
       annualRatePensionContribution: readNumber(
         "annualRatePensionContribution",
       ),
-      annualRatePensionDeductionLimitUsedElsewhere: readNumber(
-        "annualRatePensionDeductionLimitUsedElsewhere",
-      ),
-      annualNonDeductibleRatePensionContribution: readNumber(
-        "annualNonDeductibleRatePensionContribution",
-      ),
       annualAgeSavingsContribution: readNumber("annualAgeSavingsContribution"),
       annualFreeFundsContribution: readNumber("annualFreeFundsContribution"),
       ageSavingsContributionLimit: readNumber("ageSavingsContributionLimit"),
@@ -388,7 +385,7 @@
       annualNetBudget,
       ratePensionContributionTaxRelief,
       precision,
-      fixedAnnualNonDeductibleRatePensionContribution,
+      limits,
     } = optimization;
     const headings = {
       improved: "Du kan nå FIRE tidligere",
@@ -421,10 +418,18 @@
     });
 
     const safeTotal = Math.max(1, annualNetBudget);
+    const recommendedDeductibleRatePension = Math.min(
+      recommended.annualRatePensionContribution,
+      limits.ratePension,
+    );
     const recommendedRateNetCost =
-      recommended.annualRatePensionContribution *
+      recommendedDeductibleRatePension *
         (1 - ratePensionContributionTaxRelief) +
-      fixedAnnualNonDeductibleRatePensionContribution;
+      Math.max(
+        0,
+        recommended.annualRatePensionContribution -
+          recommendedDeductibleRatePension,
+      );
     optimizationAllocationBar.style.setProperty(
       "--rate-share",
       `${(recommendedRateNetCost / safeTotal) * 100}%`,
@@ -438,14 +443,10 @@
       `${(recommended.annualFreeFundsContribution / safeTotal) * 100}%`,
     );
 
-    const fixedContributionNote =
-      fixedAnnualNonDeductibleRatePensionContribution > 0
-        ? ` ${currency.format(fixedAnnualNonDeductibleRatePensionContribution)} til ratepension uden fradrag holdes fast.`
-        : "";
     optimizationNote.textContent =
       optimization.status === "limits-applied"
-        ? `Din nuværende fordeling overskrider loftet for aldersopsparing. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og bruger 2026-lofterne.${fixedContributionNote}`
-        : `Samme årlige nettobudget på ${currency.format(annualNetBudget)}. Den fradragsberettigede pensionsandel er afprøvet i trin på ${currency.format(precision)}.${fixedContributionNote}`;
+        ? `Din nuværende fordeling overskrider loftet for aldersopsparing. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og bruger 2026-lofterne.`
+        : `Samme årlige nettobudget på ${currency.format(annualNetBudget)} Den samlede ratepensionsindbetaling er afprøvet i trin på ${currency.format(precision)}`;
   }
 
   function runContributionOptimization() {
@@ -1018,6 +1019,12 @@
     ageSavingsRedirectMessage.textContent =
       calculation.annualAgeSavingsContributionRedirected > 0
         ? `${currency.format(calculation.annualAgeSavingsContributionRedirected)} over loftet flyttes til frie midler i beregningen.`
+        : "";
+    ratePensionSplitMessage.hidden =
+      calculation.annualNonDeductibleRatePensionContribution <= 0;
+    ratePensionSplitMessage.textContent =
+      calculation.annualNonDeductibleRatePensionContribution > 0
+        ? `${currency.format(calculation.annualDeductibleRatePensionContribution)} behandles med fradrag, og ${currency.format(calculation.annualNonDeductibleRatePensionContribution)} behandles som hovedstol uden fradrag.`
         : "";
     errorBox.hidden = true;
     results.hidden = false;
