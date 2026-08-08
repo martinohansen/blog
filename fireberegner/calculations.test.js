@@ -1267,6 +1267,155 @@ assertClose(
   inventoryTax.totalFreeFundsTax,
 );
 
+const defaultPensionTargets = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 70,
+    payoutYears: 20,
+    desiredAnnualWithdrawal: 300000,
+    ratePensionBalance: 500000,
+    ageSavingsBalance: 50000,
+    annualRatePensionContribution: 60000,
+    annualAgeSavingsContribution: 9900,
+    annualFreeFundsContribution: 50000,
+    returnRate: 0.07,
+    inflationRate: 0.02,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+);
+assertClose(defaultPensionTargets.requiredAtRetirement, 6354262.08);
+assertClose(defaultPensionTargets.pensionTargetToday, 1401125.69);
+
+const futurePensionMixInputs = {
+  ...standardInputs,
+  currentAge: 30,
+  retirementAge: 32,
+  payoutYears: 10,
+  desiredAnnualWithdrawal: 10,
+  ratePensionBalance: 0,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 0,
+  freeFundsCostBasis: 0,
+  askBalance: 0,
+  annualFreeFundsContribution: 0,
+  pensionTax: 0,
+  pensionWithdrawalTax: 0.4,
+  returnRate: 0,
+  inflationRate: 0,
+  withdrawalAfterTax: true,
+};
+const futureRateOnlyPension = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 200,
+    annualAgeSavingsContribution: 0,
+  },
+  asOfDate,
+);
+const futureAgeSavingsOnlyPension = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 200,
+  },
+  asOfDate,
+);
+assertClose(futureRateOnlyPension.requiredAtRetirement, 100 / 0.6);
+assertClose(futureRateOnlyPension.pensionTargetToday, 100 / 0.6);
+assertClose(futureAgeSavingsOnlyPension.requiredAtRetirement, 100);
+assertClose(futureAgeSavingsOnlyPension.pensionTargetToday, 100);
+
+const beforeTaxRateOnlyTarget = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 200,
+    annualAgeSavingsContribution: 0,
+    withdrawalAfterTax: false,
+  },
+  asOfDate,
+);
+const beforeTaxAgeSavingsOnlyTarget = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 200,
+    withdrawalAfterTax: false,
+  },
+  asOfDate,
+);
+assertClose(beforeTaxRateOnlyTarget.requiredAtRetirement, 100);
+assertClose(
+  beforeTaxRateOnlyTarget.requiredAtRetirement,
+  beforeTaxAgeSavingsOnlyTarget.requiredAtRetirement,
+);
+assertClose(
+  beforeTaxRateOnlyTarget.pensionTargetToday,
+  beforeTaxAgeSavingsOnlyTarget.pensionTargetToday,
+);
+
+const zeroProjectedPension = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+  },
+  asOfDate,
+);
+assert.equal(zeroProjectedPension.requiredAtRetirement, null);
+assert.equal(zeroProjectedPension.pensionTargetToday, null);
+
+const zeroWithdrawalWithNoProjectedPension = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    desiredAnnualWithdrawal: 0,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+  },
+  asOfDate,
+);
+assert.equal(zeroWithdrawalWithNoProjectedPension.requiredAtRetirement, 0);
+assert.equal(zeroWithdrawalWithNoProjectedPension.pensionTargetToday, 0);
+
+const fullyTaxedFutureRatePension = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 200,
+    annualAgeSavingsContribution: 0,
+    pensionWithdrawalTax: 1,
+  },
+  asOfDate,
+);
+assert.equal(fullyTaxedFutureRatePension.requiredAtRetirement, null);
+assert.equal(fullyTaxedFutureRatePension.pensionTargetToday, null);
+assert.ok(fullyTaxedFutureRatePension.planRows.length > 0);
+
+const fullyTaxedBeforeTaxRatePension = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 200,
+    annualAgeSavingsContribution: 0,
+    pensionWithdrawalTax: 1,
+    withdrawalAfterTax: false,
+  },
+  asOfDate,
+);
+assertClose(fullyTaxedBeforeTaxRatePension.requiredAtRetirement, 100);
+assertClose(fullyTaxedBeforeTaxRatePension.pensionTargetToday, 100);
+
+const zeroProjectedBeforeTaxPension = calculateFire(
+  {
+    ...futurePensionMixInputs,
+    annualRatePensionContribution: 0,
+    annualAgeSavingsContribution: 0,
+    withdrawalAfterTax: false,
+  },
+  asOfDate,
+);
+assertClose(zeroProjectedBeforeTaxPension.requiredAtRetirement, 100);
+assertClose(zeroProjectedBeforeTaxPension.pensionTargetToday, 100);
+
 const afterTaxPension = calculateFire(
   {
     ...standardInputs,

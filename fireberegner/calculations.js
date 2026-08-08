@@ -794,19 +794,6 @@
       );
     }
 
-    const currentPensionNetFraction = pensionNetFraction(
-      inputs.ratePensionBalance,
-      inputs.ageSavingsBalance,
-    );
-    const requiredAtRetirement =
-      (inputs.desiredAnnualWithdrawal /
-        Math.max(CALCULATION_TOLERANCE, currentPensionNetFraction)) *
-      presentValueFactor(realPensionReturn, inputs.payoutYears);
-    const pensionTargetToday =
-      requiredAtRetirement /
-      Math.pow(1 + realPensionReturn, yearsToRetirement);
-    assertFinite(requiredAtRetirement, pensionTargetToday);
-
     function simulateDrawdown(
       startYear,
       startBalances,
@@ -1225,6 +1212,36 @@
       },
     );
     const planRows = [...accumulationRows, ...drawdown.rows];
+    const retirementOpeningRow = planRows.find(
+      (row) => row.age === inputs.retirementAge,
+    );
+    const projectedRatePension = retirementOpeningRow?.ratePension ?? 0;
+    const projectedAgeSavings = retirementOpeningRow?.ageSavings ?? 0;
+    const projectedPension = projectedRatePension + projectedAgeSavings;
+    let targetPensionNetFraction = 1;
+
+    if (inputs.desiredAnnualWithdrawal > 0 && inputs.withdrawalAfterTax) {
+      const projectedPensionNetFraction = pensionNetFraction(
+        projectedRatePension,
+        projectedAgeSavings,
+      );
+      targetPensionNetFraction =
+        projectedPension > CALCULATION_TOLERANCE &&
+        projectedPensionNetFraction > CALCULATION_TOLERANCE
+          ? projectedPensionNetFraction
+          : null;
+    }
+
+    const requiredAtRetirement =
+      targetPensionNetFraction === null
+        ? null
+        : (inputs.desiredAnnualWithdrawal / targetPensionNetFraction) *
+          presentValueFactor(realPensionReturn, inputs.payoutYears);
+    const pensionTargetToday =
+      requiredAtRetirement === null
+        ? null
+        : requiredAtRetirement /
+          Math.pow(1 + realPensionReturn, yearsToRetirement);
     const finalRow = planRows[planRows.length - 1];
     const totalFreeFundsWithdrawalTax = planRows.reduce(
       (total, row) => total + row.withdrawalTax,
@@ -1280,6 +1297,8 @@
       inputs.annualRatePensionContribution >
       CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE;
     assertFinite(
+      requiredAtRetirement ?? 0,
+      pensionTargetToday ?? 0,
       pensionTargetAtStop ?? 0,
       totalFreeFundsTax,
       totalPensionWithdrawalTax,

@@ -931,11 +931,15 @@
     );
     setText(
       "required-at-retirement",
-      currency.format(calculation.requiredAtRetirement),
+      calculation.requiredAtRetirement === null
+        ? "—"
+        : currency.format(calculation.requiredAtRetirement),
     );
     setText(
       "pension-target-today",
-      currency.format(calculation.pensionTargetToday),
+      calculation.pensionTargetToday === null
+        ? "—"
+        : currency.format(calculation.pensionTargetToday),
     );
     setText(
       "pension-stop-age",
