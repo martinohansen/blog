@@ -147,6 +147,10 @@ const fixedNominalContributions = calculateFire(
   asOfDate,
 );
 assertClose(
+  inflationAdjustedContributions.pensionTargetToday,
+  inflationAdjustedContributions.rows[0].pensionTarget,
+);
+assertClose(
   inflationAdjustedContributions.planRows[1].contribution,
   129400,
 );

@@ -794,32 +794,13 @@
       );
     }
 
-    let projectedRatePension = inputs.ratePensionBalance;
-    let projectedAgeSavings = inputs.ageSavingsBalance;
-
-    for (let year = 1; year <= yearsToRetirement; year += 1) {
-      projectedRatePension =
-        projectedRatePension * (1 + realPensionReturn) +
-        contributionAtMidyear(
-          inputs.annualRatePensionContribution,
-          year,
-        ) * midyearGrowthFactor(realPensionReturn);
-      projectedAgeSavings =
-        projectedAgeSavings * (1 + realPensionReturn) +
-        contributionAtMidyear(
-          inputs.annualAgeSavingsContribution,
-          year,
-        ) * midyearGrowthFactor(realPensionReturn);
-      assertFinite(projectedRatePension, projectedAgeSavings);
-    }
-
-    const projectedPensionNetFraction = pensionNetFraction(
-      projectedRatePension,
-      projectedAgeSavings,
+    const currentPensionNetFraction = pensionNetFraction(
+      inputs.ratePensionBalance,
+      inputs.ageSavingsBalance,
     );
     const requiredAtRetirement =
       (inputs.desiredAnnualWithdrawal /
-        Math.max(CALCULATION_TOLERANCE, projectedPensionNetFraction)) *
+        Math.max(CALCULATION_TOLERANCE, currentPensionNetFraction)) *
       presentValueFactor(realPensionReturn, inputs.payoutYears);
     const pensionTargetToday =
       requiredAtRetirement /
