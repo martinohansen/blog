@@ -39,8 +39,7 @@
                   <label class="field">
                     <span
                       >Nuværende alder
-                      <i
-                        title="Beregningen bruger hele år fra dagens dato"
+                      <i title="Beregningen bruger hele år fra dagens dato"
                         >i</i
                       ></span
                     >
@@ -91,7 +90,7 @@
                     <span
                       >Ønsket årlig hævning
                       <i
-                        title="Beløbet vises i dagens kroner. Efter skat omfatter beregnet skat på frie midler og den indtastede effektive skat på ratepensionsudbetalinger."
+                        title="Beløbet vises i dagens kroner. Efter skat omfatter beregnet skat på frie midler og den indtastede effektive skat på udbetalinger fra ratepension og livrente."
                         >i</i
                       ></span
                     >
@@ -140,6 +139,16 @@
                       inputmode="numeric"
                       data-number-format="integer"
                       value="50.000"
+                      required
+                  /></label>
+                  <label class="field"
+                    ><span>Livrente</span
+                    ><input
+                      name="lifeAnnuityBalance"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="0"
                       required
                   /></label>
                   <label class="field"
@@ -217,6 +226,21 @@
                       required
                   /></label>
                   <label class="field"
+                    ><span
+                      >Livrente
+                      <i
+                        title="Din årlige indbetaling til livrente. Indbetalingen medregnes i planen, men optimeringen ændrer den ikke."
+                        >i</i
+                      ></span
+                    ><input
+                      name="annualLifeAnnuityContribution"
+                      type="text"
+                      inputmode="numeric"
+                      data-number-format="integer"
+                      value="0"
+                      required
+                  /></label>
+                  <label class="field"
                     ><span>Frie midler</span
                     ><input
                       name="annualFreeFundsContribution"
@@ -248,7 +272,7 @@
                     <span
                       >Omdiriger pension
                       <i
-                        title="Når pensionen har nået sit mål, flyttes nettoudgiften til de fremtidige pensionsindbetalinger over til frie midler. Indbetalinger op til rateloftet reduceres med den indtastede skatteværdi. Beløbet over loftet flyttes krone for krone."
+                        title="Når pensionen har nået sit mål, flyttes nettoudgiften til de fremtidige indbetalinger på ratepension og livrente samt indbetalingen på aldersopsparing over til frie midler."
                         >i</i
                       ></span
                     >
@@ -290,7 +314,9 @@
                     aria-controls="optimization-result"
                   >
                     <svg viewBox="0 0 20 20" aria-hidden="true">
-                      <path d="M3 5.5h11M11.5 2.5l3 3-3 3M17 14.5H6M8.5 11.5l-3 3 3 3" />
+                      <path
+                        d="M3 5.5h11M11.5 2.5l3 3-3 3M17 14.5H6M8.5 11.5l-3 3 3 3"
+                      />
                     </svg>
                     <span>Optimér for tidligere FIRE</span>
                   </button>
@@ -330,7 +356,10 @@
                     id="optimization-comparison"
                     class="optimization-comparison"
                   >
-                    <div class="optimization-column-headings" aria-hidden="true">
+                    <div
+                      class="optimization-column-headings"
+                      aria-hidden="true"
+                    >
                       <span></span><span>Før</span><span></span
                       ><span>Anbefalet</span>
                     </div>
@@ -416,9 +445,9 @@
                   >
                   <label class="field"
                     ><span
-                      >Skatteværdi af ratepensionsfradrag
+                      >Skatteværdi af pensionsfradrag
                       <i
-                        title="Den forventede skattebesparelse ved indbetaling på ratepension. Satsen bruges til at beregne nettoudgiften og må ikke forveksles med skatten ved udbetaling."
+                        title="Den forventede skattebesparelse ved fradragsberettigede indbetalinger på ratepension og livrente. Satsen bruges til at beregne nettoudgiften og må ikke forveksles med skatten ved udbetaling."
                         >i</i
                       ></span
                     ><span class="input-suffix"
@@ -433,9 +462,9 @@
                   >
                   <label class="field"
                     ><span
-                      >Skat på ratepensionsudbetaling
+                      >Skat på pensionsudbetaling
                       <i
-                        title="Din forventede effektive indkomstskat på udbetalinger fra ratepension. Aldersopsparing er fortsat skattefri ved udbetaling."
+                        title="Din forventede effektive indkomstskat på udbetalinger fra ratepension og livrente. Aldersopsparing er fortsat skattefri ved udbetaling."
                         >i</i
                       ></span
                     ><span class="input-suffix"
@@ -507,7 +536,8 @@
                         value="0"
                         required
                       /><b>%</b></span
-                  ></label>
+                    ></label
+                  >
                 </div>
               </details>
             </div>
@@ -594,71 +624,99 @@
                     </div>
                   </div>
                   <div class="phase-strip" aria-label="Faser i beregningen">
-                  <div
-                    id="phase-saving-pension"
-                    class="phase phase-saving phase-saving-pension"
-                  >
-                    <svg
-                      class="phase-icon phase-icon-pig"
-                      aria-hidden="true"
-                      viewBox="0 0 32 32"
+                    <div
+                      id="phase-saving-pension"
+                      class="phase phase-saving phase-saving-pension"
                     >
-                      <path d="M8.2 13.2c2-3 5.2-4.7 9.2-4.7 2.2 0 4.2.5 5.8 1.5l3.6-1.5v4.4c1 1.1 1.6 2.4 1.7 4h1.8v4.4h-3.2a10.7 10.7 0 0 1-3.4 3.2v3h-4.1v-1.6c-1.5.3-3 .3-4.5 0v1.6H11v-2.7c-2.9-1.5-4.7-4.1-4.7-7.1 0-1.7.6-3.2 1.9-4.5Z" />
-                      <path d="M13.4 11.5h7.1M6.6 17.1H4.8a2.7 2.7 0 0 1-2.7-2.7v-1.2" />
-                      <circle cx="23.6" cy="15" r=".9" />
-                      <path d="M15.5 8.4c.2-2.1 1.7-3.7 4-4.2.2 1.8-.6 3.3-2.3 4.3" />
-                    </svg>
-                    <b>Pension + frie midler</b
-                    ><small id="phase-saving-pension-ages"></small>
-                    <span class="phase-connector" aria-hidden="true"></span>
-                  </div>
-                  <div id="phase-saving-free" class="phase phase-saving-free">
-                    <svg
-                      class="phase-icon phase-icon-coins"
-                      aria-hidden="true"
-                      viewBox="0 0 32 32"
-                    >
-                      <ellipse cx="11" cy="7" rx="6.2" ry="3" />
-                      <path d="M4.8 7v4.2c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3V7" />
-                      <path d="M4.8 11.3v4.1c0 1.7 2.8 3 6.2 3 2.2 0 4.1-.5 5.2-1.3" />
-                      <ellipse cx="21.2" cy="17.1" rx="6.2" ry="3" />
-                      <path d="M15 17.1v4c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3v-4" />
-                      <path d="M15 21.2v4c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3v-4" />
-                    </svg>
-                    <b>Frie midler</b
-                    ><small id="phase-saving-free-ages"></small>
-                    <span class="phase-connector" aria-hidden="true"></span>
-                  </div>
-                  <div id="phase-fire" class="phase phase-fire">
-                    <svg
-                      class="phase-icon phase-icon-palm"
-                      aria-hidden="true"
-                      viewBox="0 0 32 32"
-                    >
-                      <path d="M13.7 28.2c1.2-5.4 2.2-10.1 2.4-14.5M19.3 28.2c-.6-5.8-1.4-10.5-3.2-14.5" />
-                      <path d="M16.1 13.7C13.6 9.4 9.6 7.4 5.2 8.6c4.2.8 7.7 2.8 10.9 5.1Z" />
-                      <path d="M16.1 13.7c-.8-4.8 1.6-8.8 5.9-10.2-.7 4.5-2.6 7.8-5.9 10.2Z" />
-                      <path d="M16.1 13.7c3-4.1 7.4-5.3 11.1-2.9-4.5.2-8.1 1.2-11.1 2.9Z" />
-                      <path d="M16.1 13.7c3.8.2 6.6 2.1 8.1 5.5-3.2-1.8-5.9-2.3-8.5-1.7" />
-                      <path d="M16.1 13.7c-3.8.5-6.4 2.8-7.3 6.2 2.7-2.1 5.3-3 7.3-2.7" />
-                      <path d="M10.4 28.2h12.8" />
-                    </svg>
-                    <b>FIRE</b><small id="phase-fire-ages"></small>
-                    <span class="phase-connector" aria-hidden="true"></span>
-                  </div>
-                  <div id="phase-pension" class="phase phase-pension">
-                    <svg
-                      class="phase-icon phase-icon-person"
-                      aria-hidden="true"
-                      viewBox="0 0 32 32"
-                    >
-                      <circle cx="16" cy="8" r="4.5" />
-                      <path d="M5.8 27.8v-2.2c0-6 4.5-10.5 10.2-10.5s10.2 4.5 10.2 10.5v2.2H5.8Z" />
-                      <path d="M10.6 27.8v-4.7M21.4 27.8v-4.7" />
-                    </svg>
-                    <b>Pension</b><small id="phase-pension-ages"></small>
-                    <span class="phase-connector" aria-hidden="true"></span>
-                  </div>
+                      <svg
+                        class="phase-icon phase-icon-pig"
+                        aria-hidden="true"
+                        viewBox="0 0 32 32"
+                      >
+                        <path
+                          d="M8.2 13.2c2-3 5.2-4.7 9.2-4.7 2.2 0 4.2.5 5.8 1.5l3.6-1.5v4.4c1 1.1 1.6 2.4 1.7 4h1.8v4.4h-3.2a10.7 10.7 0 0 1-3.4 3.2v3h-4.1v-1.6c-1.5.3-3 .3-4.5 0v1.6H11v-2.7c-2.9-1.5-4.7-4.1-4.7-7.1 0-1.7.6-3.2 1.9-4.5Z"
+                        />
+                        <path
+                          d="M13.4 11.5h7.1M6.6 17.1H4.8a2.7 2.7 0 0 1-2.7-2.7v-1.2"
+                        />
+                        <circle cx="23.6" cy="15" r=".9" />
+                        <path
+                          d="M15.5 8.4c.2-2.1 1.7-3.7 4-4.2.2 1.8-.6 3.3-2.3 4.3"
+                        />
+                      </svg>
+                      <b>Pension + frie midler</b
+                      ><small id="phase-saving-pension-ages"></small>
+                      <span class="phase-connector" aria-hidden="true"></span>
+                    </div>
+                    <div id="phase-saving-free" class="phase phase-saving-free">
+                      <svg
+                        class="phase-icon phase-icon-coins"
+                        aria-hidden="true"
+                        viewBox="0 0 32 32"
+                      >
+                        <ellipse cx="11" cy="7" rx="6.2" ry="3" />
+                        <path
+                          d="M4.8 7v4.2c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3V7"
+                        />
+                        <path
+                          d="M4.8 11.3v4.1c0 1.7 2.8 3 6.2 3 2.2 0 4.1-.5 5.2-1.3"
+                        />
+                        <ellipse cx="21.2" cy="17.1" rx="6.2" ry="3" />
+                        <path
+                          d="M15 17.1v4c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3v-4"
+                        />
+                        <path
+                          d="M15 21.2v4c0 1.7 2.8 3 6.2 3s6.2-1.3 6.2-3v-4"
+                        />
+                      </svg>
+                      <b>Frie midler</b
+                      ><small id="phase-saving-free-ages"></small>
+                      <span class="phase-connector" aria-hidden="true"></span>
+                    </div>
+                    <div id="phase-fire" class="phase phase-fire">
+                      <svg
+                        class="phase-icon phase-icon-palm"
+                        aria-hidden="true"
+                        viewBox="0 0 32 32"
+                      >
+                        <path
+                          d="M13.7 28.2c1.2-5.4 2.2-10.1 2.4-14.5M19.3 28.2c-.6-5.8-1.4-10.5-3.2-14.5"
+                        />
+                        <path
+                          d="M16.1 13.7C13.6 9.4 9.6 7.4 5.2 8.6c4.2.8 7.7 2.8 10.9 5.1Z"
+                        />
+                        <path
+                          d="M16.1 13.7c-.8-4.8 1.6-8.8 5.9-10.2-.7 4.5-2.6 7.8-5.9 10.2Z"
+                        />
+                        <path
+                          d="M16.1 13.7c3-4.1 7.4-5.3 11.1-2.9-4.5.2-8.1 1.2-11.1 2.9Z"
+                        />
+                        <path
+                          d="M16.1 13.7c3.8.2 6.6 2.1 8.1 5.5-3.2-1.8-5.9-2.3-8.5-1.7"
+                        />
+                        <path
+                          d="M16.1 13.7c-3.8.5-6.4 2.8-7.3 6.2 2.7-2.1 5.3-3 7.3-2.7"
+                        />
+                        <path d="M10.4 28.2h12.8" />
+                      </svg>
+                      <b>FIRE</b><small id="phase-fire-ages"></small>
+                      <span class="phase-connector" aria-hidden="true"></span>
+                    </div>
+                    <div id="phase-pension" class="phase phase-pension">
+                      <svg
+                        class="phase-icon phase-icon-person"
+                        aria-hidden="true"
+                        viewBox="0 0 32 32"
+                      >
+                        <circle cx="16" cy="8" r="4.5" />
+                        <path
+                          d="M5.8 27.8v-2.2c0-6 4.5-10.5 10.2-10.5s10.2 4.5 10.2 10.5v2.2H5.8Z"
+                        />
+                        <path d="M10.6 27.8v-4.7M21.4 27.8v-4.7" />
+                      </svg>
+                      <b>Pension</b><small id="phase-pension-ages"></small>
+                      <span class="phase-connector" aria-hidden="true"></span>
+                    </div>
                   </div>
                   <div id="wealth-chart" class="wealth-chart"></div>
                   <div class="chart-legend" aria-label="Grafens linjer">
@@ -685,30 +743,30 @@
                       <th>Alder</th>
                       <th>Fase</th>
                       <th>Ratepension</th>
+                      <th>Livrente</th>
                       <th>Aldersopsparing</th>
                       <th>Frie midler</th>
                       <th>Aktiesparekonto</th>
                       <th>Samlet formue</th>
                       <th>Indbetaling</th>
-                      <th>Udbetaling før skat</th>
-                      <th>Udbetaling efter skat</th>
+                      <th>Brutto-udb.</th>
+                      <th>Netto-udb.</th>
                       <th>Lagerskat</th>
                       <th>Effektiv skat</th>
-                      <th>Udbetaling fra</th>
+                      <th>Udb. fra</th>
                     </tr>
                   </thead>
                   <tbody id="projection-body"></tbody>
                 </table>
               </div>
               <p id="projection-note" class="projection-note">
-                Datoerne er årlige beregningstidspunkter fra dagens dato. Før
-                skat viser den samlede hævning fra formuen. Efter skat viser
-                beløbet efter beregnet skat. Lagerskat viser skatten af årets
-                positive afkast på den lagerbeskattede andel af frie midler og
-                er trukket fra formuen frem mod næste dato. Effektiv skat viser
-                skatten på årets samlede
-                udbetaling som procent af udbetalingen før skat. Lagerskat
-                indgår ikke i denne procentsats.
+                Datoerne er årlige beregningstidspunkter fra dagens dato.
+                Brutto-udb. viser den samlede hævning fra formuen. Netto-udb.
+                viser beløbet efter beregnet skat. Lagerskat viser skatten af
+                årets positive afkast på den lagerbeskattede andel af frie
+                midler og er trukket fra formuen frem mod næste dato. Effektiv
+                skat viser skatten på årets samlede udbetaling som procent af
+                brutto-udb. Lagerskat indgår ikke i denne procentsats.
               </p>
             </details>
           </section>
@@ -739,7 +797,7 @@
                 <dd id="total-free-funds-tax"></dd>
               </div>
               <div>
-                <dt>Samlet skat på ratepensionsudbetalinger</dt>
+                <dt>Samlet skat på pensionsudbetalinger</dt>
                 <dd id="total-pension-withdrawal-tax"></dd>
               </div>
               <div>
@@ -828,23 +886,25 @@
             kroner. Indbetalinger antages at ske midt i hvert beregningsår som
             en tilnærmelse til løbende indbetalinger. Det giver årets
             indbetalinger et halvt års beregnet afkast. Hævninger sker ved
-            starten af hver udbetalingsperiode.
-            Den valgte procentdel af frie midler lagerbeskattes. Resten
-            realisationsbeskattes. Fordelingen anvendes på startformuen,
-            den samlede købspris og fremtidige indbetalinger. Ved
-            realisationsbeskatning beregnes skat af gevinsten ved salg. Ved
-            lagerbeskatning beregnes skat årligt af positive afkast og trækkes
-            fra formuen.
-            Beregningen bruger 2026-satserne for en enlig uden anden
-            aktieindkomst og medregner ikke udbytter eller fremførte tab. ASK beskattes kun
-            af fremtidige afkast fra den indtastede startværdi. Beregningen
-            medregner ikke allerede optjent ASK-skat. Ratepensionsudbetalinger
-            beskattes med den indtastede effektive sats. Den indtastede
-            skatteværdi anvendes på ratepensionsindbetalinger op til
-            2026-rateloftet. Indbetalinger over loftet medregnes til fuld
-            nettoudgift og som hovedstol uden fradrag.
-            Resultatet er et overslag og er ikke investerings- eller
-            pensionsrådgivning.
+            starten af hver udbetalingsperiode. Den valgte procentdel af frie
+            midler lagerbeskattes. Resten realisationsbeskattes. Fordelingen
+            anvendes på startformuen, den samlede købspris og fremtidige
+            indbetalinger. Ved realisationsbeskatning beregnes skat af gevinsten
+            ved salg. Ved lagerbeskatning beregnes skat årligt af positive
+            afkast og trækkes fra formuen. Beregningen bruger 2026-satserne for
+            en enlig uden anden aktieindkomst og medregner ikke udbytter eller
+            fremførte tab. ASK beskattes kun af fremtidige afkast fra den
+            indtastede startværdi. Beregningen medregner ikke allerede optjent
+            ASK-skat. Udbetalinger fra ratepension og livrente beskattes med den
+            indtastede effektive sats. Den indtastede skatteværdi anvendes på
+            ratepensionsindbetalinger op til 2026-rateloftet og på hele den
+            indtastede livrenteindbetaling. Private livrenteindbetalinger over
+            opfyldningsfradraget kan have andre fradragsforløb. Livrenten
+            fordeles over den valgte udbetalingsperiode som en forenkling.
+            Optimeringen ændrer ikke livrenteindbetalingen. Indbetalinger på
+            ratepension over loftet medregnes til fuld nettoudgift og som
+            hovedstol uden fradrag. Resultatet er et overslag og er ikke
+            investerings- eller pensionsrådgivning.
             <span class="disclaimer-links">
               <a
                 class="source-link"

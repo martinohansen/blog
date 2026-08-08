@@ -23,9 +23,7 @@
   const optimizeButton = document.querySelector("#optimize-contributions");
   const optimizeButtonLabel = optimizeButton.querySelector("span");
   const optimizationResult = document.querySelector("#optimization-result");
-  const optimizationHeading = document.querySelector(
-    "#optimization-heading",
-  );
+  const optimizationHeading = document.querySelector("#optimization-heading");
   const optimizationComparison = document.querySelector(
     "#optimization-comparison",
   );
@@ -36,9 +34,7 @@
   const optimizationAllocationBar = document.querySelector(
     "#optimization-allocation-bar",
   );
-  const applyOptimizationButton = document.querySelector(
-    "#apply-optimization",
-  );
+  const applyOptimizationButton = document.querySelector("#apply-optimization");
   const { calculateFire, optimizeAnnualContributions } =
     window.FireCalculations;
   let latestOptimization = null;
@@ -237,6 +233,7 @@
       payoutYears: readNumber("payoutYears"),
       desiredAnnualWithdrawal: readNumber("desiredAnnualWithdrawal"),
       ratePensionBalance: readNumber("ratePensionBalance"),
+      lifeAnnuityBalance: readNumber("lifeAnnuityBalance"),
       ratePensionNonDeductibleBasis: readNumber(
         "ratePensionNonDeductibleBasis",
       ),
@@ -246,6 +243,9 @@
       askBalance: readNumber("askBalance"),
       annualRatePensionContribution: readNumber(
         "annualRatePensionContribution",
+      ),
+      annualLifeAnnuityContribution: readNumber(
+        "annualLifeAnnuityContribution",
       ),
       annualAgeSavingsContribution: readNumber("annualAgeSavingsContribution"),
       annualFreeFundsContribution: readNumber("annualFreeFundsContribution"),
@@ -257,10 +257,7 @@
       ),
       pensionWithdrawalTax: readNumber("pensionWithdrawalTax", 100),
       askTax: readNumber("askTax", 100),
-      freeFundsInventoryShare: readNumber(
-        "freeFundsInventoryShare",
-        100,
-      ),
+      freeFundsInventoryShare: readNumber("freeFundsInventoryShare", 100),
       returnRate: readNumber("returnRate", 100),
       inflationRate: readNumber("inflationRate", 100),
       withdrawalAfterTax: form.elements.withdrawalAfterTax.checked,
@@ -333,7 +330,7 @@
       .querySelectorAll(".amount-step-button")
       .forEach((button) => {
         button.disabled = isFullyInventoryTaxed;
-    });
+      });
     freeFundsCostBasisField.querySelector("i").title = isFullyInventoryTaxed
       ? "Den samlede købspris bruges ikke, når alle frie midler er lagerbeskattede."
       : "Det samlede beløb, du betalte for de investeringer i frie midler, som du stadig ejer.";
@@ -383,6 +380,7 @@
       current,
       recommended,
       annualNetBudget,
+      fixedAnnualLifeAnnuityContribution,
       ratePensionContributionTaxRelief,
       precision,
       limits,
@@ -404,10 +402,7 @@
     applyOptimizationButton.disabled =
       optimization.status === "current-optimal";
     setText("optimization-current-fire", fireAgeLabel(current.fireAge));
-    setText(
-      "optimization-recommended-fire",
-      fireAgeLabel(recommended.fireAge),
-    );
+    setText("optimization-recommended-fire", fireAgeLabel(recommended.fireAge));
 
     valueIds.forEach(([id, key]) => {
       setText(`optimization-current-${id}`, currency.format(current[key]));
@@ -443,10 +438,14 @@
       `${(recommended.annualFreeFundsContribution / safeTotal) * 100}%`,
     );
 
+    const fixedLifeAnnuityNote =
+      fixedAnnualLifeAnnuityContribution > 0
+        ? ` Livrenteindbetalingen på ${currency.format(fixedAnnualLifeAnnuityContribution)} holdes fast.`
+        : "";
     optimizationNote.textContent =
       optimization.status === "limits-applied"
-        ? `Din nuværende fordeling overskrider loftet for aldersopsparing. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og bruger 2026-lofterne.`
-        : `Samme årlige nettobudget på ${currency.format(annualNetBudget)} Den samlede ratepensionsindbetaling er afprøvet i trin på ${currency.format(precision)}`;
+        ? `Din nuværende fordeling overskrider loftet for aldersopsparing. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og bruger 2026-lofterne.${fixedLifeAnnuityNote}`
+        : `Samme årlige nettobudget på ${currency.format(annualNetBudget)} Den samlede ratepensionsindbetaling er afprøvet i trin på ${currency.format(precision)}${fixedLifeAnnuityNote}`;
   }
 
   function runContributionOptimization() {
@@ -509,6 +508,7 @@
         <td>${ages.format(row.age)}</td>
         <td>${row.phase}</td>
         <td>${currency.format(row.ratePension)}</td>
+        <td>${currency.format(row.lifeAnnuity)}</td>
         <td>${currency.format(row.ageSavings)}</td>
         <td>${currency.format(row.freeFunds)}</td>
         <td>${currency.format(row.ask)}</td>
@@ -636,7 +636,8 @@
     const pensionStopAge = calculation.pensionStopRow
       ? Math.min(calculation.pensionStopRow.age, fireAge)
       : fireAge;
-    const pensionValue = (row) => row.ratePension + row.ageSavings;
+    const pensionValue = (row) =>
+      row.ratePension + row.lifeAnnuity + row.ageSavings;
     const freeFundsValue = (row) => row.freeFunds + row.ask;
     const rawMax = Math.max(
       ...rows.map((row) => Math.max(pensionValue(row), freeFundsValue(row))),
@@ -967,7 +968,9 @@
     setText("pension-stop-date", stop ? dateFormat.format(stop.date) : "—");
     setText(
       "pension-at-stop",
-      stop ? currency.format(stop.ratePension + stop.ageSavings) : "—",
+      stop
+        ? currency.format(stop.ratePension + stop.lifeAnnuity + stop.ageSavings)
+        : "—",
     );
     setText(
       "pension-target-at-stop",
@@ -996,7 +999,9 @@
     setText(
       "final-pension",
       currency.format(
-        calculation.finalRow.ratePension + calculation.finalRow.ageSavings,
+        calculation.finalRow.ratePension +
+          calculation.finalRow.lifeAnnuity +
+          calculation.finalRow.ageSavings,
       ),
     );
     setText(
@@ -1055,8 +1060,7 @@
       renderInflationState();
     }
     if (
-      event.target ===
-      form.elements.redirectPensionContributionsToFreeFunds
+      event.target === form.elements.redirectPensionContributionsToFreeFunds
     ) {
       renderPensionRedirectState();
     }
