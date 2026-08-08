@@ -1110,6 +1110,29 @@ assertClose(
   fullyInventoryTaxed.planRows.find((row) => row.age === 31).freeFunds,
   107300,
 );
+
+const mixedDrawdownTax = calculateFire(
+  {
+    ...mixedTaxBaseInputs,
+    desiredAnnualWithdrawal: 100000,
+    freeFundsBalance: 1000000,
+    freeFundsCostBasis: 0,
+    freeFundsInventoryShare: 0.5,
+  },
+  asOfDate,
+);
+const mixedDrawdownStart = mixedDrawdownTax.planRows.find(
+  (row) => row.age === 30,
+);
+const mixedDrawdownAge31 = mixedDrawdownTax.planRows.find(
+  (row) => row.age === 31,
+);
+assertClose(mixedDrawdownStart.withdrawalTax, 13500);
+assertClose(mixedDrawdownStart.annualFreeFundsTax, 14490);
+assertClose(mixedDrawdownAge31.freeFundsRealization, 495000);
+assertClose(mixedDrawdownAge31.freeFundsInventory, 480510);
+assertClose(mixedDrawdownAge31.freeFunds, 975510);
+
 assert.throws(
   () =>
     calculateFire(

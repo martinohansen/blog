@@ -672,22 +672,30 @@
     }
 
     function growBalancesWithTax(balances, priorTaxableGain = 0) {
+      const inventoryBalance = balances[FREE_FUNDS_INVENTORY];
       const inventoryTax = inventoryTaxForBalance(
-        balances[FREE_FUNDS_INVENTORY],
+        inventoryBalance,
         priorTaxableGain,
       );
       const currentRates = ratesForBalances(balances);
       const grownBalances = growBalances(balances, currentRates);
+
+      grownBalances[FREE_FUNDS_INVENTORY] = Math.max(
+        0,
+        (inventoryBalance * (1 + inputs.returnRate) - inventoryTax) /
+          (1 + inputs.inflationRate),
+      );
+
       const realTax = inventoryTax / (1 + inputs.inflationRate);
       const realTaxableGain = usesInventoryTax
         ? Math.max(
             0,
-            balances[FREE_FUNDS_INVENTORY] * inputs.returnRate,
+            inventoryBalance * inputs.returnRate,
           ) /
           (1 + inputs.inflationRate)
         : 0;
 
-      assertFinite(realTax, realTaxableGain);
+      assertFinite(...grownBalances, realTax, realTaxableGain);
       return {
         balances: grownBalances,
         freeFundsTax: realTax,
