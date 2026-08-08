@@ -333,10 +333,10 @@
       .querySelectorAll(".amount-step-button")
       .forEach((button) => {
         button.disabled = isFullyInventoryTaxed;
-      });
+    });
     freeFundsCostBasisField.querySelector("i").title = isFullyInventoryTaxed
-      ? "Anskaffelsessummen bruges ikke, når alle frie midler er lagerbeskattede."
-      : "Den indtastede anskaffelsessum fordeles med samme procent som formuen. Kun den realisationsbeskattede del bruges i skatteberegningen.";
+      ? "Den samlede købspris bruges ikke, når alle frie midler er lagerbeskattede."
+      : "Det samlede beløb, du betalte for de investeringer i frie midler, som du stadig ejer.";
     setText(
       "total-free-funds-tax-label",
       isFullyInventoryTaxed

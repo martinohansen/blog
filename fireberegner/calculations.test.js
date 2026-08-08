@@ -210,7 +210,7 @@ assert.throws(
       },
       asOfDate,
     ),
-  /Anskaffelsessummen må ikke være højere/,
+  /Den samlede købspris må ikke være højere/,
 );
 assert.throws(
   () => calculateFire({ ...standardInputs, returnRate: -0.001 }, asOfDate),

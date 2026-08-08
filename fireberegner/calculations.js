@@ -563,7 +563,7 @@
       inputs.freeFundsCostBasis > inputs.freeFundsBalance
     ) {
       throw new Error(
-        "Anskaffelsessummen må ikke være højere end værdien af de frie midler.",
+        "Den samlede købspris må ikke være højere end værdien af de frie midler.",
       );
     }
 
