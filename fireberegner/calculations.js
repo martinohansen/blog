@@ -1533,6 +1533,25 @@
         : requiredAtRetirement /
           Math.pow(1 + realPensionReturn, yearsToRetirement);
     const finalRow = planRows[planRows.length - 1];
+    const finalTaxFreeRatePension = Math.min(
+      finalRow.ratePension,
+      finalRow.ratePensionNonDeductibleBasis,
+    );
+    const finalTaxablePension =
+      Math.max(0, finalRow.ratePension - finalTaxFreeRatePension) +
+      finalRow.lifeAnnuity;
+    const finalRealizationGain = Math.max(
+      0,
+      finalRow.freeFundsRealization - finalRow.freeFundsCostBasis,
+    );
+    const finalReserveAfterTax =
+      finalTaxFreeRatePension +
+      finalTaxablePension * (1 - pensionWithdrawalTax) +
+      finalRow.ageSavings +
+      finalRow.freeFundsRealization -
+      calculateShareIncomeTax(finalRealizationGain) +
+      finalRow.freeFundsInventory +
+      finalRow.ask;
     const totalFreeFundsWithdrawalTax = planRows.reduce(
       (total, row) => total + row.withdrawalTax,
       0,
@@ -1588,6 +1607,7 @@
       requiredAtRetirement ?? 0,
       pensionTargetToday ?? 0,
       pensionTargetAtStop ?? 0,
+      finalReserveAfterTax,
       totalFreeFundsTax,
       totalPensionWithdrawalTax,
       totalFreeFundsWithdrawals,
@@ -1646,6 +1666,7 @@
       rows: milestoneRows,
       planRows,
       finalRow,
+      finalReserveAfterTax,
     };
   }
 
@@ -1658,7 +1679,7 @@
       ),
       fireAge: calculation.fireRow?.age ?? null,
       fireDate: calculation.fireRow ? new Date(calculation.fireRow.date) : null,
-      finalReserve: calculation.finalRow.totalBalance,
+      finalReserveAfterTax: calculation.finalReserveAfterTax,
       finalAge: calculation.finalRow.age,
     };
   }
@@ -1703,8 +1724,8 @@
 
     return (
       firstFireTime - secondFireTime ||
-      second.calculation.finalRow.totalBalance -
-        first.calculation.finalRow.totalBalance ||
+      second.calculation.finalReserveAfterTax -
+        first.calculation.finalReserveAfterTax ||
       first.distance - second.distance ||
       second.candidate.annualFreeFundsContribution -
         first.candidate.annualFreeFundsContribution ||

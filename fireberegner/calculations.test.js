@@ -1447,6 +1447,65 @@ assertClose(firstAfterTaxPensionWithdrawal.netWithdrawal, 100);
 assertClose(afterTaxPension.requiredAtRetirement, 5000 / 3);
 assertClose(afterTaxPension.finalRow.totalBalance, 0);
 
+const afterTaxAgeSavings = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 10,
+    desiredAnnualWithdrawal: 100,
+    ratePensionBalance: 0,
+    lifeAnnuityBalance: 0,
+    ageSavingsBalance: 1000,
+    freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualLifeAnnuityContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    pensionWithdrawalTax: 0.4,
+    returnRate: 0,
+    inflationRate: 0,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+);
+const firstAgeSavingsWithdrawal = afterTaxAgeSavings.planRows.find(
+  (row) => row.phase === "Pension" && row.withdrawal > 0,
+);
+assert.equal(afterTaxAgeSavings.isFullyFunded, true);
+assertClose(firstAgeSavingsWithdrawal.withdrawal, 100);
+assertClose(firstAgeSavingsWithdrawal.pensionWithdrawalTax, 0);
+assertClose(firstAgeSavingsWithdrawal.netWithdrawal, 100);
+
+const afterTaxReserve = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 30,
+    retirementAge: 31,
+    payoutYears: 10,
+    desiredAnnualWithdrawal: 0,
+    ratePensionBalance: 100,
+    lifeAnnuityBalance: 100,
+    ageSavingsBalance: 100,
+    freeFundsBalance: 100,
+    freeFundsCostBasis: 40,
+    askBalance: 100,
+    annualRatePensionContribution: 0,
+    annualLifeAnnuityContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 0,
+    pensionWithdrawalTax: 0.4,
+    returnRate: 0,
+    inflationRate: 0,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+);
+assertClose(afterTaxReserve.finalRow.totalBalance, 500);
+assertClose(afterTaxReserve.finalReserveAfterTax, 403.8);
+
 const beforeTaxPension = calculateFire(
   {
     ...standardInputs,
@@ -1770,8 +1829,8 @@ if (
   optimizedContributions.current.fireDate.getTime()
 ) {
   assert.ok(
-    optimizedContributions.recommended.finalReserve >=
-      optimizedContributions.current.finalReserve,
+    optimizedContributions.recommended.finalReserveAfterTax >=
+      optimizedContributions.current.finalReserveAfterTax,
   );
 }
 assertClose(

@@ -400,7 +400,7 @@
       ["age-savings", "annualAgeSavingsContribution"],
       ["free", "annualFreeFundsContribution"],
       ["tax-saving", "annualPensionTaxSaving"],
-      ["reserve", "finalReserve"],
+      ["reserve", "finalReserveAfterTax"],
     ];
 
     optimizationHeading.textContent = headings[optimization.status];
@@ -465,7 +465,7 @@
       optimization.status === "limits-applied"
         ? `Din nuværende fordeling overskrider et privat 2026-loft. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og holder sig under lofterne. Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet.`
         : optimization.status === "larger-reserve"
-          ? `FIRE-året er uændret. Anbefalingen giver den største beregnede reserve ved planens slutning med samme årlige nettobudget på ${currency.format(annualNetBudget)}.`
+          ? `FIRE-året er uændret. Anbefalingen giver den største beregnede reserve efter skat ved planens slutning med samme årlige nettobudget på ${currency.format(annualNetBudget)}.`
           : `Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet med samme årlige nettobudget på ${currency.format(annualNetBudget)} og trin på ${currency.format(precision)}`;
   }
 
