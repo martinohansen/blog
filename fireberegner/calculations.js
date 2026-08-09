@@ -18,9 +18,9 @@
     mixed: "mixed",
   });
   const CONTRIBUTION_SEARCH_STEP = 1000;
-  const MAX_CONTRIBUTION_SEARCH_STEPS = 250;
   const CONTRIBUTION_LIMITS = Object.freeze({
     ratePension: 68700,
+    lifeAnnuity: 63200,
     ageSavings: 9900,
     ageSavingsHigh: 64200,
   });
@@ -75,30 +75,48 @@
     return netCost;
   }
 
+  function lifeAnnuityContributionNetCost(totalContribution, taxRelief) {
+    const deductibleContribution = Math.min(
+      totalContribution,
+      CONTRIBUTION_LIMITS.lifeAnnuity,
+    );
+    const nonDeductibleContribution = Math.max(
+      0,
+      totalContribution - deductibleContribution,
+    );
+    const netCost =
+      deductibleContribution * (1 - taxRelief) + nonDeductibleContribution;
+    assertFinite(netCost);
+    return netCost;
+  }
+
+  function pensionContributionTaxSaving(contributions, taxRelief) {
+    const rateContribution = contributions.annualRatePensionContribution ?? 0;
+    const lifeAnnuityContribution =
+      contributions.annualLifeAnnuityContribution ?? 0;
+    const saving =
+      rateContribution -
+      ratePensionContributionNetCost(rateContribution, taxRelief) +
+      lifeAnnuityContribution -
+      lifeAnnuityContributionNetCost(lifeAnnuityContribution, taxRelief);
+    assertFinite(saving);
+    return saving;
+  }
+
   function contributionNetBudget(contributions, taxRelief) {
     const budget =
       ratePensionContributionNetCost(
         contributions.annualRatePensionContribution,
         taxRelief,
       ) +
-      (contributions.annualLifeAnnuityContribution ?? 0) * (1 - taxRelief) +
+      lifeAnnuityContributionNetCost(
+        contributions.annualLifeAnnuityContribution ?? 0,
+        taxRelief,
+      ) +
       contributions.annualAgeSavingsContribution +
       contributions.annualFreeFundsContribution;
     assertFinite(budget);
     return budget;
-  }
-
-  function maximumRatePensionContributionForBudget(budget, taxRelief) {
-    const deductibleNetCost = 1 - taxRelief;
-    const netCostAtLimit = CONTRIBUTION_LIMITS.ratePension * deductibleNetCost;
-
-    if (budget <= netCostAtLimit && deductibleNetCost > 0) {
-      return budget / deductibleNetCost;
-    }
-
-    return (
-      CONTRIBUTION_LIMITS.ratePension + Math.max(0, budget - netCostAtLimit)
-    );
   }
 
   function ageSavingsContributionLimit(inputs) {
@@ -1432,7 +1450,10 @@
           ? deductibleRatePensionContribution *
               (1 - ratePensionContributionTaxRelief) +
             nonDeductibleRatePensionContribution +
-            lifeAnnuityContribution * (1 - ratePensionContributionTaxRelief) +
+            lifeAnnuityContributionNetCost(
+              lifeAnnuityContribution,
+              ratePensionContributionTaxRelief,
+            ) +
             ageSavingsContribution
           : 0;
       const totalFreeFundsContribution =
@@ -1560,6 +1581,9 @@
     const ageSavingsContributionLimitExceeded =
       inputs.annualAgeSavingsContribution >
       selectedAgeSavingsContributionLimit + MONEY_TOLERANCE;
+    const lifeAnnuityContributionLimitExceeded =
+      annualLifeAnnuityContribution >
+      CONTRIBUTION_LIMITS.lifeAnnuity + MONEY_TOLERANCE;
     assertFinite(
       requiredAtRetirement ?? 0,
       pensionTargetToday ?? 0,
@@ -1599,10 +1623,13 @@
       pensionStopRow,
       pensionTargetAtStop,
       annualNetContributionBudget,
+      ratePensionContributionTaxRelief,
       ratePensionContributionLimit: CONTRIBUTION_LIMITS.ratePension,
       annualDeductibleRatePensionContribution,
       annualNonDeductibleRatePensionContribution,
       annualLifeAnnuityContribution,
+      lifeAnnuityContributionLimit: CONTRIBUTION_LIMITS.lifeAnnuity,
+      lifeAnnuityContributionLimitExceeded,
       ageSavingsContributionLimit: selectedAgeSavingsContributionLimit,
       ageSavingsContributionLimitExceeded,
       annualAgeSavingsContributionRedirected,
@@ -1625,36 +1652,15 @@
   function contributionSnapshot(contributions, calculation) {
     return {
       ...contributions,
+      annualPensionTaxSaving: pensionContributionTaxSaving(
+        contributions,
+        calculation.ratePensionContributionTaxRelief,
+      ),
       fireAge: calculation.fireRow?.age ?? null,
       fireDate: calculation.fireRow ? new Date(calculation.fireRow.date) : null,
+      finalReserve: calculation.finalRow.totalBalance,
+      finalAge: calculation.finalRow.age,
     };
-  }
-
-  function contributionSearchStep(maximum) {
-    return Math.max(
-      CONTRIBUTION_SEARCH_STEP,
-      Math.ceil(
-        maximum / MAX_CONTRIBUTION_SEARCH_STEPS / CONTRIBUTION_SEARCH_STEP,
-      ) * CONTRIBUTION_SEARCH_STEP,
-    );
-  }
-
-  function contributionCandidates(maximum, current, step) {
-    const candidates = new Set([0, maximum]);
-
-    for (
-      let contribution = step;
-      contribution < maximum;
-      contribution += step
-    ) {
-      candidates.add(contribution);
-    }
-
-    if (current >= 0 && current <= maximum) {
-      candidates.add(current);
-    }
-
-    return [...candidates].sort((first, second) => first - second);
   }
 
   function contributionDistance(first, second) {
@@ -1662,6 +1668,10 @@
       Math.abs(
         first.annualRatePensionContribution -
           second.annualRatePensionContribution,
+      ) +
+      Math.abs(
+        first.annualLifeAnnuityContribution -
+          second.annualLifeAnnuityContribution,
       ) +
       Math.abs(
         first.annualAgeSavingsContribution -
@@ -1673,12 +1683,62 @@
     );
   }
 
+  function candidateKey(candidate) {
+    return [
+      candidate.annualRatePensionContribution,
+      candidate.annualLifeAnnuityContribution,
+      candidate.annualAgeSavingsContribution,
+    ]
+      .map((value) => value.toFixed(4))
+      .join(":");
+  }
+
+  function compareEvaluations(first, second) {
+    const firstFireTime = first.calculation.fireRow
+      ? first.calculation.fireRow.date.getTime()
+      : Number.POSITIVE_INFINITY;
+    const secondFireTime = second.calculation.fireRow
+      ? second.calculation.fireRow.date.getTime()
+      : Number.POSITIVE_INFINITY;
+
+    return (
+      firstFireTime - secondFireTime ||
+      second.calculation.finalRow.totalBalance -
+        first.calculation.finalRow.totalBalance ||
+      first.distance - second.distance ||
+      second.candidate.annualFreeFundsContribution -
+        first.candidate.annualFreeFundsContribution ||
+      candidateKey(first.candidate).localeCompare(
+        candidateKey(second.candidate),
+      )
+    );
+  }
+
+  function contributionCandidates(maximum, current) {
+    const candidates = new Set([0, maximum]);
+
+    for (
+      let contribution = CONTRIBUTION_SEARCH_STEP;
+      contribution < maximum;
+      contribution += CONTRIBUTION_SEARCH_STEP
+    ) {
+      candidates.add(contribution);
+    }
+    if (current >= 0 && current <= maximum) {
+      candidates.add(current);
+    }
+
+    return [...candidates].sort((first, second) => first - second);
+  }
+
   function optimizeAnnualContributions(inputs, calculationDate = new Date()) {
     const currentCalculation = calculateFire(inputs, calculationDate, {
       includeBridgeCapacity: false,
     });
     const currentContributions = {
       annualRatePensionContribution: inputs.annualRatePensionContribution,
+      annualLifeAnnuityContribution:
+        inputs.annualLifeAnnuityContribution ?? 0,
       annualAgeSavingsContribution: inputs.annualAgeSavingsContribution,
       annualFreeFundsContribution: inputs.annualFreeFundsContribution,
     };
@@ -1690,111 +1750,146 @@
       currentContributions,
       ratePensionContributionTaxRelief,
     );
-    const maximumRatePensionContribution =
-      maximumRatePensionContributionForBudget(
-        annualNetBudget,
+    const currentContributionsAreWithinLimits =
+      currentContributions.annualRatePensionContribution <=
+        CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE &&
+      currentContributions.annualLifeAnnuityContribution <=
+        CONTRIBUTION_LIMITS.lifeAnnuity + MONEY_TOLERANCE &&
+      currentContributions.annualAgeSavingsContribution <=
+        selectedAgeSavingsContributionLimit + MONEY_TOLERANCE;
+
+    function completeCandidate(ratePension, lifeAnnuity, ageSavings) {
+      if (
+        ratePension < -MONEY_TOLERANCE ||
+        ratePension > CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE ||
+        lifeAnnuity < -MONEY_TOLERANCE ||
+        lifeAnnuity > CONTRIBUTION_LIMITS.lifeAnnuity + MONEY_TOLERANCE ||
+        ageSavings < -MONEY_TOLERANCE ||
+        ageSavings > selectedAgeSavingsContributionLimit + MONEY_TOLERANCE
+      ) {
+        return null;
+      }
+
+      const candidate = {
+        annualRatePensionContribution: Math.max(0, ratePension),
+        annualLifeAnnuityContribution: Math.max(0, lifeAnnuity),
+        annualAgeSavingsContribution: Math.max(0, ageSavings),
+        annualFreeFundsContribution: 0,
+      };
+      const pensionAndAgeNetCost = contributionNetBudget(
+        candidate,
         ratePensionContributionTaxRelief,
       );
-    const maximumAgeSavingsContribution = Math.min(
-      selectedAgeSavingsContributionLimit,
-      annualNetBudget,
-    );
-    const ratePensionSearchStep = contributionSearchStep(
-      maximumRatePensionContribution,
-    );
-    const ageSavingsSearchStep = contributionSearchStep(
-      maximumAgeSavingsContribution,
-    );
+      const freeFunds = annualNetBudget - pensionAndAgeNetCost;
+
+      if (freeFunds < -MONEY_TOLERANCE) {
+        return null;
+      }
+      candidate.annualFreeFundsContribution = Math.max(0, freeFunds);
+      return candidate;
+    }
+
+    function evaluate(candidate) {
+      const calculation = calculateFire(
+        { ...inputs, ...candidate },
+        calculationDate,
+        { includeBridgeCapacity: false },
+      );
+      const evaluation = {
+        candidate,
+        calculation,
+        distance: contributionDistance(candidate, currentContributions),
+      };
+      return evaluation;
+    }
+
+    function splitPensionContribution(totalPensionContribution) {
+      const annualRatePensionContribution = Math.min(
+        CONTRIBUTION_LIMITS.ratePension,
+        totalPensionContribution,
+      );
+
+      return {
+        annualRatePensionContribution,
+        annualLifeAnnuityContribution:
+          totalPensionContribution - annualRatePensionContribution,
+      };
+    }
+
     const ratePensionCandidates = contributionCandidates(
-      maximumRatePensionContribution,
+      CONTRIBUTION_LIMITS.ratePension,
       currentContributions.annualRatePensionContribution,
-      ratePensionSearchStep,
+    );
+    const lifeAnnuityCandidates = contributionCandidates(
+      CONTRIBUTION_LIMITS.lifeAnnuity,
+      currentContributions.annualLifeAnnuityContribution,
     );
     const ageSavingsCandidates = contributionCandidates(
-      maximumAgeSavingsContribution,
+      selectedAgeSavingsContributionLimit,
       currentContributions.annualAgeSavingsContribution,
-      ageSavingsSearchStep,
     );
-    const currentContributionsAreWithinLimits =
-      currentContributions.annualAgeSavingsContribution <=
-      selectedAgeSavingsContributionLimit;
-
-    let bestCandidate = null;
-    let bestCalculation = null;
-    let bestFireTime = Number.POSITIVE_INFINITY;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    const seenCandidates = new Set();
-
-    ratePensionCandidates.forEach((annualRatePensionContribution) => {
-      ageSavingsCandidates.forEach((annualAgeSavingsContribution) => {
-        const annualFreeFundsContribution =
-          annualNetBudget -
-          ratePensionContributionNetCost(
-            annualRatePensionContribution,
-            ratePensionContributionTaxRelief,
-          ) -
-          annualAgeSavingsContribution;
-
-        if (annualFreeFundsContribution < -MONEY_TOLERANCE) {
-          return;
-        }
-
-        const candidate = {
-          annualRatePensionContribution,
-          annualAgeSavingsContribution,
-          annualFreeFundsContribution: Math.max(0, annualFreeFundsContribution),
-        };
-        const candidateKey = Object.values(candidate).join(":");
-
-        if (seenCandidates.has(candidateKey)) {
-          return;
-        }
-        seenCandidates.add(candidateKey);
-
-        const calculation = calculateFire(
-          { ...inputs, ...candidate },
-          calculationDate,
-          { includeBridgeCapacity: false },
-        );
-        const fireTime = calculation.fireRow
-          ? calculation.fireRow.date.getTime()
-          : Number.POSITIVE_INFINITY;
-        const distance = contributionDistance(candidate, currentContributions);
-        const isBetterFireDate = fireTime < bestFireTime;
-        const isCloserTie =
-          fireTime === bestFireTime && distance < bestDistance;
-        const isDeterministicTie =
-          fireTime === bestFireTime &&
-          distance === bestDistance &&
-          bestCandidate &&
-          candidate.annualFreeFundsContribution >
-            bestCandidate.annualFreeFundsContribution;
-
-        if (isBetterFireDate || isCloserTie || isDeterministicTie) {
-          bestCandidate = candidate;
-          bestCalculation = calculation;
-          bestFireTime = fireTime;
-          bestDistance = distance;
-        }
+    const totalPensionCandidates = new Set();
+    ratePensionCandidates.forEach((ratePension) => {
+      lifeAnnuityCandidates.forEach((lifeAnnuity) => {
+        totalPensionCandidates.add(ratePension + lifeAnnuity);
       });
     });
+
+    let bestEvaluation = null;
+    let evaluatedCandidates = 0;
+    [...totalPensionCandidates]
+      .sort((first, second) => first - second)
+      .forEach((totalPensionContribution) => {
+        const pensionSplit = splitPensionContribution(
+          totalPensionContribution,
+        );
+        ageSavingsCandidates.forEach((ageSavingsContribution) => {
+          const candidate = completeCandidate(
+            pensionSplit.annualRatePensionContribution,
+            pensionSplit.annualLifeAnnuityContribution,
+            ageSavingsContribution,
+          );
+          if (!candidate) {
+            return;
+          }
+
+          const evaluation = evaluate(candidate);
+          evaluatedCandidates += 1;
+          if (
+            !bestEvaluation ||
+            compareEvaluations(evaluation, bestEvaluation) < 0
+          ) {
+            bestEvaluation = evaluation;
+          }
+        });
+      });
+
+    let bestCandidate = bestEvaluation?.candidate ?? null;
+    let bestCalculation = bestEvaluation?.calculation ?? null;
+    const bestFireTime = bestCalculation?.fireRow
+      ? bestCalculation.fireRow.date.getTime()
+      : Number.POSITIVE_INFINITY;
 
     const currentFireTime = currentCalculation.fireRow
       ? currentCalculation.fireRow.date.getTime()
       : Number.POSITIVE_INFINITY;
+    const currentEvaluation = {
+      candidate: currentContributions,
+      calculation: currentCalculation,
+      distance: 0,
+    };
     let status = "improved";
 
     if (!bestCalculation?.fireRow) {
       status = "unachievable";
-    } else if (
-      currentContributionsAreWithinLimits &&
-      currentFireTime === bestFireTime
-    ) {
+    } else if (!currentContributionsAreWithinLimits) {
+      status = "limits-applied";
+    } else if (compareEvaluations(currentEvaluation, bestEvaluation) <= 0) {
       status = "current-optimal";
       bestCandidate = currentContributions;
       bestCalculation = currentCalculation;
-    } else if (!currentContributionsAreWithinLimits) {
-      status = "limits-applied";
+    } else if (currentFireTime === bestFireTime) {
+      status = "larger-reserve";
     }
 
     return {
@@ -1805,17 +1900,15 @@
           ? null
           : contributionSnapshot(bestCandidate, bestCalculation),
       annualNetBudget,
-      fixedAnnualLifeAnnuityContribution:
-        inputs.annualLifeAnnuityContribution ?? 0,
-      fixedLifeAnnuityNetCost:
-        (inputs.annualLifeAnnuityContribution ?? 0) *
-        (1 - ratePensionContributionTaxRelief),
       ratePensionContributionTaxRelief,
       limits: {
         ratePension: CONTRIBUTION_LIMITS.ratePension,
+        lifeAnnuity: CONTRIBUTION_LIMITS.lifeAnnuity,
         ageSavings: selectedAgeSavingsContributionLimit,
       },
-      precision: ratePensionSearchStep,
+      precision: CONTRIBUTION_SEARCH_STEP,
+      evaluatedCandidates,
+      searchMethod: "exhaustive-grid",
     };
   }
 

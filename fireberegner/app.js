@@ -20,6 +20,9 @@
   const ratePensionSplitMessage = document.querySelector(
     "#rate-pension-split-message",
   );
+  const lifeAnnuityLimitMessage = document.querySelector(
+    "#life-annuity-limit-message",
+  );
   const optimizeButton = document.querySelector("#optimize-contributions");
   const optimizeButtonLabel = optimizeButton.querySelector("span");
   const optimizationResult = document.querySelector("#optimization-result");
@@ -380,20 +383,24 @@
       current,
       recommended,
       annualNetBudget,
-      fixedAnnualLifeAnnuityContribution,
       ratePensionContributionTaxRelief,
       precision,
       limits,
+      evaluatedCandidates,
     } = optimization;
     const headings = {
       improved: "Du kan nå FIRE tidligere",
-      "current-optimal": "Din fordeling er allerede optimal",
+      "larger-reserve": "Du kan få en større reserve",
+      "current-optimal": "Din fordeling er optimal for FIRE og reserve",
       "limits-applied": "Fordelingen holder sig under 2026-lofterne",
     };
     const valueIds = [
       ["rate", "annualRatePensionContribution"],
+      ["life-annuity", "annualLifeAnnuityContribution"],
       ["age-savings", "annualAgeSavingsContribution"],
       ["free", "annualFreeFundsContribution"],
+      ["tax-saving", "annualPensionTaxSaving"],
+      ["reserve", "finalReserve"],
     ];
 
     optimizationHeading.textContent = headings[optimization.status];
@@ -425,9 +432,25 @@
         recommended.annualRatePensionContribution -
           recommendedDeductibleRatePension,
       );
+    const recommendedDeductibleLifeAnnuity = Math.min(
+      recommended.annualLifeAnnuityContribution,
+      limits.lifeAnnuity,
+    );
+    const recommendedLifeAnnuityNetCost =
+      recommendedDeductibleLifeAnnuity *
+        (1 - ratePensionContributionTaxRelief) +
+      Math.max(
+        0,
+        recommended.annualLifeAnnuityContribution -
+          recommendedDeductibleLifeAnnuity,
+      );
     optimizationAllocationBar.style.setProperty(
       "--rate-share",
       `${(recommendedRateNetCost / safeTotal) * 100}%`,
+    );
+    optimizationAllocationBar.style.setProperty(
+      "--life-share",
+      `${(recommendedLifeAnnuityNetCost / safeTotal) * 100}%`,
     );
     optimizationAllocationBar.style.setProperty(
       "--age-share",
@@ -438,14 +461,12 @@
       `${(recommended.annualFreeFundsContribution / safeTotal) * 100}%`,
     );
 
-    const fixedLifeAnnuityNote =
-      fixedAnnualLifeAnnuityContribution > 0
-        ? ` Livrenteindbetalingen på ${currency.format(fixedAnnualLifeAnnuityContribution)} holdes fast.`
-        : "";
     optimizationNote.textContent =
       optimization.status === "limits-applied"
-        ? `Din nuværende fordeling overskrider loftet for aldersopsparing. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og bruger 2026-lofterne.${fixedLifeAnnuityNote}`
-        : `Samme årlige nettobudget på ${currency.format(annualNetBudget)} Den samlede ratepensionsindbetaling er afprøvet i trin på ${currency.format(precision)}${fixedLifeAnnuityNote}`;
+        ? `Din nuværende fordeling overskrider et privat 2026-loft. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og holder sig under lofterne. Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet.`
+        : optimization.status === "larger-reserve"
+          ? `FIRE-året er uændret. Anbefalingen giver den største beregnede reserve ved planens slutning med samme årlige nettobudget på ${currency.format(annualNetBudget)}.`
+          : `Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet med samme årlige nettobudget på ${currency.format(annualNetBudget)} og trin på ${currency.format(precision)}`;
   }
 
   function runContributionOptimization() {
@@ -463,7 +484,7 @@
         errorBox.hidden = false;
       } finally {
         optimizeButton.disabled = false;
-        optimizeButtonLabel.textContent = "Optimér for tidligere FIRE";
+        optimizeButtonLabel.textContent = "Optimér FIRE og reserve";
         optimizationResult.removeAttribute("aria-busy");
       }
     }, 0);
@@ -478,6 +499,7 @@
 
     [
       "annualRatePensionContribution",
+      "annualLifeAnnuityContribution",
       "annualAgeSavingsContribution",
       "annualFreeFundsContribution",
     ].forEach((name) => {
@@ -1019,6 +1041,11 @@
       calculation.ageSavingsContributionLimitExceeded,
       calculation.ageSavingsContributionLimit,
     );
+    markContributionLimit(
+      "annualLifeAnnuityContribution",
+      calculation.lifeAnnuityContributionLimitExceeded,
+      calculation.lifeAnnuityContributionLimit,
+    );
     ageSavingsRedirectMessage.hidden =
       calculation.annualAgeSavingsContributionRedirected <= 0;
     ageSavingsRedirectMessage.textContent =
@@ -1030,6 +1057,12 @@
     ratePensionSplitMessage.textContent =
       calculation.annualNonDeductibleRatePensionContribution > 0
         ? `${currency.format(calculation.annualDeductibleRatePensionContribution)} behandles med fradrag, og ${currency.format(calculation.annualNonDeductibleRatePensionContribution)} behandles som hovedstol uden fradrag.`
+        : "";
+    lifeAnnuityLimitMessage.hidden =
+      !calculation.lifeAnnuityContributionLimitExceeded;
+    lifeAnnuityLimitMessage.textContent =
+      calculation.lifeAnnuityContributionLimitExceeded
+        ? `Kun ${currency.format(calculation.lifeAnnuityContributionLimit)} af livrenteindbetalingen får den angivne skattebesparelse i den enkle private model.`
         : "";
     errorBox.hidden = true;
     results.hidden = false;

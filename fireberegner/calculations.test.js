@@ -1721,9 +1721,21 @@ function netContributionBudget(contributions, taxRelief) {
     contributions.annualRatePensionContribution -
       deductibleRatePensionContribution,
   );
+  const lifeAnnuityContribution =
+    contributions.annualLifeAnnuityContribution ?? 0;
+  const deductibleLifeAnnuityContribution = Math.min(
+    lifeAnnuityContribution,
+    CONTRIBUTION_LIMITS.lifeAnnuity,
+  );
+  const nonDeductibleLifeAnnuityContribution = Math.max(
+    0,
+    lifeAnnuityContribution - deductibleLifeAnnuityContribution,
+  );
   return (
     deductibleRatePensionContribution * (1 - taxRelief) +
     nonDeductibleRatePensionContribution +
+    deductibleLifeAnnuityContribution * (1 - taxRelief) +
+    nonDeductibleLifeAnnuityContribution +
     contributions.annualAgeSavingsContribution +
     contributions.annualFreeFundsContribution
   );
@@ -1736,11 +1748,16 @@ const optimizedContributions = optimizeAnnualContributions(
 
 assert.deepEqual(optimizationInputs, unchangedOptimizationInputs);
 assert.ok(
-  ["improved", "current-optimal"].includes(optimizedContributions.status),
+  ["improved", "larger-reserve", "current-optimal"].includes(
+    optimizedContributions.status,
+  ),
 );
 assert.equal(optimizedContributions.precision, 1000);
+assert.equal(optimizedContributions.searchMethod, "exhaustive-grid");
+assert.ok(optimizedContributions.evaluatedCandidates > 0);
 assert.deepEqual(optimizedContributions.limits, {
   ratePension: CONTRIBUTION_LIMITS.ratePension,
+  lifeAnnuity: CONTRIBUTION_LIMITS.lifeAnnuity,
   ageSavings: CONTRIBUTION_LIMITS.ageSavings,
 });
 assert.ok(optimizedContributions.recommended);
@@ -1748,6 +1765,15 @@ assert.ok(
   optimizedContributions.recommended.fireAge <=
     optimizedContributions.current.fireAge,
 );
+if (
+  optimizedContributions.recommended.fireDate.getTime() ===
+  optimizedContributions.current.fireDate.getTime()
+) {
+  assert.ok(
+    optimizedContributions.recommended.finalReserve >=
+      optimizedContributions.current.finalReserve,
+  );
+}
 assertClose(
   optimizedContributions.annualNetBudget,
   netContributionBudget(
@@ -1777,19 +1803,87 @@ const fixedLifeAnnuityOptimization = optimizeAnnualContributions(
 );
 assertClose(
   fixedLifeAnnuityOptimization.annualNetBudget,
-  optimizedContributions.annualNetBudget,
+  optimizedContributions.annualNetBudget +
+    12000 * (1 - optimizationInputs.ratePensionContributionTaxRelief),
+);
+assert.ok(
+  fixedLifeAnnuityOptimization.recommended.annualLifeAnnuityContribution <=
+    CONTRIBUTION_LIMITS.lifeAnnuity,
+);
+assert.ok(fixedLifeAnnuityOptimization.recommended.annualPensionTaxSaving >= 0);
+assertClose(
+  fixedLifeAnnuityOptimization.current.annualPensionTaxSaving,
+  (optimizationInputs.annualRatePensionContribution + 12000) *
+    optimizationInputs.ratePensionContributionTaxRelief,
+);
+
+const taxLeveragedOptimization = optimizeAnnualContributions(
+  {
+    ...standardInputs,
+    currentAge: 25,
+    retirementAge: 50,
+    payoutYears: 20,
+    desiredAnnualWithdrawal: 250000,
+    ratePensionBalance: 0,
+    lifeAnnuityBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 100000,
+    freeFundsCostBasis: 100000,
+    askBalance: 0,
+    annualRatePensionContribution: 0,
+    annualLifeAnnuityContribution: 0,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution: 100000,
+    ratePensionContributionTaxRelief: 0.52,
+    pensionWithdrawalTax: 0.37,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+);
+assert.ok(
+  taxLeveragedOptimization.recommended.annualLifeAnnuityContribution > 0,
+);
+assert.ok(
+  taxLeveragedOptimization.recommended.annualLifeAnnuityContribution <=
+    CONTRIBUTION_LIMITS.lifeAnnuity,
+);
+assert.ok(taxLeveragedOptimization.recommended.annualPensionTaxSaving > 0);
+const interiorTaxLeveragedCandidate = calculateFire(
+  {
+    ...standardInputs,
+    currentAge: 25,
+    retirementAge: 50,
+    payoutYears: 20,
+    desiredAnnualWithdrawal: 250000,
+    ratePensionBalance: 0,
+    lifeAnnuityBalance: 0,
+    ageSavingsBalance: 0,
+    freeFundsBalance: 100000,
+    freeFundsCostBasis: 100000,
+    askBalance: 0,
+    annualRatePensionContribution: CONTRIBUTION_LIMITS.ratePension,
+    annualLifeAnnuityContribution: 30000,
+    annualAgeSavingsContribution: 0,
+    annualFreeFundsContribution:
+      100000 -
+      (CONTRIBUTION_LIMITS.ratePension + 30000) * (1 - 0.52),
+    ratePensionContributionTaxRelief: 0.52,
+    pensionWithdrawalTax: 0.37,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.ok(
+  taxLeveragedOptimization.recommended.fireAge <=
+    interiorTaxLeveragedCandidate.fireRow.age,
 );
 assertClose(
-  fixedLifeAnnuityOptimization.fixedAnnualLifeAnnuityContribution,
-  12000,
-);
-assertClose(
-  fixedLifeAnnuityOptimization.fixedLifeAnnuityNetCost,
-  12000 * (1 - optimizationInputs.ratePensionContributionTaxRelief),
-);
-assert.equal(
-  "annualLifeAnnuityContribution" in fixedLifeAnnuityOptimization.recommended,
-  false,
+  netContributionBudget(
+    taxLeveragedOptimization.recommended,
+    0.52,
+  ),
+  taxLeveragedOptimization.annualNetBudget,
 );
 
 const repeatedOptimization = optimizeAnnualContributions(
@@ -1797,6 +1891,8 @@ const repeatedOptimization = optimizeAnnualContributions(
     ...optimizationInputs,
     annualRatePensionContribution:
       optimizedContributions.recommended.annualRatePensionContribution,
+    annualLifeAnnuityContribution:
+      optimizedContributions.recommended.annualLifeAnnuityContribution,
     annualAgeSavingsContribution:
       optimizedContributions.recommended.annualAgeSavingsContribution,
     annualFreeFundsContribution:
@@ -1878,7 +1974,6 @@ const independentPensionSplit = optimizeAnnualContributions(
   asOfDate,
 );
 assert.equal(independentPensionSplit.recommended.fireAge, 45);
-assert.ok(independentPensionSplit.recommended.annualAgeSavingsContribution > 0);
 assertClose(
   netContributionBudget(
     independentPensionSplit.recommended,

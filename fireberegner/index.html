@@ -204,7 +204,7 @@
                     ><span
                       >Ratepension
                       <i
-                        title="Din samlede årlige indbetaling til ratepension, inklusive indbetalinger via arbejdsgiver og andre ordninger. Beregneren anvender skatteværdien op til rateloftet på 68.700 kr. i 2026. Beløb over loftet regnes som indbetaling uden fradrag."
+                        title="Din samlede årlige indbetaling til ratepension, inklusive indbetalinger via arbejdsgiver og andre ordninger. Beregneren anvender skattebesparelsen op til rateloftet på 68.700 kr. i 2026. Beløb over loftet regnes som indbetaling uden fradrag."
                         >i</i
                       ></span
                     ><input
@@ -234,7 +234,7 @@
                     ><span
                       >Livrente
                       <i
-                        title="Din årlige indbetaling til livrente. Indbetalingen medregnes i planen, men optimeringen ændrer den ikke."
+                        title="Din årlige indbetaling til privat livrente. Optimeringen kan ændre beløbet og bruger opfyldningsfradraget på 63.200 kr. i 2026."
                         >i</i
                       ></span
                     ><input
@@ -298,6 +298,12 @@
                   hidden
                 ></p>
                 <p
+                  id="life-annuity-limit-message"
+                  class="contribution-adjustment-message"
+                  role="status"
+                  hidden
+                ></p>
+                <p
                   id="age-savings-redirect-message"
                   class="contribution-adjustment-message"
                   role="status"
@@ -323,7 +329,7 @@
                         d="M3 5.5h11M11.5 2.5l3 3-3 3M17 14.5H6M8.5 11.5l-3 3 3 3"
                       />
                     </svg>
-                    <span>Optimér for tidligere FIRE</span>
+                    <span>Optimér FIRE og reserve</span>
                   </button>
                   <button
                     id="apply-optimization"
@@ -376,6 +382,12 @@
                         <dd id="optimization-recommended-rate"></dd>
                       </div>
                       <div class="optimization-row optimization-row-pension">
+                        <dt><i aria-hidden="true"></i>Livrente</dt>
+                        <dd id="optimization-current-life-annuity"></dd>
+                        <span aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-life-annuity"></dd>
+                      </div>
+                      <div class="optimization-row optimization-row-pension">
                         <dt><i aria-hidden="true"></i>Aldersopsparing</dt>
                         <dd id="optimization-current-age-savings"></dd>
                         <span aria-hidden="true">→</span>
@@ -387,13 +399,25 @@
                         <span aria-hidden="true">→</span>
                         <dd id="optimization-recommended-free"></dd>
                       </div>
+                      <div class="optimization-row optimization-row-tax">
+                        <dt>Skattebesparelse</dt>
+                        <dd id="optimization-current-tax-saving"></dd>
+                        <span aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-tax-saving"></dd>
+                      </div>
+                      <div class="optimization-row optimization-row-reserve">
+                        <dt>Reserve ved planens slutning</dt>
+                        <dd id="optimization-current-reserve"></dd>
+                        <span aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-reserve"></dd>
+                      </div>
                     </dl>
                     <div
                       id="optimization-allocation-bar"
                       class="optimization-allocation-bar"
                       aria-hidden="true"
                     >
-                      <i></i><i></i><i></i>
+                      <i></i><i></i><i></i><i></i>
                     </div>
                   </div>
                   <footer class="optimization-footer">
@@ -450,9 +474,9 @@
                   >
                   <label class="field"
                     ><span
-                      >Skatteværdi af pensionsfradrag
+                      >Skattebesparelse på pension
                       <i
-                        title="Den forventede skattebesparelse ved fradragsberettigede indbetalinger på ratepension og livrente. Satsen bruges til at beregne nettoudgiften og må ikke forveksles med skatten ved udbetaling."
+                        title="Hvor meget en fradragsberettiget indbetaling til ratepension eller livrente sænker din skat. 40 % betyder, at en indbetaling på 10.000 kr. koster cirka 6.000 kr. efter skat."
                         >i</i
                       ></span
                     ><span class="input-suffix"
@@ -460,7 +484,7 @@
                         name="ratePensionContributionTaxRelief"
                         type="number"
                         step="0.1"
-                        value="37"
+                        value="40"
                         required
                       /><b>%</b></span
                     ></label
@@ -901,12 +925,13 @@
             fremførte tab. ASK beskattes kun af fremtidige afkast fra den
             indtastede startværdi. Beregningen medregner ikke allerede optjent
             ASK-skat. Udbetalinger fra ratepension og livrente beskattes med den
-            indtastede effektive sats. Den indtastede skatteværdi anvendes på
+            indtastede effektive sats. Den indtastede skattebesparelse anvendes på
             ratepensionsindbetalinger op til 2026-rateloftet og på hele den
-            indtastede livrenteindbetaling. Private livrenteindbetalinger over
-            opfyldningsfradraget kan have andre fradragsforløb. Livrenten
-            fordeles over den valgte udbetalingsperiode som en forenkling.
-            Optimeringen ændrer ikke livrenteindbetalingen. Indbetalinger på
+            indtastede livrenteindbetaling op til opfyldningsfradraget på
+            63.200 kr. Private livrenteindbetalinger over opfyldningsfradraget
+            kan have andre fradragsforløb. Livrenten fordeles over den valgte
+            udbetalingsperiode som en forenkling. Optimeringen bruger højst
+            opfyldningsfradraget til livrente. Indbetalinger på
             ratepension over loftet medregnes til fuld nettoudgift og som
             hovedstol uden fradrag. Resultatet er et overslag og er ikke
             investerings- eller pensionsrådgivning.

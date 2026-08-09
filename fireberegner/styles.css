@@ -701,6 +701,12 @@ legend,
   background: var(--blue);
 }
 
+.optimization-row-tax dt,
+.optimization-row-reserve dt {
+  color: var(--muted);
+  padding-left: 15px;
+}
+
 .optimization-row dd {
   font-family: var(--data);
   font-size: var(--text-data-sm-size);
@@ -737,11 +743,16 @@ legend,
 }
 
 .optimization-allocation-bar i:nth-child(2) {
+  background: #c98d19;
+  flex: 0 0 var(--life-share, 0%);
+}
+
+.optimization-allocation-bar i:nth-child(3) {
   background: var(--color-pension-fill);
   flex: 0 0 var(--age-share, 0%);
 }
 
-.optimization-allocation-bar i:nth-child(3) {
+.optimization-allocation-bar i:nth-child(4) {
   background: var(--blue);
   flex: 0 0 var(--free-share, 0%);
 }
