@@ -1857,6 +1857,9 @@ const fixedLifeAnnuityOptimization = optimizeAnnualContributions(
     ...optimizationInputs,
     lifeAnnuityBalance: 100000,
     annualLifeAnnuityContribution: 12000,
+    optimizationLocks: {
+      annualLifeAnnuityContribution: true,
+    },
   },
   asOfDate,
 );
@@ -1869,12 +1872,46 @@ assert.ok(
   fixedLifeAnnuityOptimization.recommended.annualLifeAnnuityContribution <=
     CONTRIBUTION_LIMITS.lifeAnnuity,
 );
+assert.equal(
+  fixedLifeAnnuityOptimization.recommended.annualLifeAnnuityContribution,
+  12000,
+);
+assert.equal(
+  fixedLifeAnnuityOptimization.lockedContributions
+    .annualLifeAnnuityContribution,
+  true,
+);
 assert.ok(fixedLifeAnnuityOptimization.recommended.annualPensionTaxSaving >= 0);
 assertClose(
   fixedLifeAnnuityOptimization.current.annualPensionTaxSaving,
   (optimizationInputs.annualRatePensionContribution + 12000) *
     optimizationInputs.ratePensionContributionTaxRelief,
 );
+
+const allContributionsLocked = optimizeAnnualContributions(
+  {
+    ...optimizationInputs,
+    optimizationLocks: {
+      annualRatePensionContribution: true,
+      annualLifeAnnuityContribution: true,
+      annualAgeSavingsContribution: true,
+      annualFreeFundsContribution: true,
+    },
+  },
+  asOfDate,
+);
+assert.equal(allContributionsLocked.status, "current-optimal");
+assert.equal(allContributionsLocked.evaluatedCandidates, 1);
+assert.deepEqual(
+  allContributionsLocked.recommended,
+  allContributionsLocked.current,
+);
+assert.deepEqual(allContributionsLocked.lockedContributions, {
+  annualRatePensionContribution: true,
+  annualLifeAnnuityContribution: true,
+  annualAgeSavingsContribution: true,
+  annualFreeFundsContribution: true,
+});
 
 const taxLeveragedOptimization = optimizeAnnualContributions(
   {

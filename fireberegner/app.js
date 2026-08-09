@@ -26,6 +26,10 @@
   const optimizeButton = document.querySelector("#optimize-contributions");
   const optimizeButtonLabel = optimizeButton.querySelector("span");
   const optimizationResult = document.querySelector("#optimization-result");
+  const optimizationSection = document.querySelector("#optimization-section");
+  const optimizationResultOnlyElements = [
+    ...document.querySelectorAll("[data-optimization-result-only]"),
+  ];
   const optimizationHeading = document.querySelector("#optimization-heading");
   const optimizationComparison = document.querySelector(
     "#optimization-comparison",
@@ -38,6 +42,9 @@
     "#optimization-allocation-bar",
   );
   const applyOptimizationButton = document.querySelector("#apply-optimization");
+  const contributionLockButtons = [
+    ...document.querySelectorAll("[data-lock-contribution]"),
+  ];
   const { calculateFire, optimizeAnnualContributions } =
     window.FireCalculations;
   let latestOptimization = null;
@@ -268,7 +275,44 @@
         form.elements.contributionsFollowInflation.checked,
       redirectPensionContributionsToFreeFunds:
         form.elements.redirectPensionContributionsToFreeFunds.checked,
+      optimizationLocks: Object.fromEntries(
+        contributionLockButtons.map((button) => [
+          button.dataset.lockContribution,
+          button.getAttribute("aria-pressed") === "true",
+        ]),
+      ),
     };
+  }
+
+  function toggleContributionLock(button) {
+    const locked = button.getAttribute("aria-pressed") !== "true";
+    const row = button.closest(".optimization-row");
+    const fieldLabel = button.dataset.lockLabel;
+    const label = locked
+      ? `Lås ${fieldLabel} op i optimeringen`
+      : `Lås ${fieldLabel} i optimeringen`;
+
+    button.setAttribute("aria-pressed", String(locked));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    row.classList.toggle("optimization-row-locked", locked);
+    hideOptimizationResult();
+  }
+
+  function lockedContributionNote(locks) {
+    const labels = {
+      annualRatePensionContribution: "ratepension",
+      annualLifeAnnuityContribution: "livrente",
+      annualAgeSavingsContribution: "aldersopsparing",
+      annualFreeFundsContribution: "frie midler",
+    };
+    const lockedLabels = Object.entries(locks ?? {})
+      .filter(([, locked]) => locked)
+      .map(([key]) => labels[key]);
+
+    return lockedLabels.length > 0
+      ? ` Låst i optimeringen: ${lockedLabels.join(", ")}.`
+      : "";
   }
 
   function markContributionLimit(name, exceeded, limit) {
@@ -356,8 +400,56 @@
 
   function hideOptimizationResult() {
     latestOptimization = null;
-    optimizationResult.hidden = true;
+    optimizationResult.classList.remove("optimization-has-result");
+    optimizationSection.classList.remove("optimization-has-result");
+    optimizationResultOnlyElements.forEach((element) => {
+      element.hidden = true;
+    });
+    optimizationHeading.textContent = "Vælg faste beløb";
+    optimizationComparison.hidden = false;
+    optimizationNote.textContent =
+      "Lås de beløb, som optimeringen skal fastholde. Beregn derefter anbefalingen.";
     applyOptimizationButton.disabled = true;
+  }
+
+  function renderOptimizationPreview(inputs, calculation) {
+    setText(
+      "optimization-current-rate",
+      currency.format(inputs.annualRatePensionContribution),
+    );
+    setText(
+      "optimization-current-life-annuity",
+      currency.format(inputs.annualLifeAnnuityContribution),
+    );
+    setText(
+      "optimization-current-age-savings",
+      currency.format(inputs.annualAgeSavingsContribution),
+    );
+    setText(
+      "optimization-current-free",
+      currency.format(inputs.annualFreeFundsContribution),
+    );
+    const deductiblePensionContribution =
+      Math.min(
+        inputs.annualRatePensionContribution,
+        calculation.ratePensionContributionLimit,
+      ) +
+      Math.min(
+        inputs.annualLifeAnnuityContribution,
+        calculation.lifeAnnuityContributionLimit,
+      );
+    setText(
+      "optimization-current-tax-saving",
+      currency.format(
+        deductiblePensionContribution *
+          calculation.ratePensionContributionTaxRelief,
+      ),
+    );
+    setText(
+      "optimization-current-reserve",
+      currency.format(calculation.finalReserveAfterTax),
+    );
+    hideOptimizationResult();
   }
 
   function fireAgeLabel(fireAge) {
@@ -370,14 +462,20 @@
     optimizationResult.removeAttribute("aria-busy");
 
     if (optimization.status === "unachievable") {
+      hideOptimizationResult();
       optimizationHeading.textContent = "Ingen fordeling kan nå FIRE";
-      optimizationComparison.hidden = true;
-      optimizationFireShift.hidden = true;
       applyOptimizationButton.disabled = true;
       optimizationNote.textContent =
-        "Det nuværende årlige nettobudget kan ikke finansiere hele planen. Prøv at øge budgettet eller sænke den ønskede hævning.";
+        `Det nuværende årlige nettobudget kan ikke finansiere hele planen. Prøv at øge budgettet, sænke den ønskede hævning eller låse færre indbetalinger.${lockedContributionNote(optimization.lockedContributions)}`;
       return;
     }
+
+    latestOptimization = optimization;
+    optimizationResult.classList.add("optimization-has-result");
+    optimizationSection.classList.add("optimization-has-result");
+    optimizationResultOnlyElements.forEach((element) => {
+      element.hidden = false;
+    });
 
     const {
       current,
@@ -387,12 +485,14 @@
       precision,
       limits,
       evaluatedCandidates,
+      lockedContributions,
     } = optimization;
+    const lockNote = lockedContributionNote(lockedContributions);
     const headings = {
       improved: "Du kan nå FIRE tidligere",
       "larger-reserve": "Du kan få en større reserve",
       "current-optimal": "Din fordeling er optimal for FIRE og reserve",
-      "limits-applied": "Fordelingen holder sig under 2026-lofterne",
+      "limits-applied": "De ulåste beløb holder sig under 2026-lofterne",
     };
     const valueIds = [
       ["rate", "annualRatePensionContribution"],
@@ -405,7 +505,6 @@
 
     optimizationHeading.textContent = headings[optimization.status];
     optimizationComparison.hidden = false;
-    optimizationFireShift.hidden = false;
     applyOptimizationButton.disabled =
       optimization.status === "current-optimal";
     setText("optimization-current-fire", fireAgeLabel(current.fireAge));
@@ -463,10 +562,10 @@
 
     optimizationNote.textContent =
       optimization.status === "limits-applied"
-        ? `Din nuværende fordeling overskrider et privat 2026-loft. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og holder sig under lofterne. Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet.`
+        ? `Din nuværende fordeling overskrider et privat 2026-loft. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og holder de ulåste beløb under lofterne. Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet.${lockNote}`
         : optimization.status === "larger-reserve"
-          ? `FIRE-året er uændret. Anbefalingen giver den største beregnede reserve efter skat ved planens slutning med samme årlige nettobudget på ${currency.format(annualNetBudget)}.`
-          : `Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet med samme årlige nettobudget på ${currency.format(annualNetBudget)} og trin på ${currency.format(precision)}`;
+          ? `FIRE-året er uændret. Anbefalingen giver den største beregnede reserve efter skat ved planens slutning med samme årlige nettobudget på ${currency.format(annualNetBudget)}${lockNote}`
+          : `Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet med samme årlige nettobudget på ${currency.format(annualNetBudget)} og trin på ${currency.format(precision)}${lockNote}`;
   }
 
   function runContributionOptimization() {
@@ -484,7 +583,7 @@
         errorBox.hidden = false;
       } finally {
         optimizeButton.disabled = false;
-        optimizeButtonLabel.textContent = "Optimér FIRE og reserve";
+        optimizeButtonLabel.textContent = "Beregn anbefaling";
         optimizationResult.removeAttribute("aria-busy");
       }
     }, 0);
@@ -503,6 +602,9 @@
       "annualAgeSavingsContribution",
       "annualFreeFundsContribution",
     ].forEach((name) => {
+      if (latestOptimization.lockedContributions?.[name]) {
+        return;
+      }
       form.elements[name].value = inputNumber.format(
         Math.round(recommended[name]),
       );
@@ -1075,7 +1177,11 @@
 
     try {
       const inputs = readInputs();
-      render(calculateFire(inputs), inputs);
+      const calculation = calculateFire(inputs);
+      render(calculation, inputs);
+      if (!latestOptimization) {
+        renderOptimizationPreview(inputs, calculation);
+      }
     } catch (error) {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
@@ -1107,6 +1213,9 @@
   });
   optimizeButton.addEventListener("click", runContributionOptimization);
   applyOptimizationButton.addEventListener("click", applyOptimization);
+  contributionLockButtons.forEach((button) => {
+    button.addEventListener("click", () => toggleContributionLock(button));
+  });
 
   formattedNumberInputs.forEach((input) => {
     formatNumberInput(input);

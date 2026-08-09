@@ -1709,6 +1709,7 @@
       candidate.annualRatePensionContribution,
       candidate.annualLifeAnnuityContribution,
       candidate.annualAgeSavingsContribution,
+      candidate.annualFreeFundsContribution,
     ]
       .map((value) => value.toFixed(4))
       .join(":");
@@ -1763,6 +1764,20 @@
       annualAgeSavingsContribution: inputs.annualAgeSavingsContribution,
       annualFreeFundsContribution: inputs.annualFreeFundsContribution,
     };
+    const optimizationLocks = {
+      annualRatePensionContribution: Boolean(
+        inputs.optimizationLocks?.annualRatePensionContribution,
+      ),
+      annualLifeAnnuityContribution: Boolean(
+        inputs.optimizationLocks?.annualLifeAnnuityContribution,
+      ),
+      annualAgeSavingsContribution: Boolean(
+        inputs.optimizationLocks?.annualAgeSavingsContribution,
+      ),
+      annualFreeFundsContribution: Boolean(
+        inputs.optimizationLocks?.annualFreeFundsContribution,
+      ),
+    };
     const ratePensionContributionTaxRelief =
       inputs.ratePensionContributionTaxRelief ?? 0;
     const selectedAgeSavingsContributionLimit =
@@ -1771,22 +1786,44 @@
       currentContributions,
       ratePensionContributionTaxRelief,
     );
-    const currentContributionsAreWithinLimits =
-      currentContributions.annualRatePensionContribution <=
-        CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE &&
-      currentContributions.annualLifeAnnuityContribution <=
-        CONTRIBUTION_LIMITS.lifeAnnuity + MONEY_TOLERANCE &&
-      currentContributions.annualAgeSavingsContribution <=
-        selectedAgeSavingsContributionLimit + MONEY_TOLERANCE;
+    const currentUnlockedContributionsAreWithinLimits =
+      (optimizationLocks.annualRatePensionContribution ||
+        currentContributions.annualRatePensionContribution <=
+          CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE) &&
+      (optimizationLocks.annualLifeAnnuityContribution ||
+        currentContributions.annualLifeAnnuityContribution <=
+          CONTRIBUTION_LIMITS.lifeAnnuity + MONEY_TOLERANCE) &&
+      (optimizationLocks.annualAgeSavingsContribution ||
+        currentContributions.annualAgeSavingsContribution <=
+          selectedAgeSavingsContributionLimit + MONEY_TOLERANCE);
 
     function completeCandidate(ratePension, lifeAnnuity, ageSavings) {
       if (
         ratePension < -MONEY_TOLERANCE ||
-        ratePension > CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE ||
+        (!optimizationLocks.annualRatePensionContribution &&
+          ratePension >
+            CONTRIBUTION_LIMITS.ratePension + MONEY_TOLERANCE) ||
         lifeAnnuity < -MONEY_TOLERANCE ||
-        lifeAnnuity > CONTRIBUTION_LIMITS.lifeAnnuity + MONEY_TOLERANCE ||
+        (!optimizationLocks.annualLifeAnnuityContribution &&
+          lifeAnnuity > CONTRIBUTION_LIMITS.lifeAnnuity + MONEY_TOLERANCE) ||
         ageSavings < -MONEY_TOLERANCE ||
-        ageSavings > selectedAgeSavingsContributionLimit + MONEY_TOLERANCE
+        (!optimizationLocks.annualAgeSavingsContribution &&
+          ageSavings >
+            selectedAgeSavingsContributionLimit + MONEY_TOLERANCE) ||
+        (optimizationLocks.annualRatePensionContribution &&
+          Math.abs(
+            ratePension -
+              currentContributions.annualRatePensionContribution,
+          ) > MONEY_TOLERANCE) ||
+        (optimizationLocks.annualLifeAnnuityContribution &&
+          Math.abs(
+            lifeAnnuity -
+              currentContributions.annualLifeAnnuityContribution,
+          ) > MONEY_TOLERANCE) ||
+        (optimizationLocks.annualAgeSavingsContribution &&
+          Math.abs(
+            ageSavings - currentContributions.annualAgeSavingsContribution,
+          ) > MONEY_TOLERANCE)
       ) {
         return null;
       }
@@ -1806,7 +1843,18 @@
       if (freeFunds < -MONEY_TOLERANCE) {
         return null;
       }
-      candidate.annualFreeFundsContribution = Math.max(0, freeFunds);
+      if (
+        optimizationLocks.annualFreeFundsContribution &&
+        Math.abs(
+          freeFunds - currentContributions.annualFreeFundsContribution,
+        ) > MONEY_TOLERANCE
+      ) {
+        return null;
+      }
+      candidate.annualFreeFundsContribution = optimizationLocks
+        .annualFreeFundsContribution
+        ? currentContributions.annualFreeFundsContribution
+        : Math.max(0, freeFunds);
       return candidate;
     }
 
@@ -1825,6 +1873,24 @@
     }
 
     function splitPensionContribution(totalPensionContribution) {
+      if (optimizationLocks.annualRatePensionContribution) {
+        return {
+          annualRatePensionContribution:
+            currentContributions.annualRatePensionContribution,
+          annualLifeAnnuityContribution:
+            totalPensionContribution -
+            currentContributions.annualRatePensionContribution,
+        };
+      }
+      if (optimizationLocks.annualLifeAnnuityContribution) {
+        return {
+          annualRatePensionContribution:
+            totalPensionContribution -
+            currentContributions.annualLifeAnnuityContribution,
+          annualLifeAnnuityContribution:
+            currentContributions.annualLifeAnnuityContribution,
+        };
+      }
       const annualRatePensionContribution = Math.min(
         CONTRIBUTION_LIMITS.ratePension,
         totalPensionContribution,
@@ -1837,18 +1903,27 @@
       };
     }
 
-    const ratePensionCandidates = contributionCandidates(
-      CONTRIBUTION_LIMITS.ratePension,
-      currentContributions.annualRatePensionContribution,
-    );
-    const lifeAnnuityCandidates = contributionCandidates(
-      CONTRIBUTION_LIMITS.lifeAnnuity,
-      currentContributions.annualLifeAnnuityContribution,
-    );
-    const ageSavingsCandidates = contributionCandidates(
-      selectedAgeSavingsContributionLimit,
-      currentContributions.annualAgeSavingsContribution,
-    );
+    const ratePensionCandidates = optimizationLocks
+      .annualRatePensionContribution
+      ? [currentContributions.annualRatePensionContribution]
+      : contributionCandidates(
+          CONTRIBUTION_LIMITS.ratePension,
+          currentContributions.annualRatePensionContribution,
+        );
+    const lifeAnnuityCandidates = optimizationLocks
+      .annualLifeAnnuityContribution
+      ? [currentContributions.annualLifeAnnuityContribution]
+      : contributionCandidates(
+          CONTRIBUTION_LIMITS.lifeAnnuity,
+          currentContributions.annualLifeAnnuityContribution,
+        );
+    const ageSavingsCandidates = optimizationLocks
+      .annualAgeSavingsContribution
+      ? [currentContributions.annualAgeSavingsContribution]
+      : contributionCandidates(
+          selectedAgeSavingsContributionLimit,
+          currentContributions.annualAgeSavingsContribution,
+        );
     const totalPensionCandidates = new Set();
     ratePensionCandidates.forEach((ratePension) => {
       lifeAnnuityCandidates.forEach((lifeAnnuity) => {
@@ -1858,6 +1933,36 @@
 
     let bestEvaluation = null;
     let evaluatedCandidates = 0;
+    const evaluatedCandidateKeys = new Set();
+
+    function considerCandidate(candidate) {
+      if (!candidate) {
+        return;
+      }
+      const key = candidateKey(candidate);
+      if (evaluatedCandidateKeys.has(key)) {
+        return;
+      }
+      evaluatedCandidateKeys.add(key);
+
+      const evaluation = evaluate(candidate);
+      evaluatedCandidates += 1;
+      if (
+        !bestEvaluation ||
+        compareEvaluations(evaluation, bestEvaluation) < 0
+      ) {
+        bestEvaluation = evaluation;
+      }
+    }
+
+    considerCandidate(
+      completeCandidate(
+        currentContributions.annualRatePensionContribution,
+        currentContributions.annualLifeAnnuityContribution,
+        currentContributions.annualAgeSavingsContribution,
+      ),
+    );
+
     [...totalPensionCandidates]
       .sort((first, second) => first - second)
       .forEach((totalPensionContribution) => {
@@ -1870,18 +1975,7 @@
             pensionSplit.annualLifeAnnuityContribution,
             ageSavingsContribution,
           );
-          if (!candidate) {
-            return;
-          }
-
-          const evaluation = evaluate(candidate);
-          evaluatedCandidates += 1;
-          if (
-            !bestEvaluation ||
-            compareEvaluations(evaluation, bestEvaluation) < 0
-          ) {
-            bestEvaluation = evaluation;
-          }
+          considerCandidate(candidate);
         });
       });
 
@@ -1903,7 +1997,7 @@
 
     if (!bestCalculation?.fireRow) {
       status = "unachievable";
-    } else if (!currentContributionsAreWithinLimits) {
+    } else if (!currentUnlockedContributionsAreWithinLimits) {
       status = "limits-applied";
     } else if (compareEvaluations(currentEvaluation, bestEvaluation) <= 0) {
       status = "current-optimal";
@@ -1930,6 +2024,7 @@
       precision: CONTRIBUTION_SEARCH_STEP,
       evaluatedCandidates,
       searchMethod: "exhaustive-grid",
+      lockedContributions: optimizationLocks,
     };
   }
 

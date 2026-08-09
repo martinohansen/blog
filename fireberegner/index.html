@@ -329,13 +329,15 @@
                         d="M3 5.5h11M11.5 2.5l3 3-3 3M17 14.5H6M8.5 11.5l-3 3 3 3"
                       />
                     </svg>
-                    <span>Optimér FIRE og reserve</span>
+                    <span>Beregn anbefaling</span>
                   </button>
                   <button
                     id="apply-optimization"
                     class="apply-optimization-button"
                     type="button"
                     disabled
+                    data-optimization-result-only
+                    hidden
                   >
                     Brug fordelingen
                   </button>
@@ -345,16 +347,17 @@
                   class="optimization-result"
                   aria-labelledby="optimization-heading"
                   aria-live="polite"
-                  hidden
                 >
                   <header class="optimization-header">
                     <div>
                       <p>Optimeret fordeling</p>
-                      <h3 id="optimization-heading"></h3>
+                      <h3 id="optimization-heading">Vælg faste beløb</h3>
                     </div>
                     <div
                       id="optimization-fire-shift"
                       class="optimization-fire-shift"
+                      data-optimization-result-only
+                      hidden
                     >
                       <span id="optimization-current-fire"></span>
                       <svg viewBox="0 0 24 12" aria-hidden="true">
@@ -371,51 +374,142 @@
                       class="optimization-column-headings"
                       aria-hidden="true"
                     >
-                      <span></span><span>Før</span><span></span
-                      ><span>Anbefalet</span>
+                      <span></span><span>Før</span
+                      ><span data-optimization-result-only hidden></span
+                      ><span data-optimization-result-only hidden>Anbefalet</span>
                     </div>
                     <dl>
                       <div class="optimization-row optimization-row-pension">
-                        <dt><i aria-hidden="true"></i>Samlet ratepension</dt>
-                        <dd id="optimization-current-rate"></dd>
-                        <span aria-hidden="true">→</span>
-                        <dd id="optimization-recommended-rate"></dd>
-                      </div>
-                      <div class="optimization-row optimization-row-pension">
-                        <dt><i aria-hidden="true"></i>Livrente</dt>
-                        <dd id="optimization-current-life-annuity"></dd>
-                        <span aria-hidden="true">→</span>
-                        <dd id="optimization-recommended-life-annuity"></dd>
+                        <dt><i aria-hidden="true"></i>Ratepension</dt>
+                        <dd class="optimization-current-value">
+                          <span id="optimization-current-rate"></span>
+                          <button
+                            class="contribution-lock"
+                            type="button"
+                            data-lock-contribution="annualRatePensionContribution"
+                            data-lock-label="ratepension"
+                            aria-pressed="false"
+                            aria-label="Lås ratepension i optimeringen"
+                            title="Lås ratepension i optimeringen"
+                          >
+                            <svg class="lock-icon-open" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M11.5 7V5.5a3 3 0 0 0-5.7-1.3" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                            <svg class="lock-icon-closed" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M6 7V5.5a3 3 0 0 1 6 0V7" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                          </button>
+                        </dd>
+                        <span data-optimization-result-only hidden aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-rate" data-optimization-result-only hidden></dd>
                       </div>
                       <div class="optimization-row optimization-row-pension">
                         <dt><i aria-hidden="true"></i>Aldersopsparing</dt>
-                        <dd id="optimization-current-age-savings"></dd>
-                        <span aria-hidden="true">→</span>
-                        <dd id="optimization-recommended-age-savings"></dd>
+                        <dd class="optimization-current-value">
+                          <span id="optimization-current-age-savings"></span>
+                          <button
+                            class="contribution-lock"
+                            type="button"
+                            data-lock-contribution="annualAgeSavingsContribution"
+                            data-lock-label="aldersopsparing"
+                            aria-pressed="false"
+                            aria-label="Lås aldersopsparing i optimeringen"
+                            title="Lås aldersopsparing i optimeringen"
+                          >
+                            <svg class="lock-icon-open" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M11.5 7V5.5a3 3 0 0 0-5.7-1.3" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                            <svg class="lock-icon-closed" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M6 7V5.5a3 3 0 0 1 6 0V7" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                          </button>
+                        </dd>
+                        <span data-optimization-result-only hidden aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-age-savings" data-optimization-result-only hidden></dd>
+                      </div>
+                      <div class="optimization-row optimization-row-pension">
+                        <dt><i aria-hidden="true"></i>Livrente</dt>
+                        <dd class="optimization-current-value">
+                          <span id="optimization-current-life-annuity"></span>
+                          <button
+                            class="contribution-lock"
+                            type="button"
+                            data-lock-contribution="annualLifeAnnuityContribution"
+                            data-lock-label="livrente"
+                            aria-pressed="false"
+                            aria-label="Lås livrente i optimeringen"
+                            title="Lås livrente i optimeringen"
+                          >
+                            <svg class="lock-icon-open" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M11.5 7V5.5a3 3 0 0 0-5.7-1.3" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                            <svg class="lock-icon-closed" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M6 7V5.5a3 3 0 0 1 6 0V7" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                          </button>
+                        </dd>
+                        <span data-optimization-result-only hidden aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-life-annuity" data-optimization-result-only hidden></dd>
                       </div>
                       <div class="optimization-row optimization-row-free">
                         <dt><i aria-hidden="true"></i>Frie midler</dt>
-                        <dd id="optimization-current-free"></dd>
-                        <span aria-hidden="true">→</span>
-                        <dd id="optimization-recommended-free"></dd>
+                        <dd class="optimization-current-value">
+                          <span id="optimization-current-free"></span>
+                          <button
+                            class="contribution-lock"
+                            type="button"
+                            data-lock-contribution="annualFreeFundsContribution"
+                            data-lock-label="frie midler"
+                            aria-pressed="false"
+                            aria-label="Lås frie midler i optimeringen"
+                            title="Lås frie midler i optimeringen"
+                          >
+                            <svg class="lock-icon-open" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M11.5 7V5.5a3 3 0 0 0-5.7-1.3" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                            <svg class="lock-icon-closed" viewBox="0 0 18 18" aria-hidden="true">
+                              <path d="M6 7V5.5a3 3 0 0 1 6 0V7" />
+                              <rect x="3.5" y="7" width="11" height="8" rx="2" />
+                              <path d="M9 10v2" />
+                            </svg>
+                          </button>
+                        </dd>
+                        <span data-optimization-result-only hidden aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-free" data-optimization-result-only hidden></dd>
                       </div>
                       <div class="optimization-row optimization-row-tax">
                         <dt>Skattebesparelse</dt>
                         <dd id="optimization-current-tax-saving"></dd>
-                        <span aria-hidden="true">→</span>
-                        <dd id="optimization-recommended-tax-saving"></dd>
+                        <span data-optimization-result-only hidden aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-tax-saving" data-optimization-result-only hidden></dd>
                       </div>
                       <div class="optimization-row optimization-row-reserve">
                         <dt>Reserve efter skat ved planens slutning</dt>
                         <dd id="optimization-current-reserve"></dd>
-                        <span aria-hidden="true">→</span>
-                        <dd id="optimization-recommended-reserve"></dd>
+                        <span data-optimization-result-only hidden aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-reserve" data-optimization-result-only hidden></dd>
                       </div>
                     </dl>
                     <div
                       id="optimization-allocation-bar"
                       class="optimization-allocation-bar"
+                      data-optimization-result-only
                       aria-hidden="true"
+                      hidden
                     >
                       <i></i><i></i><i></i><i></i>
                     </div>

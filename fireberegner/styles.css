@@ -244,6 +244,57 @@ legend,
   min-height: 1em;
 }
 
+.contribution-lock {
+  align-items: center;
+  appearance: none;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 26px;
+  height: 26px;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+}
+
+.contribution-lock:hover {
+  background: var(--surface-soft);
+  color: var(--green);
+}
+
+.contribution-lock:focus-visible {
+  outline: 3px solid rgba(22, 75, 57, 0.18);
+  outline-offset: 1px;
+}
+
+.contribution-lock[aria-pressed="true"] {
+  background: var(--gold-soft);
+  border-color: var(--color-pension-line);
+  color: #8a5b08;
+}
+
+.contribution-lock svg {
+  fill: none;
+  height: 17px;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+  width: 17px;
+}
+
+.contribution-lock .lock-icon-closed,
+.contribution-lock[aria-pressed="true"] .lock-icon-open {
+  display: none;
+}
+
+.contribution-lock[aria-pressed="true"] .lock-icon-closed {
+  display: block;
+}
+
 .field i,
 .inflation-field i,
 .result-card footer i {
@@ -532,6 +583,11 @@ legend,
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.optimization-disclosure:not(.optimization-has-result)
+  .optimization-actions {
+  grid-template-columns: 1fr;
+}
+
 .optimization-button,
 .apply-optimization-button {
   align-items: center;
@@ -662,9 +718,15 @@ legend,
   grid-template-columns: minmax(120px, 1fr) minmax(80px, auto) 18px minmax(80px, auto);
 }
 
+.optimization-result:not(.optimization-has-result)
+  .optimization-column-headings,
+.optimization-result:not(.optimization-has-result) .optimization-row {
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, auto);
+}
+
 .optimization-column-headings {
   color: var(--muted);
-  font-size: var(--text-overline-size);
+  font-size: var(--text-label-sm-size);
   font-weight: var(--weight-semibold);
   line-height: var(--text-overline-line);
   padding-bottom: var(--space-1);
@@ -678,15 +740,15 @@ legend,
 
 .optimization-row {
   align-items: baseline;
-  padding: 3px 0;
+  padding: 5px 0;
 }
 
 .optimization-row dt {
   align-items: center;
   display: flex;
-  font-size: var(--text-caption-size);
+  font-size: var(--text-body-md-size);
   gap: var(--space-2);
-  line-height: var(--text-caption-line);
+  line-height: var(--text-body-md-line);
 }
 
 .optimization-row dt i {
@@ -709,12 +771,23 @@ legend,
 
 .optimization-row dd {
   font-family: var(--data);
-  font-size: var(--text-data-sm-size);
+  font-size: var(--text-data-md-size);
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-medium);
   margin: 0;
   text-align: right;
   white-space: nowrap;
+}
+
+.optimization-current-value {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.optimization-row-locked dt {
+  font-weight: var(--weight-semibold);
 }
 
 .optimization-row > span {
