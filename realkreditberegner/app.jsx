@@ -193,6 +193,7 @@ function EcbMsciChart() {
     () => buildEcbMsciChartData(startYear, rollYears),
     [startYear, rollYears],
   );
+  const endLabel = chartData[chartData.length - 1]?.label || "";
   const avgLabel = `${rollYears}-års annualiseret`;
   const isNarrow = viewportWidth <= 720;
 
@@ -266,7 +267,7 @@ function EcbMsciChart() {
       </div>
 
       <div style={{ fontSize: 14, color: C.text3, marginBottom: 10 }}>
-        {startYear}–2026 Q1 · Rullende annualiseret afkast:{" "}
+        {startYear}–{endLabel} · Rullende annualiseret afkast:{" "}
         <strong style={{ color: C.orange }}>{rollYears} år</strong>
       </div>
 
