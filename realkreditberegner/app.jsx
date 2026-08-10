@@ -1536,8 +1536,8 @@ function App() {
             inkl. afdragsfrihedstillæg ved ≤60%.
           </p>
           <p>
-            <strong style={{ color: C.text3 }}>Renter:</strong> Fast rente ~4%, F5 ~2,6%, F3 ~2,4%,
-            Kort Rente ~2,3% (marts 2026).
+            <strong style={{ color: C.text3 }}>Renter:</strong> Fast rente 4%, F5 2,90%, F3 2,75%,
+            Kort Rente 2,59% (Nordea, 6. aug. 2026).
           </p>
           <p>
             <strong style={{ color: C.text3 }}>60/4-reglen:</strong> Ved belåning {">"} 60% og

@@ -10,22 +10,22 @@
     {
       id: "f5",
       label: "F5",
-      rate: 2.6,
-      rateLabel: "2,6%",
+      rate: 2.9,
+      rateLabel: "2,90%",
       color: "#0071e3",
     },
     {
       id: "f3",
       label: "F3",
-      rate: 2.4,
-      rateLabel: "2,4%",
+      rate: 2.75,
+      rateLabel: "2,75%",
       color: "#8b5cf6",
     },
     {
       id: "kort",
       label: "Kort",
-      rate: 2.3,
-      rateLabel: "2,3%",
+      rate: 2.59,
+      rateLabel: "2,59%",
       color: "#059669",
     },
   ];
@@ -132,6 +132,7 @@
       }
     }
     labels.push("2026 Q1");
+    labels.push("2026 Q2");
 
     var ecbBase = [
       2.5, 2.5, 3.75, 4.25, 3.25, 2.5, 2.0, 2.0, 2.75, 3.75, 3.75, 1.25, 1.0,
@@ -181,7 +182,8 @@
     overrideQuarter(2025, 1, 2.65);
     overrideQuarter(2025, 2, 2.15);
     overrideQuarter(2025, 3, 2.15);
-    ecb.push(2.15);
+    overrideQuarter(2026, 0, 2.15);
+    overrideQuarter(2026, 1, 2.4);
 
     return { labels: labels, msciQ: msciQ, msciHistoryQ: msciHistoryQ, msciVisibleStartIndex: msciVisibleStartIndex, ecb: ecb };
   }
