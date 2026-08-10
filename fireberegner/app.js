@@ -408,7 +408,7 @@
     optimizationHeading.textContent = "Vælg faste beløb";
     optimizationComparison.hidden = false;
     optimizationNote.textContent =
-      "Lås de beløb, som optimeringen skal fastholde. Beregn derefter anbefalingen.";
+      "Mål 1 er tidligst mulig FIRE. Mål 2 er den laveste årlige pris efter skattebesparelsen. Lås eventuelle faste beløb, og beregn anbefalingen.";
     applyOptimizationButton.disabled = true;
   }
 
@@ -438,6 +438,10 @@
         inputs.annualLifeAnnuityContribution,
         calculation.lifeAnnuityContributionLimit,
       );
+    setText(
+      "optimization-current-net-cost",
+      currency.format(calculation.annualNetContributionBudget),
+    );
     setText(
       "optimization-current-tax-saving",
       currency.format(
@@ -490,8 +494,9 @@
     const lockNote = lockedContributionNote(lockedContributions);
     const headings = {
       improved: "Du kan nå FIRE tidligere",
-      "larger-reserve": "Du kan få en større reserve",
-      "current-optimal": "Din fordeling er optimal for FIRE og reserve",
+      "lower-cost": "Samme FIRE til en lavere pris",
+      "larger-reserve": "Samme FIRE og pris med en større reserve",
+      "current-optimal": "Din fordeling er optimal for FIRE og pris",
       "limits-applied": "De ulåste beløb holder sig under 2026-lofterne",
     };
     const valueIds = [
@@ -499,6 +504,7 @@
       ["life-annuity", "annualLifeAnnuityContribution"],
       ["age-savings", "annualAgeSavingsContribution"],
       ["free", "annualFreeFundsContribution"],
+      ["net-cost", "annualNetCost"],
       ["tax-saving", "annualPensionTaxSaving"],
       ["reserve", "finalReserveAfterTax"],
     ];
@@ -518,7 +524,7 @@
       );
     });
 
-    const safeTotal = Math.max(1, annualNetBudget);
+    const safeTotal = Math.max(1, recommended.annualNetCost);
     const recommendedDeductibleRatePension = Math.min(
       recommended.annualRatePensionContribution,
       limits.ratePension,
@@ -560,12 +566,13 @@
       `${(recommended.annualFreeFundsContribution / safeTotal) * 100}%`,
     );
 
-    optimizationNote.textContent =
+    const objectiveNote =
+      "FIRE-året prioriteres først. Blandt fordelinger med det tidligste FIRE-år vælges den laveste årlige pris efter skattebesparelsen.";
+    const limitNote =
       optimization.status === "limits-applied"
-        ? `Din nuværende fordeling overskrider et privat 2026-loft. Anbefalingen bevarer et nettobudget på ${currency.format(annualNetBudget)} om året og holder de ulåste beløb under lofterne. Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet.${lockNote}`
-        : optimization.status === "larger-reserve"
-          ? `FIRE-året er uændret. Anbefalingen giver den største beregnede reserve efter skat ved planens slutning med samme årlige nettobudget på ${currency.format(annualNetBudget)}${lockNote}`
-          : `Alle ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer blev beregnet med samme årlige nettobudget på ${currency.format(annualNetBudget)} og trin på ${currency.format(precision)}${lockNote}`;
+        ? " Din nuværende fordeling overskrider et privat 2026-loft, så de ulåste beløb er flyttet under lofterne."
+        : "";
+    optimizationNote.textContent = `${objectiveNote} Der blev beregnet ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer i trin på ${currency.format(precision)} inden for din nuværende årlige pris på ${currency.format(annualNetBudget)}${limitNote}${lockNote}`;
   }
 
   function runContributionOptimization() {

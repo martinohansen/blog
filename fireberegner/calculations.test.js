@@ -1807,7 +1807,7 @@ const optimizedContributions = optimizeAnnualContributions(
 
 assert.deepEqual(optimizationInputs, unchangedOptimizationInputs);
 assert.ok(
-  ["improved", "larger-reserve", "current-optimal"].includes(
+  ["improved", "lower-cost", "larger-reserve", "current-optimal"].includes(
     optimizedContributions.status,
   ),
 );
@@ -1829,8 +1829,8 @@ if (
   optimizedContributions.current.fireDate.getTime()
 ) {
   assert.ok(
-    optimizedContributions.recommended.finalReserveAfterTax >=
-      optimizedContributions.current.finalReserveAfterTax,
+    optimizedContributions.recommended.annualNetCost <=
+      optimizedContributions.current.annualNetCost,
   );
 }
 assertClose(
@@ -1845,7 +1845,11 @@ assertClose(
     optimizedContributions.recommended,
     optimizationInputs.ratePensionContributionTaxRelief,
   ),
-  optimizedContributions.annualNetBudget,
+  optimizedContributions.recommended.annualNetCost,
+);
+assert.ok(
+  optimizedContributions.recommended.annualNetCost <=
+    optimizedContributions.annualNetBudget,
 );
 assert.ok(
   optimizedContributions.recommended.annualAgeSavingsContribution <=
@@ -1979,7 +1983,11 @@ assertClose(
     taxLeveragedOptimization.recommended,
     0.52,
   ),
-  taxLeveragedOptimization.annualNetBudget,
+  taxLeveragedOptimization.recommended.annualNetCost,
+);
+assert.ok(
+  taxLeveragedOptimization.recommended.annualNetCost <=
+    taxLeveragedOptimization.annualNetBudget,
 );
 
 const repeatedOptimization = optimizeAnnualContributions(
@@ -2021,8 +2029,9 @@ assertClose(
     overLimitOptimization.recommended,
     optimizationInputs.ratePensionContributionTaxRelief,
   ),
-  63281,
+  overLimitOptimization.recommended.annualNetCost,
 );
+assertClose(overLimitOptimization.recommended.annualNetCost, 63200);
 
 const highLimitOptimization = optimizeAnnualContributions(
   {
@@ -2075,7 +2084,7 @@ assertClose(
     independentPensionSplit.recommended,
     independentPensionSplitInputs.ratePensionContributionTaxRelief,
   ),
-  independentPensionSplit.annualNetBudget,
+  independentPensionSplit.recommended.annualNetCost,
 );
 
 const ratioConstrainedPensionSplit = calculateFire(
@@ -2551,7 +2560,7 @@ assertClose(
     combinedRateOptimization.recommended,
     optimizationInputs.ratePensionContributionTaxRelief,
   ),
-  combinedRateOptimization.annualNetBudget,
+  combinedRateOptimization.recommended.annualNetCost,
 );
 
 let randomState = 0x51f15e;

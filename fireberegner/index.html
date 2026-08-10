@@ -492,6 +492,12 @@
                         <dd id="optimization-recommended-free" data-optimization-result-only hidden></dd>
                       </div>
                       <div class="optimization-row optimization-row-tax">
+                        <dt>Årlig pris efter skattebesparelse</dt>
+                        <dd id="optimization-current-net-cost"></dd>
+                        <span data-optimization-result-only hidden aria-hidden="true">→</span>
+                        <dd id="optimization-recommended-net-cost" data-optimization-result-only hidden></dd>
+                      </div>
+                      <div class="optimization-row optimization-row-tax">
                         <dt>Skattebesparelse</dt>
                         <dd id="optimization-current-tax-saving"></dd>
                         <span data-optimization-result-only hidden aria-hidden="true">→</span>
@@ -1025,7 +1031,9 @@
             63.200 kr. Private livrenteindbetalinger over opfyldningsfradraget
             kan have andre fradragsforløb. Livrenten fordeles over den valgte
             udbetalingsperiode som en forenkling. Optimeringen bruger højst
-            opfyldningsfradraget til livrente. Indbetalinger på
+            opfyldningsfradraget til livrente. Optimeringen prioriterer altid
+            det tidligste FIRE-år inden for den nuværende årlige nettopris og
+            derefter den laveste nettopris, som kan nå det år. Indbetalinger på
             ratepension over loftet medregnes til fuld nettoudgift og som
             hovedstol uden fradrag. Optimeringens slutreserve værdisætter
             aldersopsparing, ASK og lagerbeskattede frie midler til den viste

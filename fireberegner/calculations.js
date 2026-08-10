@@ -1673,6 +1673,10 @@
   function contributionSnapshot(contributions, calculation) {
     return {
       ...contributions,
+      annualNetCost: contributionNetBudget(
+        contributions,
+        calculation.ratePensionContributionTaxRelief,
+      ),
       annualPensionTaxSaving: pensionContributionTaxSaving(
         contributions,
         calculation.ratePensionContributionTaxRelief,
@@ -1725,6 +1729,7 @@
 
     return (
       firstFireTime - secondFireTime ||
+      first.annualNetCost - second.annualNetCost ||
       second.calculation.finalReserveAfterTax -
         first.calculation.finalReserveAfterTax ||
       first.distance - second.distance ||
@@ -1797,7 +1802,12 @@
         currentContributions.annualAgeSavingsContribution <=
           selectedAgeSavingsContributionLimit + MONEY_TOLERANCE);
 
-    function completeCandidate(ratePension, lifeAnnuity, ageSavings) {
+    function buildCandidate(
+      ratePension,
+      lifeAnnuity,
+      ageSavings,
+      freeFunds,
+    ) {
       if (
         ratePension < -MONEY_TOLERANCE ||
         (!optimizationLocks.annualRatePensionContribution &&
@@ -1823,6 +1833,11 @@
         (optimizationLocks.annualAgeSavingsContribution &&
           Math.abs(
             ageSavings - currentContributions.annualAgeSavingsContribution,
+          ) > MONEY_TOLERANCE) ||
+        freeFunds < -MONEY_TOLERANCE ||
+        (optimizationLocks.annualFreeFundsContribution &&
+          Math.abs(
+            freeFunds - currentContributions.annualFreeFundsContribution,
           ) > MONEY_TOLERANCE)
       ) {
         return null;
@@ -1832,30 +1847,49 @@
         annualRatePensionContribution: Math.max(0, ratePension),
         annualLifeAnnuityContribution: Math.max(0, lifeAnnuity),
         annualAgeSavingsContribution: Math.max(0, ageSavings),
-        annualFreeFundsContribution: 0,
+        annualFreeFundsContribution: Math.max(0, freeFunds),
       };
-      const pensionAndAgeNetCost = contributionNetBudget(
-        candidate,
-        ratePensionContributionTaxRelief,
-      );
-      const freeFunds = annualNetBudget - pensionAndAgeNetCost;
-
-      if (freeFunds < -MONEY_TOLERANCE) {
-        return null;
-      }
       if (
-        optimizationLocks.annualFreeFundsContribution &&
-        Math.abs(
-          freeFunds - currentContributions.annualFreeFundsContribution,
-        ) > MONEY_TOLERANCE
+        contributionNetBudget(candidate, ratePensionContributionTaxRelief) >
+        annualNetBudget + MONEY_TOLERANCE
       ) {
         return null;
       }
-      candidate.annualFreeFundsContribution = optimizationLocks
-        .annualFreeFundsContribution
-        ? currentContributions.annualFreeFundsContribution
-        : Math.max(0, freeFunds);
       return candidate;
+    }
+
+    function completeFullBudgetCandidate(ratePension, lifeAnnuity, ageSavings) {
+      const baselineFreeFunds = optimizationLocks.annualFreeFundsContribution
+        ? currentContributions.annualFreeFundsContribution
+        : 0;
+      const candidateWithoutFreeFunds = buildCandidate(
+        ratePension,
+        lifeAnnuity,
+        ageSavings,
+        baselineFreeFunds,
+      );
+      if (!candidateWithoutFreeFunds) {
+        return null;
+      }
+      if (optimizationLocks.annualFreeFundsContribution) {
+        return buildCandidate(
+          ratePension,
+          lifeAnnuity,
+          ageSavings,
+          currentContributions.annualFreeFundsContribution,
+        );
+      }
+
+      const pensionAndAgeNetCost = contributionNetBudget(
+        candidateWithoutFreeFunds,
+        ratePensionContributionTaxRelief,
+      );
+      return buildCandidate(
+        ratePension,
+        lifeAnnuity,
+        ageSavings,
+        annualNetBudget - pensionAndAgeNetCost,
+      );
     }
 
     function evaluate(candidate) {
@@ -1867,6 +1901,10 @@
       const evaluation = {
         candidate,
         calculation,
+        annualNetCost: contributionNetBudget(
+          candidate,
+          ratePensionContributionTaxRelief,
+        ),
         distance: contributionDistance(candidate, currentContributions),
       };
       return evaluation;
@@ -1925,38 +1963,79 @@
           currentContributions.annualAgeSavingsContribution,
         );
     const totalPensionCandidates = new Set();
-    ratePensionCandidates.forEach((ratePension) => {
+    if (optimizationLocks.annualRatePensionContribution) {
       lifeAnnuityCandidates.forEach((lifeAnnuity) => {
-        totalPensionCandidates.add(ratePension + lifeAnnuity);
+        totalPensionCandidates.add(
+          currentContributions.annualRatePensionContribution + lifeAnnuity,
+        );
       });
-    });
+    } else if (optimizationLocks.annualLifeAnnuityContribution) {
+      ratePensionCandidates.forEach((ratePension) => {
+        totalPensionCandidates.add(
+          ratePension + currentContributions.annualLifeAnnuityContribution,
+        );
+      });
+    } else {
+      ratePensionCandidates.forEach((ratePension) => {
+        totalPensionCandidates.add(ratePension);
+      });
+      lifeAnnuityCandidates.forEach((lifeAnnuity) => {
+        if (lifeAnnuity > 0) {
+          totalPensionCandidates.add(
+            CONTRIBUTION_LIMITS.ratePension + lifeAnnuity,
+          );
+        }
+      });
+      totalPensionCandidates.add(
+        currentContributions.annualRatePensionContribution +
+          currentContributions.annualLifeAnnuityContribution,
+      );
+    }
 
-    let bestEvaluation = null;
+    let bestFullBudgetEvaluation = null;
     let evaluatedCandidates = 0;
-    const evaluatedCandidateKeys = new Set();
+    const evaluationsByCandidateKey = new Map();
+    const contributionCombinations = [
+      {
+        ratePension: currentContributions.annualRatePensionContribution,
+        lifeAnnuity: currentContributions.annualLifeAnnuityContribution,
+        ageSavings: currentContributions.annualAgeSavingsContribution,
+      },
+    ];
 
-    function considerCandidate(candidate) {
+    function evaluateCandidate(candidate) {
       if (!candidate) {
-        return;
+        return null;
       }
       const key = candidateKey(candidate);
-      if (evaluatedCandidateKeys.has(key)) {
-        return;
+      if (evaluationsByCandidateKey.has(key)) {
+        return evaluationsByCandidateKey.get(key);
       }
-      evaluatedCandidateKeys.add(key);
 
       const evaluation = evaluate(candidate);
+      evaluationsByCandidateKey.set(key, evaluation);
       evaluatedCandidates += 1;
+      return evaluation;
+    }
+
+    function considerFullBudgetCandidate(candidate) {
+      const evaluation = evaluateCandidate(candidate);
+      if (!evaluation) {
+        return;
+      }
       if (
-        !bestEvaluation ||
-        compareEvaluations(evaluation, bestEvaluation) < 0
+        !bestFullBudgetEvaluation ||
+        compareEvaluations(
+          evaluation,
+          bestFullBudgetEvaluation,
+        ) < 0
       ) {
-        bestEvaluation = evaluation;
+        bestFullBudgetEvaluation = evaluation;
       }
     }
 
-    considerCandidate(
-      completeCandidate(
+    considerFullBudgetCandidate(
+      completeFullBudgetCandidate(
         currentContributions.annualRatePensionContribution,
         currentContributions.annualLifeAnnuityContribution,
         currentContributions.annualAgeSavingsContribution,
@@ -1970,14 +2049,140 @@
           totalPensionContribution,
         );
         ageSavingsCandidates.forEach((ageSavingsContribution) => {
-          const candidate = completeCandidate(
+          const combination = {
+            ratePension: pensionSplit.annualRatePensionContribution,
+            lifeAnnuity: pensionSplit.annualLifeAnnuityContribution,
+            ageSavings: ageSavingsContribution,
+          };
+          contributionCombinations.push(combination);
+          const candidate = completeFullBudgetCandidate(
             pensionSplit.annualRatePensionContribution,
             pensionSplit.annualLifeAnnuityContribution,
             ageSavingsContribution,
           );
-          considerCandidate(candidate);
+          considerFullBudgetCandidate(candidate);
         });
       });
+
+    function cheapestEvaluationForFireTime(
+      combination,
+      targetFireTime,
+      maximumNetCost,
+    ) {
+      const { ratePension, lifeAnnuity, ageSavings } = combination;
+      if (optimizationLocks.annualFreeFundsContribution) {
+        const evaluation = evaluateCandidate(
+          buildCandidate(
+            ratePension,
+            lifeAnnuity,
+            ageSavings,
+            currentContributions.annualFreeFundsContribution,
+          ),
+        );
+        return evaluation?.calculation.fireRow &&
+          evaluation.calculation.fireRow.date.getTime() <= targetFireTime
+          ? evaluation
+          : null;
+      }
+
+      const candidateWithoutFreeFunds = buildCandidate(
+        ratePension,
+        lifeAnnuity,
+        ageSavings,
+        0,
+      );
+      if (!candidateWithoutFreeFunds) {
+        return null;
+      }
+      const fixedNetCost = contributionNetBudget(
+        candidateWithoutFreeFunds,
+        ratePensionContributionTaxRelief,
+      );
+      if (fixedNetCost > maximumNetCost + MONEY_TOLERANCE) {
+        return null;
+      }
+      const maximumFreeFunds = Math.max(0, annualNetBudget - fixedNetCost);
+      let lowerStep = -1;
+      let upperStep = Math.ceil(
+        maximumFreeFunds / CONTRIBUTION_SEARCH_STEP,
+      );
+      let bestEvaluation = null;
+
+      while (upperStep - lowerStep > 1) {
+        const candidateStep = Math.floor((lowerStep + upperStep) / 2);
+        const freeFunds = Math.min(
+          maximumFreeFunds,
+          candidateStep * CONTRIBUTION_SEARCH_STEP,
+        );
+        const evaluation = evaluateCandidate(
+          buildCandidate(
+            ratePension,
+            lifeAnnuity,
+            ageSavings,
+            freeFunds,
+          ),
+        );
+        const reachesTarget =
+          evaluation?.calculation.fireRow &&
+          evaluation.calculation.fireRow.date.getTime() <= targetFireTime;
+
+        if (reachesTarget) {
+          upperStep = candidateStep;
+          bestEvaluation = evaluation;
+        } else {
+          lowerStep = candidateStep;
+        }
+      }
+
+      if (!bestEvaluation) {
+        const freeFunds = Math.min(
+          maximumFreeFunds,
+          upperStep * CONTRIBUTION_SEARCH_STEP,
+        );
+        const evaluation = evaluateCandidate(
+          buildCandidate(
+            ratePension,
+            lifeAnnuity,
+            ageSavings,
+            freeFunds,
+          ),
+        );
+        if (
+          evaluation?.calculation.fireRow &&
+          evaluation.calculation.fireRow.date.getTime() <= targetFireTime
+        ) {
+          bestEvaluation = evaluation;
+        }
+      }
+
+      return bestEvaluation;
+    }
+
+    let bestEvaluation = bestFullBudgetEvaluation;
+    const earliestFireTime = bestFullBudgetEvaluation?.calculation.fireRow
+      ? bestFullBudgetEvaluation.calculation.fireRow.date.getTime()
+      : Number.POSITIVE_INFINITY;
+
+    if (Number.isFinite(earliestFireTime)) {
+      bestEvaluation = null;
+      contributionCombinations.forEach((combination) => {
+        const evaluation = cheapestEvaluationForFireTime(
+          combination,
+          earliestFireTime,
+          bestEvaluation?.annualNetCost ?? Number.POSITIVE_INFINITY,
+        );
+        if (
+          evaluation &&
+          (!bestEvaluation ||
+            compareEvaluations(
+              evaluation,
+              bestEvaluation,
+            ) < 0)
+        ) {
+          bestEvaluation = evaluation;
+        }
+      });
+    }
 
     let bestCandidate = bestEvaluation?.candidate ?? null;
     let bestCalculation = bestEvaluation?.calculation ?? null;
@@ -1991,6 +2196,10 @@
     const currentEvaluation = {
       candidate: currentContributions,
       calculation: currentCalculation,
+      annualNetCost: contributionNetBudget(
+        currentContributions,
+        ratePensionContributionTaxRelief,
+      ),
       distance: 0,
     };
     let status = "improved";
@@ -1999,12 +2208,21 @@
       status = "unachievable";
     } else if (!currentUnlockedContributionsAreWithinLimits) {
       status = "limits-applied";
-    } else if (compareEvaluations(currentEvaluation, bestEvaluation) <= 0) {
+    } else if (
+      compareEvaluations(
+        currentEvaluation,
+        bestEvaluation,
+      ) <= 0
+    ) {
       status = "current-optimal";
       bestCandidate = currentContributions;
       bestCalculation = currentCalculation;
     } else if (currentFireTime === bestFireTime) {
-      status = "larger-reserve";
+      status =
+        bestEvaluation.annualNetCost <
+        currentEvaluation.annualNetCost - MONEY_TOLERANCE
+          ? "lower-cost"
+          : "larger-reserve";
     }
 
     return {
