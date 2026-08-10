@@ -45,9 +45,26 @@
   const contributionLockButtons = [
     ...document.querySelectorAll("[data-lock-contribution]"),
   ];
+  const savePlanCodeButton = document.querySelector("#save-plan-code");
+  const loadPlanCodeButton = document.querySelector("#load-plan-code");
+  const planCodeDialog = document.querySelector("#plan-code-dialog");
+  const closePlanCodeDialogButton = document.querySelector(
+    "#close-plan-code-dialog",
+  );
+  const savedPlanCode = document.querySelector("#saved-plan-code");
+  const copyPlanCodeButton = document.querySelector("#copy-plan-code");
+  const copyPlanCodeStatus = document.querySelector(
+    "#copy-plan-code-status",
+  );
+  const planCodeInput = document.querySelector("#plan-code-input");
+  const applyPlanCodeButton = document.querySelector("#apply-plan-code");
+  const planCodeError = document.querySelector("#plan-code-error");
+  const planCodeStatus = document.querySelector("#plan-code-status");
   const { calculateFire, optimizeAnnualContributions } =
     window.FireCalculations;
+  const { encodePlan, decodePlan } = window.FirePlanCode;
   let latestOptimization = null;
+  let planCodeReturnFocus = null;
   const inputLocale =
     document.documentElement.lang || navigator.language || "da-DK";
   const inputNumber = new Intl.NumberFormat(inputLocale, {
@@ -282,6 +299,149 @@
         ]),
       ),
     };
+  }
+
+  const planPercentageFields = new Set([
+    "pensionTax",
+    "ratePensionContributionTaxRelief",
+    "pensionWithdrawalTax",
+    "askTax",
+    "freeFundsInventoryShare",
+    "returnRate",
+    "inflationRate",
+  ]);
+
+  function setPlanCodeStatus(message) {
+    planCodeStatus.textContent = message;
+    planCodeStatus.hidden = !message;
+  }
+
+  function setPlanCodeError(message) {
+    planCodeError.textContent = message;
+    planCodeError.hidden = !message;
+  }
+
+  function setCopyPlanCodeStatus(message) {
+    copyPlanCodeStatus.textContent = message;
+    copyPlanCodeStatus.hidden = !message;
+  }
+
+  function formatPlanPercentage(value) {
+    return String(Number((value * 100).toFixed(10)));
+  }
+
+  function refreshSavedPlanCode() {
+    const inputs = readInputs();
+    calculateFire(inputs);
+    savedPlanCode.value = encodePlan(inputs);
+    copyPlanCodeButton.disabled = false;
+  }
+
+  function openPlanCodeDialog(mode) {
+    planCodeReturnFocus =
+      mode === "save" ? savePlanCodeButton : loadPlanCodeButton;
+    setPlanCodeStatus("");
+    setPlanCodeError("");
+    setCopyPlanCodeStatus("");
+    planCodeInput.value = "";
+    savedPlanCode.value = "";
+    copyPlanCodeButton.disabled = true;
+
+    try {
+      refreshSavedPlanCode();
+    } catch (error) {
+      setPlanCodeError(error.message);
+    }
+
+    planCodeDialog.showModal();
+    window.requestAnimationFrame(() => {
+      if (mode === "save" && savedPlanCode.value) {
+        copyPlanCodeButton.focus();
+      } else if (mode === "load") {
+        planCodeInput.focus();
+      } else {
+        closePlanCodeDialogButton.focus();
+      }
+    });
+  }
+
+  function closePlanCodeDialog() {
+    planCodeDialog.close();
+    planCodeReturnFocus?.focus();
+  }
+
+  async function copySavedPlanCode() {
+    if (!savedPlanCode.value) {
+      return;
+    }
+
+    setCopyPlanCodeStatus("");
+    let copied = false;
+
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(savedPlanCode.value);
+        copied = true;
+      } catch (_error) {
+        copied = false;
+      }
+    }
+
+    if (!copied) {
+      savedPlanCode.focus();
+      savedPlanCode.select();
+      try {
+        copied = document.execCommand("copy");
+      } catch (_error) {
+        copied = false;
+      }
+    }
+
+    setCopyPlanCodeStatus(
+      copied
+        ? "Koden er kopieret."
+        : "Koden kunne ikke kopieres automatisk. Markér og kopiér den manuelt.",
+    );
+  }
+
+  function applyPlanInputs(inputs) {
+    Object.entries(inputs).forEach(([name, value]) => {
+      const input = form.elements[name];
+
+      if (input.type === "checkbox") {
+        input.checked = value;
+      } else if (planPercentageFields.has(name)) {
+        input.value = formatPlanPercentage(value);
+      } else {
+        input.value = String(value);
+        if (input.matches("[data-number-format='integer']")) {
+          formatNumberInput(input);
+        }
+      }
+    });
+
+    hideOptimizationResult();
+    renderInflationState();
+    renderPensionRedirectState();
+    renderWithdrawalTaxState();
+    renderFreeFundsTaxation();
+    update();
+  }
+
+  function loadPlanCode() {
+    setPlanCodeError("");
+
+    try {
+      const inputs = decodePlan(planCodeInput.value);
+      calculateFire(inputs);
+      applyPlanInputs(inputs);
+      closePlanCodeDialog();
+      setPlanCodeStatus("Input indlæst.");
+    } catch (error) {
+      setPlanCodeError(error.message);
+      planCodeInput.focus();
+      planCodeInput.select();
+    }
   }
 
   function toggleContributionLock(button) {
@@ -1198,6 +1358,7 @@
 
   form.addEventListener("submit", update);
   form.addEventListener("input", (event) => {
+    setPlanCodeStatus("");
     hideOptimizationResult();
     if (event.target.matches("[data-number-format='integer']")) {
       formatNumberInput(event.target, true);
@@ -1222,6 +1383,32 @@
   applyOptimizationButton.addEventListener("click", applyOptimization);
   contributionLockButtons.forEach((button) => {
     button.addEventListener("click", () => toggleContributionLock(button));
+  });
+  savePlanCodeButton.addEventListener("click", () =>
+    openPlanCodeDialog("save"),
+  );
+  loadPlanCodeButton.addEventListener("click", () =>
+    openPlanCodeDialog("load"),
+  );
+  closePlanCodeDialogButton.addEventListener("click", () =>
+    closePlanCodeDialog(),
+  );
+  copyPlanCodeButton.addEventListener("click", copySavedPlanCode);
+  applyPlanCodeButton.addEventListener("click", loadPlanCode);
+  planCodeDialog.addEventListener("click", (event) => {
+    if (event.target === planCodeDialog) {
+      closePlanCodeDialog();
+    }
+  });
+  planCodeDialog.addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closePlanCodeDialog();
+  });
+  planCodeDialog.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePlanCodeDialog();
+    }
   });
 
   formattedNumberInputs.forEach((input) => {
