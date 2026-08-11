@@ -218,6 +218,7 @@
       const button = document.createElement("button");
       button.className = "amount-step-button";
       button.type = "button";
+      button.tabIndex = -1;
       button.setAttribute("aria-label", label);
       button.title = label;
       button.innerHTML = `<svg viewBox="0 0 9 5" aria-hidden="true"><path d="${path}" /></svg>`;
