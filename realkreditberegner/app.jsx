@@ -1152,113 +1152,138 @@ function App() {
         </div>
 
         <div className="card">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 20 }}>
-            <div>
-              <h2 style={{ fontSize: 28, fontWeight: 600, marginBottom: 6, color: C.text, letterSpacing: -0.5 }}>
+          <div style={{ marginBottom: 20 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                gap: 12,
+                marginBottom: 6,
+              }}
+            >
+              <h2
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  fontSize: 28,
+                  fontWeight: 600,
+                  color: C.text,
+                  letterSpacing: -0.5,
+                }}
+              >
                 Investér vs. afdrag
               </h2>
-              <p style={{ fontSize: 14, color: C.text2, lineHeight: 1.6, fontWeight: 400 }}>
-                Udgangspunkt: {currentLtv === null ? "60%" : fmtPct2(currentLtv)} belåning med {fmt(loanAmount)} kr. lån. Pengene er de samme i begge scenarier — enten som egenkapital
-                i boligen (afdrag) eller som indskud i en portefølje (investering).
-              </p>
-              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: C.orange,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ color: C.orange }}>
-                    <strong>Afkast</strong>
-                  </span>
-                  <span style={{ color: C.text3 }}>
-                    — hvad investeringen kaster af sig (efter lagerbeskatning)
-                  </span>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 6,
+                  alignItems: "center",
+                  flexShrink: 0,
+                  marginTop: 4,
+                }}
+              >
+                <div
+                  style={{
+                    width: investOwners > 1 ? 52 : 0,
+                    opacity: investOwners > 1 ? 1 : 0,
+                    overflow: "hidden",
+                    transform: investOwners > 1 ? "translateX(0)" : "translateX(12px)",
+                    transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
+                    pointerEvents: investOwners > 1 ? "auto" : "none",
+                  }}
+                >
+                  <button
+                    className="tb on"
+                    style={{ width: "100%", whiteSpace: "nowrap" }}
+                    onClick={() => setInvestOwners((v) => (v >= 5 ? 2 : v + 1))}
+                  >
+                    {investOwners}
+                  </button>
                 </div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: C.red,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ color: C.red }}>
-                    <strong>Ekstra rente+bidrag</strong>
-                  </span>
-                  <span style={{ color: C.text3 }}>— prisen for at holde højere gæld</span>
-                </div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: C.green,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ color: C.green }}>
-                    <strong>Netto afkast</strong>
-                  </span>
-                  <span style={{ color: C.text3 }}>
-                    — afkast minus meromkostning = den reelle gevinst/tab
-                  </span>
-                </div>
-                <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
-                  <span
-                    style={{
-                      width: 10,
-                      height: 10,
-                      borderRadius: 3,
-                      background: C.blue,
-                      flexShrink: 0,
-                    }}
-                  />
-                  <span style={{ color: C.blue }}>
-                    <strong>Likviditet</strong>
-                  </span>
-                  <span style={{ color: C.text3 }}>
-                    — månedlig frie midler når afdrag udgår af dit budget
-                  </span>
+                <div className="seg">
+                  <button className={investOwners === 1 ? "on" : ""} onClick={() => setInvestOwners(1)}>
+                    Enkelt
+                  </button>
+                  <button
+                    className={investOwners > 1 ? "on" : ""}
+                    onClick={() => setInvestOwners((v) => (v === 1 ? 2 : v))}
+                  >
+                    Flere
+                  </button>
                 </div>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0, marginTop: 4 }}>
-              <div
-                style={{
-                  width: investOwners > 1 ? 52 : 0,
-                  opacity: investOwners > 1 ? 1 : 0,
-                  overflow: "hidden",
-                  transform: investOwners > 1 ? "translateX(0)" : "translateX(12px)",
-                  transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
-                  pointerEvents: investOwners > 1 ? "auto" : "none",
-                }}
-              >
-                <button
-                  className="tb on"
-                  style={{ width: "100%", whiteSpace: "nowrap" }}
-                  onClick={() => setInvestOwners((v) => (v >= 5 ? 2 : v + 1))}
-                >
-                  {investOwners}
-                </button>
+            <p style={{ fontSize: 14, color: C.text2, lineHeight: 1.6, fontWeight: 400 }}>
+              Udgangspunkt: {currentLtv === null ? "60%" : fmtPct2(currentLtv)} belåning med {fmt(loanAmount)} kr. lån. Pengene er de samme i begge scenarier — enten som egenkapital
+              i boligen (afdrag) eller som indskud i en portefølje (investering).
+            </p>
+            <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 3,
+                    background: C.orange,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ color: C.orange }}>
+                  <strong>Afkast</strong>
+                </span>
+                <span style={{ color: C.text3 }}>
+                  — hvad investeringen kaster af sig (efter lagerbeskatning)
+                </span>
               </div>
-              <div className="seg">
-                <button className={investOwners === 1 ? "on" : ""} onClick={() => setInvestOwners(1)}>
-                  Enkelt
-                </button>
-                <button
-                  className={investOwners > 1 ? "on" : ""}
-                  onClick={() => setInvestOwners((v) => (v === 1 ? 2 : v))}
-                >
-                  Flere
-                </button>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 3,
+                    background: C.red,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ color: C.red }}>
+                  <strong>Ekstra rente+bidrag</strong>
+                </span>
+                <span style={{ color: C.text3 }}>— prisen for at holde højere gæld</span>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 3,
+                    background: C.green,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ color: C.green }}>
+                  <strong>Netto afkast</strong>
+                </span>
+                <span style={{ color: C.text3 }}>
+                  — afkast minus meromkostning = den reelle gevinst/tab
+                </span>
+              </div>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
+                <span
+                  style={{
+                    width: 10,
+                    height: 10,
+                    borderRadius: 3,
+                    background: C.blue,
+                    flexShrink: 0,
+                  }}
+                />
+                <span style={{ color: C.blue }}>
+                  <strong>Likviditet</strong>
+                </span>
+                <span style={{ color: C.text3 }}>
+                  — månedlig frie midler når afdrag udgår af dit budget
+                </span>
               </div>
             </div>
           </div>
