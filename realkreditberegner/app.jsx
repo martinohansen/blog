@@ -96,6 +96,7 @@ function AmountInput({ id, label, value, step, max, onChange }) {
         <span className="amount-stepper">
           <button
             type="button"
+            tabIndex={-1}
             disabled={atMaximum}
             aria-label={`Forøg ${label.toLowerCase()} med ${fmt(step)} kr.`}
             title={`Forøg med ${fmt(step)} kr.`}
@@ -107,6 +108,7 @@ function AmountInput({ id, label, value, step, max, onChange }) {
           </button>
           <button
             type="button"
+            tabIndex={-1}
             disabled={atMinimum}
             aria-label={`Sænk ${label.toLowerCase()} med ${fmt(step)} kr.`}
             title={`Sænk med ${fmt(step)} kr.`}
