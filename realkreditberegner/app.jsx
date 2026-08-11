@@ -32,10 +32,7 @@ function roundDownToStep(value, step) {
   return Math.floor(value / step) * step;
 }
 
-const MIN_HOME_PRICE = 500000;
-const MAX_HOME_PRICE = 30000000;
 const HOME_PRICE_STEP = 100000;
-const MIN_LOAN_AMOUNT = 0;
 const LOAN_AMOUNT_STEP = 100000;
 
 const C = {
@@ -59,8 +56,70 @@ const C = {
 };
 
 function sliderBg(value, min, max, color) {
+  if (max <= min) return C.card3;
   const pct = ((value - min) / (max - min)) * 100;
   return `linear-gradient(to right, ${color} ${pct}%, ${C.card3} ${pct}%)`;
+}
+
+function AmountInput({ id, label, value, step, max, onChange }) {
+  const updateValue = (nextValue) => {
+    const upperBound = Number.isFinite(max) ? max : Number.POSITIVE_INFINITY;
+    onChange(Math.min(upperBound, Math.max(0, Math.round(nextValue))));
+  };
+
+  const changeByStep = (direction) => updateValue(value + direction * step);
+  const atMinimum = value <= 0;
+  const atMaximum = Number.isFinite(max) && value >= max;
+
+  return (
+    <div className="amount-field">
+      <label htmlFor={id}>{label}</label>
+      <div className="amount-input">
+        <input
+          id={id}
+          type="text"
+          inputMode="numeric"
+          className="mono"
+          value={fmt(value)}
+          aria-label={`${label} i kroner`}
+          onChange={(event) => {
+            const digits = event.target.value.replace(/\D/g, "");
+            updateValue(digits ? Number(digits) : 0);
+          }}
+          onKeyDown={(event) => {
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            changeByStep(event.key === "ArrowUp" ? 1 : -1);
+          }}
+        />
+        <span className="amount-unit">kr.</span>
+        <span className="amount-stepper">
+          <button
+            type="button"
+            disabled={atMaximum}
+            aria-label={`Forøg ${label.toLowerCase()} med ${fmt(step)} kr.`}
+            title={`Forøg med ${fmt(step)} kr.`}
+            onClick={() => changeByStep(1)}
+          >
+            <svg viewBox="0 0 9 5" aria-hidden="true">
+              <path d="M1 4 4.5 1 8 4" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            disabled={atMinimum}
+            aria-label={`Sænk ${label.toLowerCase()} med ${fmt(step)} kr.`}
+            title={`Sænk med ${fmt(step)} kr.`}
+            onClick={() => changeByStep(-1)}
+          >
+            <svg viewBox="0 0 9 5" aria-hidden="true">
+              <path d="M1 1 4.5 4 8 1" />
+            </svg>
+          </button>
+        </span>
+      </div>
+    </div>
+  );
 }
 
 function TooltipShell({ title, children }) {
@@ -561,6 +620,11 @@ function App() {
   const cycleTaxHousehold = () => {
     setTaxHousehold((current) => (current === "single" ? "couple" : "single"));
   };
+  const updateHomePrice = (nextHomePrice) => {
+    const nextMaxLoanAmount = roundDownToStep(nextHomePrice * 0.8, LOAN_AMOUNT_STEP);
+    setHomePrice(nextHomePrice);
+    setLoanAmount((current) => Math.min(current, nextMaxLoanAmount));
+  };
   const toggleLoanType = (loanTypeId) => {
     setSelectedTypes((current) => {
       const isSelected = current.includes(loanTypeId);
@@ -786,88 +850,22 @@ function App() {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: isPhone ? 18 : 24 }}>
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "baseline",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  marginBottom: 10,
-                }}
-              >
-                <span style={{ fontSize: 14, color: C.text2 }}>Boligpris</span>
-                <span className="mono" style={{ fontSize: isPhone ? 20 : 24, fontWeight: 600, fontFamily: C.mono }}>
-                  {fmt(homePrice)} kr.
-                </span>
-              </div>
-              <input
-                type="range"
-                min={MIN_HOME_PRICE}
-                max={MAX_HOME_PRICE}
-                step={HOME_PRICE_STEP}
-                value={homePrice}
-                style={{ background: sliderBg(homePrice, MIN_HOME_PRICE, MAX_HOME_PRICE, C.blue) }}
-                onChange={(event) => {
-                  const nextHomePrice = +event.target.value;
-                  const nextMaxLoanAmount = roundDownToStep(nextHomePrice * 0.8, LOAN_AMOUNT_STEP);
-                  setHomePrice(nextHomePrice);
-                  setLoanAmount((current) => Math.min(current, nextMaxLoanAmount));
-                }}
-              />
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: 6,
-                  fontSize: 12,
-                  color: C.text4,
-                }}
-              >
-                <span>{fmt(MIN_HOME_PRICE)}</span>
-                <span>{fmt(MAX_HOME_PRICE)}</span>
-              </div>
-            </div>
+            <AmountInput
+              id="home-price"
+              label="Boligpris"
+              value={homePrice}
+              step={HOME_PRICE_STEP}
+              onChange={updateHomePrice}
+            />
 
-            <div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "baseline",
-                  gap: 10,
-                  flexWrap: "wrap",
-                  marginBottom: 10,
-                }}
-              >
-                <span style={{ fontSize: 14, color: C.text2 }}>Restgæld</span>
-                <span className="mono" style={{ fontSize: isPhone ? 20 : 24, fontWeight: 600, fontFamily: C.mono }}>
-                  {fmt(loanAmount)} kr.
-                </span>
-              </div>
-              <input
-                type="range"
-                min={MIN_LOAN_AMOUNT}
-                max={maxLoanAmount}
-                step={LOAN_AMOUNT_STEP}
-                value={loanAmount}
-                style={{ background: sliderBg(loanAmount, MIN_LOAN_AMOUNT, maxLoanAmount, C.blue) }}
-                onChange={(event) => setLoanAmount(+event.target.value)}
-              />
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  marginTop: 6,
-                  fontSize: 12,
-                  color: C.text4,
-                }}
-              >
-                <span>{fmt(MIN_LOAN_AMOUNT)}</span>
-                <span>{fmt(maxLoanAmount)}</span>
-              </div>
-            </div>
+            <AmountInput
+              id="loan-amount"
+              label="Restgæld"
+              value={loanAmount}
+              step={LOAN_AMOUNT_STEP}
+              max={maxLoanAmount}
+              onChange={setLoanAmount}
+            />
           </div>
         </div>
 
