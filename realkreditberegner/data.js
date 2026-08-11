@@ -88,8 +88,8 @@
   var INV_LABELS = {
     afkast: { label: "Afkast", color: "#c9a050" },
     extraCost: { label: "Ekstra rente+bidrag", color: "#D4775A" },
-    result: { label: "Resultat", color: "#059669" },
-    nettoAfkast: { label: "Resultat", color: "#059669" },
+    result: { label: "Netto", color: "#059669" },
+    nettoAfkast: { label: "Netto", color: "#059669" },
     cumulativeFreed: { label: "Akkumuleret likviditet", color: "#0071e3" },
   };
 

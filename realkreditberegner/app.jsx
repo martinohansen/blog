@@ -185,7 +185,7 @@ function InvTip({ active, payload, label, showNet }) {
   if (!active || !payload?.length) return null;
   const modeLabels = {
     afkast: showNet ? "Afkast (efter lagerbeskatning)" : "Afkast (før skat)",
-    result: showNet ? "Netto" : "Brutto",
+    result: "Netto",
   };
   return (
     <TooltipShell title={`År ${label}`}>
@@ -1274,7 +1274,7 @@ function App() {
                   }}
                 />
                 <span style={{ color: C.green }}>
-                  <strong>{showNet ? "Netto" : "Brutto"}</strong>
+                  <strong>Netto</strong>
                 </span>
                 <span style={{ color: C.text3 }}>
                   — afkast minus meromkostning = den reelle gevinst/tab
@@ -1465,7 +1465,7 @@ function App() {
                   {
                     key: "result",
                     color: C.green,
-                    label: showNet ? "Netto" : "Brutto",
+                    label: "Netto",
                   },
                   { key: "cumulativeFreed", color: C.blue, label: "Akkumuleret likviditet", opacity: 0.7 },
                 ].map(({ key, color, label, opacity }) => {
@@ -1549,7 +1549,7 @@ function App() {
                   <div className="sep" style={{ margin: "6px 0" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
                     <span style={{ color: positive ? C.green : C.red }}>
-                      {showNet ? "Netto" : "Brutto"}
+                      Netto
                     </span>
                     <span className="mono" style={{ color: positive ? C.green : C.red, fontFamily: C.mono }}>
                       {positive ? "+" : ""}
