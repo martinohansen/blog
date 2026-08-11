@@ -181,8 +181,12 @@ function CTip({ active, payload, label }) {
   );
 }
 
-function InvTip({ active, payload, label }) {
+function InvTip({ active, payload, label, showNet }) {
   if (!active || !payload?.length) return null;
+  const modeLabels = {
+    afkast: showNet ? "Afkast (efter lagerbeskatning)" : "Afkast (før skat)",
+    result: showNet ? "Netto" : "Brutto",
+  };
   return (
     <TooltipShell title={`År ${label}`}>
       {payload.map((entry) => {
@@ -191,7 +195,7 @@ function InvTip({ active, payload, label }) {
           <ValueTooltipRow
             key={entry.dataKey}
             color={info.color || entry.color}
-            label={info.label || entry.dataKey}
+            label={modeLabels[entry.dataKey] || info.label || entry.dataKey}
             value={fmt(entry.value)}
           />
         );
@@ -676,8 +680,9 @@ function App() {
         taxHousehold,
         investOwners,
         currentLtv ?? 60,
+        showNet,
       ),
-    [activeTypeKey, loanAmount, investReturn, investYears, taxHousehold, investOwners, currentLtv],
+    [activeTypeKey, loanAmount, investReturn, investYears, taxHousehold, investOwners, currentLtv, showNet],
   );
 
   const investChartType = activeLoanTypes[0]?.id;
@@ -1160,6 +1165,7 @@ function App() {
                 alignItems: "flex-start",
                 gap: 12,
                 marginBottom: 6,
+                flexWrap: "wrap",
               }}
             >
               <h2
@@ -1181,35 +1187,41 @@ function App() {
                   alignItems: "center",
                   flexShrink: 0,
                   marginTop: 4,
+                  width: isNarrow ? "100%" : "auto",
+                  justifyContent: isNarrow ? "flex-start" : "flex-end",
+                  flexWrap: "wrap",
                 }}
               >
-                <div
-                  style={{
-                    width: investOwners > 1 ? 52 : 0,
-                    opacity: investOwners > 1 ? 1 : 0,
-                    overflow: "hidden",
-                    transform: investOwners > 1 ? "translateX(0)" : "translateX(12px)",
-                    transition: "width 0.25s ease, opacity 0.2s ease, transform 0.25s ease",
-                    pointerEvents: investOwners > 1 ? "auto" : "none",
-                  }}
-                >
-                  <button
-                    className="tb on"
-                    style={{ width: "100%", whiteSpace: "nowrap" }}
-                    onClick={() => setInvestOwners((v) => (v >= 5 ? 2 : v + 1))}
-                  >
-                    {investOwners}
-                  </button>
-                </div>
+                {showNet && (
+                  <>
+                    {investOwners > 1 && (
+                      <button
+                        className="tb on"
+                        style={{ width: 52, whiteSpace: "nowrap" }}
+                        onClick={() => setInvestOwners((v) => (v >= 5 ? 2 : v + 1))}
+                      >
+                        {investOwners}
+                      </button>
+                    )}
+                    <div className="seg">
+                      <button className={investOwners === 1 ? "on" : ""} onClick={() => setInvestOwners(1)}>
+                        Enkelt
+                      </button>
+                      <button
+                        className={investOwners > 1 ? "on" : ""}
+                        onClick={() => setInvestOwners((v) => (v === 1 ? 2 : v))}
+                      >
+                        Flere
+                      </button>
+                    </div>
+                  </>
+                )}
                 <div className="seg">
-                  <button className={investOwners === 1 ? "on" : ""} onClick={() => setInvestOwners(1)}>
-                    Enkelt
+                  <button className={showNet ? "on" : ""} onClick={() => setShowNet(true)}>
+                    Netto
                   </button>
-                  <button
-                    className={investOwners > 1 ? "on" : ""}
-                    onClick={() => setInvestOwners((v) => (v === 1 ? 2 : v))}
-                  >
-                    Flere
+                  <button className={!showNet ? "on" : ""} onClick={() => setShowNet(false)}>
+                    Brutto
                   </button>
                 </div>
               </div>
@@ -1233,7 +1245,7 @@ function App() {
                   <strong>Afkast</strong>
                 </span>
                 <span style={{ color: C.text3 }}>
-                  — hvad investeringen kaster af sig (efter lagerbeskatning)
+                  — hvad investeringen kaster af sig ({showNet ? "efter lagerbeskatning" : "før skat"})
                 </span>
               </div>
               <div style={{ display: "flex", gap: 10, alignItems: "center", fontSize: 14 }}>
@@ -1262,7 +1274,7 @@ function App() {
                   }}
                 />
                 <span style={{ color: C.green }}>
-                  <strong>Netto afkast</strong>
+                  <strong>{showNet ? "Netto" : "Brutto"}</strong>
                 </span>
                 <span style={{ color: C.text3 }}>
                   — afkast minus meromkostning = den reelle gevinst/tab
@@ -1391,7 +1403,7 @@ function App() {
                       axisLine={{ stroke: "rgba(60,60,67,0.08)" }}
                       width={48}
                     />
-                    <Tooltip content={<InvTip />} />
+                    <Tooltip content={<InvTip showNet={showNet} />} />
                     <ReferenceLine y={0} stroke={C.text4} strokeWidth={1} />
                     {!hiddenInvKeys.has("afkast") && (
                       <Area type="monotone" dataKey="afkast" stroke={C.orange} fill="url(#gAfk)" strokeWidth={2} dot={false} />
@@ -1406,10 +1418,10 @@ function App() {
                         dot={false}
                       />
                     )}
-                    {!hiddenInvKeys.has("nettoAfkast") && (
+                    {!hiddenInvKeys.has("result") && (
                       <Area
                         type="monotone"
-                        dataKey="nettoAfkast"
+                        dataKey="result"
                         stroke={C.green}
                         fill="url(#gNet)"
                         strokeWidth={2}
@@ -1444,9 +1456,17 @@ function App() {
               </div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 16, justifyContent: "center", fontSize: 12, marginBottom: 16 }}>
                 {[
-                  { key: "afkast", color: C.orange, label: "Afkast (efter inv.skat)" },
+                  {
+                    key: "afkast",
+                    color: C.orange,
+                    label: showNet ? "Afkast (efter lagerbeskatning)" : "Afkast (før skat)",
+                  },
                   { key: "extraCost", color: C.red, label: "Ekstra rente+bidrag (kum.)", opacity: 0.7 },
-                  { key: "nettoAfkast", color: C.green, label: "Netto afkast" },
+                  {
+                    key: "result",
+                    color: C.green,
+                    label: showNet ? "Netto" : "Brutto",
+                  },
                   { key: "cumulativeFreed", color: C.blue, label: "Akkumuleret likviditet", opacity: 0.7 },
                 ].map(({ key, color, label, opacity }) => {
                   const hidden = hiddenInvKeys.has(key);
@@ -1485,7 +1505,7 @@ function App() {
               const series = investData[loanType.id];
               if (!series) return null;
               const finalPoint = series[series.length - 1];
-              const positive = finalPoint.nettoAfkast > 0;
+              const positive = finalPoint.result > 0;
 
               return (
                 <div
@@ -1528,10 +1548,12 @@ function App() {
                   </div>
                   <div className="sep" style={{ margin: "6px 0" }} />
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 600 }}>
-                    <span style={{ color: positive ? C.green : C.red }}>Netto</span>
+                    <span style={{ color: positive ? C.green : C.red }}>
+                      {showNet ? "Netto" : "Brutto"}
+                    </span>
                     <span className="mono" style={{ color: positive ? C.green : C.red, fontFamily: C.mono }}>
                       {positive ? "+" : ""}
-                      {fmt(finalPoint.nettoAfkast)}
+                      {fmt(finalPoint.result)}
                     </span>
                   </div>
                 </div>
@@ -1542,14 +1564,18 @@ function App() {
           <div style={{ fontSize: 14, color: C.text3, marginTop: 16, lineHeight: 1.6 }}>
             <strong style={{ color: C.text2 }}>Sådan læses grafen:</strong> Hovedstolen
             (indskud vs. egenkapital) holdes ude — den er ens i begge scenarier. "Afkast" er ren
-            merværdi fra investering efter lagerbeskatning. "Ekstra rente+bidrag" er den
+            merværdi fra investering {showNet ? "efter lagerbeskatning" : "før skat"}. "Ekstra rente+bidrag" er den
             akkumulerede meromkostning ved at holde konstant gæld i stedet for at afdrage.
             "Akkumuleret likviditet" er den samlede kontantstrøm frigjort af at droppe afdraget.
-            Når den grønne linje er over nul, tjener du på at investere.
+            Når den grønne linje er over nul, tjener du på at investere. Resultatet er
+            {showNet ? " efter lagerbeskatning og rentefradrag." : " før skat og uden rentefradrag."}
           </div>
           <div style={{ fontSize: 14, color: C.text4, marginTop: 6, lineHeight: 1.5 }}>
-            Lagerbeskatning: 27% op til {fmt(79400 * investOwners)} kr., 42% derover. Ved afdrag falder den vægtede
-            bidragssats løbende, efterhånden som LTV falder. Inkluderet i beregningen.
+            {showNet
+              ? `Lagerbeskatning: 27% op til ${fmt(79400 * investOwners)} kr., 42% derover. `
+              : "Lagerbeskatning og rentefradrag er ikke medregnet. "}
+            Ved afdrag falder den vægtede bidragssats løbende, efterhånden som LTV falder.
+            Inkluderet i beregningen.
           </div>
         </div>
 
@@ -1571,9 +1597,9 @@ function App() {
             renteloft, afdragsfrihed).
           </p>
           <p>
-            <strong style={{ color: C.text3 }}>Investering:</strong> Lagerbeskatning 27%/42%.
-            Afdragsscenariet inkl. faldende rente+bidrag og løbende lavere vægtet bidragssats, når
-            LTV falder.
+            <strong style={{ color: C.text3 }}>Investering:</strong> Netto medregner
+            lagerbeskatning på 27%/42%. Brutto er før skat og uden rentefradrag. Afdragsscenariet
+            inkl. faldende rente+bidrag og løbende lavere vægtet bidragssats, når LTV falder.
           </p>
           <p>
             <strong style={{ color: C.text3 }}>Skat:</strong> Netto bruger 33,7% fradragsværdi

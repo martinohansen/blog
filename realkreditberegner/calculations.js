@@ -208,6 +208,7 @@
     taxHousehold = "single",
     investOwners = 1,
     ltv = 60,
+    showNet = true,
   ) {
     const propertyValue = loanAmount / (ltv / 100);
     const annuity = annuityYearly(loanAmount, rate);
@@ -226,6 +227,7 @@
         year: 0,
         afkast: 0,
         extraCost: 0,
+        result: 0,
         nettoAfkast: 0,
         invested: 0,
         equityBuilt: 0,
@@ -241,12 +243,18 @@
       const afdragA = annuity - renteA;
       principalA = Math.max(0, principalA - afdragA);
 
-      const costA = getNetDeductibleCost(renteA + bidragA, taxHousehold);
+      const grossCostA = renteA + bidragA;
+      const costA = showNet
+        ? getNetDeductibleCost(grossCostA, taxHousehold)
+        : grossCostA;
       cumulativeCostA += costA;
 
       const renteB = (rate / 100) * loanAmount;
       const bidragB = (bidragPctAfdragsfri / 100) * loanAmount;
-      const costB = getNetDeductibleCost(renteB + bidragB, taxHousehold);
+      const grossCostB = renteB + bidragB;
+      const costB = showNet
+        ? getNetDeductibleCost(grossCostB, taxHousehold)
+        : grossCostB;
       cumulativeCostB += costB;
 
       const monthlyFreed = Math.max(0, (costA + afdragA - costB) / 12);
@@ -258,28 +266,32 @@
         portfolio *= 1 + monthlyReturn;
       }
 
-      const previousAfkast = points[year - 1].afkast;
-      const currentAfkast = portfolio - totalInvested;
-      const taxableGain = Math.max(0, currentAfkast - previousAfkast);
-      const lowRateThreshold = 79400 * investOwners;
+      if (showNet) {
+        const previousAfkast = points[year - 1].afkast;
+        const currentAfkast = portfolio - totalInvested;
+        const taxableGain = Math.max(0, currentAfkast - previousAfkast);
+        const lowRateThreshold = 79400 * investOwners;
 
-      let taxDue = 0;
-      if (taxableGain > 0) {
-        taxDue =
-          taxableGain <= lowRateThreshold
-            ? taxableGain * 0.27
-            : lowRateThreshold * 0.27 + (taxableGain - lowRateThreshold) * 0.42;
+        let taxDue = 0;
+        if (taxableGain > 0) {
+          taxDue =
+            taxableGain <= lowRateThreshold
+              ? taxableGain * 0.27
+              : lowRateThreshold * 0.27 + (taxableGain - lowRateThreshold) * 0.42;
+        }
+        portfolio -= taxDue;
       }
-      portfolio -= taxDue;
 
       const afkast = portfolio - totalInvested;
       const extraCost = cumulativeCostB - cumulativeCostA;
+      const result = Math.round(afkast - extraCost);
 
       points.push({
         year,
         afkast: Math.round(afkast),
         extraCost: Math.round(extraCost),
-        nettoAfkast: Math.round(afkast - extraCost),
+        result,
+        nettoAfkast: result,
         invested: Math.round(totalInvested),
         equityBuilt: Math.round(loanAmount - principalA),
         portfolio: Math.round(portfolio),
@@ -299,6 +311,7 @@
     taxHousehold = "single",
     investOwners = 1,
     ltv = 60,
+    showNet = true,
   ) {
     const data = {};
 
@@ -312,6 +325,7 @@
         taxHousehold,
         investOwners,
         ltv,
+        showNet,
       );
     });
 
