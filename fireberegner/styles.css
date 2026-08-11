@@ -1886,6 +1886,12 @@ textarea:focus-visible {
 }
 
 @media (max-width: 560px) {
+  .field input,
+  .field select,
+  .plan-code-value {
+    font-size: var(--text-data-md-size);
+  }
+
   .page-shell {
     padding-inline: 12px;
   }
