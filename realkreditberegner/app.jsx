@@ -115,6 +115,43 @@ function ChartLegend({ items, hiddenKeys, onToggle, className = "" }) {
   );
 }
 
+function SectionHeader({ title, description, meta, controls, className = "" }) {
+  return (
+    <div className={`section-header ${className}`.trim()}>
+      <div className="section-header__copy">
+        <h2 className="section-title">{title}</h2>
+        {description && <p className="section-description">{description}</p>}
+        {meta && <p className="section-meta">{meta}</p>}
+      </div>
+      {controls && <div className="section-header__controls">{controls}</div>}
+    </div>
+  );
+}
+
+function DataRow({ label, value, variant = "default", tone, className = "" }) {
+  return (
+    <div
+      className={`data-row data-row--${variant} ${className}`.trim()}
+      style={tone ? { "--data-tone": tone } : undefined}
+    >
+      <span className="data-row__label">{label}</span>
+      <span className="data-row__value mono">{value}</span>
+    </div>
+  );
+}
+
+function SummaryCard({ title, tone, children }) {
+  return (
+    <div className="summary-card" style={{ "--data-tone": tone }}>
+      <div className="summary-card__title">
+        <span className="summary-card__marker" />
+        {title}
+      </div>
+      <div className="summary-card__rows">{children}</div>
+    </div>
+  );
+}
+
 function AmountInput({ id, label, value, step, max, onChange }) {
   const updateValue = (nextValue) => {
     const upperBound = Number.isFinite(max) ? max : Number.POSITIVE_INFINITY;
@@ -180,7 +217,7 @@ function AmountInput({ id, label, value, step, max, onChange }) {
 
 function TooltipShell({ title, children }) {
   return (
-    <div className="chart-tooltip">
+    <div className="chart-tooltip inset-panel">
       <div className="chart-tooltip__title">{title}</div>
       {children}
     </div>
@@ -303,12 +340,10 @@ function EcbMsciChart() {
 
   return (
     <div className="card">
-      <div className="section-intro section-intro--large">
-        <h2 className="section-title">ECB-rente vs. MSCI World</h2>
-        <p className="section-lead">
-          Kvartalsafkast med rullende annualiseret afkast
-        </p>
-      </div>
+      <SectionHeader
+        title="ECB-rente vs. MSCI World"
+        description="Kvartalsafkast med rullende annualiseret afkast"
+      />
 
       <div className="range-grid">
         <RangeControl
@@ -339,7 +374,9 @@ function EcbMsciChart() {
 
       <div className="chart-context">
         {startYear}–{endLabel} · Rullende annualiseret afkast:{" "}
-        <strong className="text-orange">{rollYears} år</strong>
+        <strong className="data-highlight" style={{ "--data-tone": C.orange }}>
+          {rollYears} år
+        </strong>
       </div>
 
       <div className="chart-frame chart-frame--large">
@@ -422,7 +459,7 @@ function MilestoneCard({ milestone, showNet, maxBarVal }) {
   );
 
   return (
-    <div className="milestone-card" style={{ "--milestone-color": milestone.tc }}>
+    <div className="milestone-card inset-panel" style={{ "--milestone-color": milestone.tc }}>
       <button
         className="milestone-toggle"
         type="button"
@@ -750,22 +787,20 @@ function App() {
         </section>
 
         <section className="card">
-          <div className="section-header">
-            <div>
-              <h2 className="section-title">Årlig omkostning</h2>
-              <p className="section-meta">
-                {showNet ? `Netto efter skat · ${taxHouseholdLabel}` : "Brutto"} · Belåning høj → lav
-              </p>
-            </div>
-            <div className="segmented-control">
+          <SectionHeader
+            title="Årlig omkostning"
+            meta={`${showNet ? `Netto efter skat · ${taxHouseholdLabel}` : "Brutto"} · Belåning høj → lav`}
+            controls={(
+              <div className="segmented-control">
               <button className={chartMode === "total" ? "on" : ""} onClick={() => setChartMode("total")}>
                 Inkl. afdrag
               </button>
               <button className={chartMode === "ydelse" ? "on" : ""} onClick={() => setChartMode("ydelse")}>
                 Kun rente+bidrag
               </button>
-            </div>
-          </div>
+              </div>
+            )}
+          />
 
           <div className="chart-frame">
             <ResponsiveContainer>
@@ -855,7 +890,7 @@ function App() {
             }))}
           />
 
-          <div className="loan-snapshot">
+          <div className="loan-snapshot inset-panel">
             <div className="loan-snapshot__header">
               <div>
                 <div className="loan-snapshot__label">belåning</div>
@@ -875,45 +910,39 @@ function App() {
                 </span>
               </div>
             </div>
-            <div className="loan-summary-grid">
+            <div className="summary-grid">
               {selectedCaseData.map(({ loanType, breakdown: result }) => (
-                <div
+                <SummaryCard
                   key={loanType.id}
-                  className="loan-summary"
-                  style={{ "--loan-color": loanType.color }}
+                  title={loanType.label}
+                  tone={loanType.color}
                 >
-                  <div className="loan-summary__title">{loanType.label}</div>
-                  <div className="loan-summary__rows">
-                    <div className="data-row">
-                      <span className="data-row__label">Rente + bidrag</span>
-                      <span className="mono">{fmt(Math.round(showNet ? result.ydelseN : result.ydelseB))}</span>
-                    </div>
-                    <div className="data-row">
-                      <span className="data-row__label">Afdrag</span>
-                      <span className="mono">{fmt(Math.round(result.afdragKr))}</span>
-                    </div>
-                    <div className="data-row">
-                      <span className="data-row__label">Samlet pr. år</span>
-                      <span className="data-row__value mono">
-                        {fmt(Math.round(showNet ? result.totalN : result.totalB))}
-                      </span>
-                    </div>
-                    <div className="data-row data-row--total">
-                      <span className="data-row__total-label">Pr. måned</span>
-                      <span className="data-row__accent-value mono">
-                        {fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
-                      </span>
-                    </div>
+                  <DataRow
+                    label="Rente + bidrag"
+                    value={fmt(Math.round(showNet ? result.ydelseN : result.ydelseB))}
+                    variant="compact"
+                  />
+                  <DataRow label="Afdrag" value={fmt(Math.round(result.afdragKr))} variant="compact" />
+                  <DataRow
+                    label="Samlet pr. år"
+                    value={fmt(Math.round(showNet ? result.totalN : result.totalB))}
+                    variant="compact"
+                  />
+                  <DataRow
+                    label="Pr. måned"
+                    value={fmt(Math.round((showNet ? result.totalN : result.totalB) / 12))}
+                    variant="total"
+                    tone={loanType.color}
+                  />
                     {result.likviditetMd > 0 && (
-                      <div className="data-row data-row--liquidity">
-                        <span>Likviditet/md.</span>
-                        <span className="mono">
-                          +{fmt(result.likviditetMd)}
-                        </span>
-                      </div>
+                      <DataRow
+                        label="Likviditet/md."
+                        value={`+${fmt(result.likviditetMd)}`}
+                        variant="compact"
+                        tone={C.blue}
+                      />
                     )}
-                  </div>
-                </div>
+                </SummaryCard>
               ))}
             </div>
           </div>
@@ -935,10 +964,10 @@ function App() {
         </section>
 
         <section className="card">
-          <h2 className="section-title">Milepæle</h2>
-          <p className="section-description">
-            Udvid hver belåningsgrad for at se rente, bidrag og månedlig ydelse opdelt på lånertype.
-          </p>
+          <SectionHeader
+            title="Milepæle"
+            description="Udvid hver belåningsgrad for at se rente, bidrag og månedlig ydelse opdelt på lånertype."
+          />
           {milestoneData.map((milestone) => (
             <MilestoneCard
               key={milestone.ltv}
@@ -950,10 +979,11 @@ function App() {
         </section>
 
         <section className="card">
-          <div className="investment-intro">
-            <div className="investment-header">
-              <h2 className="section-title investment-header__title">Investér vs. afdrag</h2>
-              <div className="investment-controls">
+          <div className="section-content">
+            <SectionHeader
+              title="Investér vs. afdrag"
+              controls={(
+                <div className="investment-controls">
                 {showNet && (
                   <>
                     {investOwners > 1 && (
@@ -985,79 +1015,81 @@ function App() {
                     Brutto
                   </button>
                 </div>
-              </div>
-            </div>
+                </div>
+              )}
+            />
             <p className="body-copy">
               Udgangspunkt: {currentLtv === null ? "60%" : fmtPct2(currentLtv)} belåning med {fmt(loanAmount)} kr. lån. Pengene er de samme i begge scenarier — enten som egenkapital
               i boligen (afdrag) eller som indskud i en portefølje (investering).
             </p>
-            <div className="explanation-list">
-              <div className="explanation-item explanation-item--orange">
-                <span className="explanation-item__swatch" />
-                <strong className="explanation-item__term">Afkast</strong>
-                <span className="explanation-item__description">
+            <div className="key-list">
+              <div className="key-item" style={{ "--key-color": C.orange }}>
+                <span className="key-item__marker" />
+                <strong className="key-item__label">Afkast</strong>
+                <span className="key-item__description">
                   — hvad investeringen kaster af sig ({showNet ? "efter lagerbeskatning" : "før skat"})
                 </span>
               </div>
-              <div className="explanation-item explanation-item--red">
-                <span className="explanation-item__swatch" />
-                <strong className="explanation-item__term">Ekstra rente+bidrag</strong>
-                <span className="explanation-item__description">— prisen for at holde højere gæld</span>
+              <div className="key-item" style={{ "--key-color": C.red }}>
+                <span className="key-item__marker" />
+                <strong className="key-item__label">Ekstra rente+bidrag</strong>
+                <span className="key-item__description">— prisen for at holde højere gæld</span>
               </div>
-              <div className="explanation-item explanation-item--green">
-                <span className="explanation-item__swatch" />
-                <strong className="explanation-item__term">Netto</strong>
-                <span className="explanation-item__description">
+              <div className="key-item" style={{ "--key-color": C.green }}>
+                <span className="key-item__marker" />
+                <strong className="key-item__label">Netto</strong>
+                <span className="key-item__description">
                   — afkast minus meromkostning = den reelle gevinst/tab
                 </span>
               </div>
-              <div className="explanation-item explanation-item--blue">
-                <span className="explanation-item__swatch" />
-                <strong className="explanation-item__term">Likviditet</strong>
-                <span className="explanation-item__description">
+              <div className="key-item" style={{ "--key-color": C.blue }}>
+                <span className="key-item__marker" />
+                <strong className="key-item__label">Likviditet</strong>
+                <span className="key-item__description">
                   — månedlig frie midler når afdrag udgår af dit budget
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="range-grid">
-            <RangeControl
-              label="Forventet afkast"
-              value={investReturn}
-              valueLabel={fmtPct1(investReturn)}
-              min={0}
-              max={20}
-              step={0.5}
-              minLabel="0%"
-              maxLabel="20%"
-              accent={C.orange}
-              onChange={setInvestReturn}
-            />
-            <RangeControl
-              label="Tidshorisont"
-              value={investYears}
-              valueLabel={`${investYears} år`}
-              min={5}
-              max={30}
-              step={1}
-              minLabel="5 år"
-              maxLabel="30 år"
-              accent={C.orange}
-              onChange={setInvestYears}
-            />
-          </div>
+          <div className="investment-analysis">
+            <div className="range-grid">
+              <RangeControl
+                label="Forventet afkast"
+                value={investReturn}
+                valueLabel={fmtPct1(investReturn)}
+                min={0}
+                max={20}
+                step={0.5}
+                minLabel="0%"
+                maxLabel="20%"
+                accent={C.orange}
+                onChange={setInvestReturn}
+              />
+              <RangeControl
+                label="Tidshorisont"
+                value={investYears}
+                valueLabel={`${investYears} år`}
+                min={5}
+                max={30}
+                step={1}
+                minLabel="5 år"
+                maxLabel="30 år"
+                accent={C.orange}
+                onChange={setInvestYears}
+              />
+            </div>
 
-          {investChartType && (
-            <>
-              <div className="chart-context chart-context--compact">
-                Viser:{" "}
-                <strong className="dynamic-loan-text" style={{ "--loan-color": activeLoanTypes[0]?.color }}>
-                  {activeLoanTypes[0]?.label}
-                </strong>{" "}
-                ({activeLoanTypes[0]?.rateLabel}) · {fmt(loanAmount)} kr.
-              </div>
-              <div className="chart-frame chart-frame--bottom-spaced">
+            {investChartType && (
+              <>
+                <div className="chart-context chart-context--compact">
+                  Viser:{" "}
+                  <strong className="dynamic-loan-text" style={{ "--loan-color": activeLoanTypes[0]?.color }}>
+                    {activeLoanTypes[0]?.label}
+                  </strong>{" "}
+                  ({activeLoanTypes[0]?.rateLabel}) · {fmt(loanAmount)} kr.
+                </div>
+                <div className="chart-frame chart-frame--bottom-spaced">
                 <ResponsiveContainer>
                   <ComposedChart
                     data={investChartData}
@@ -1152,76 +1184,71 @@ function App() {
                     )}
                   </ComposedChart>
                 </ResponsiveContainer>
-              </div>
-              <ChartLegend
-                className="chart-legend--bottom-spaced"
-                hiddenKeys={hiddenInvKeys}
-                onToggle={toggleInvKey}
-                items={[
-                  {
-                    key: "afkast",
-                    color: C.orange,
-                    label: showNet ? "Afkast (efter lagerbeskatning)" : "Afkast (før skat)",
-                  },
-                  { key: "extraCost", color: C.red, label: "Ekstra rente+bidrag (kum.)", opacity: 0.7 },
-                  {
-                    key: "result",
-                    color: C.green,
-                    label: "Netto",
-                  },
-                  { key: "cumulativeFreed", color: C.blue, label: "Akkumuleret likviditet", opacity: 0.7 },
-                ]}
-              />
-            </>
-          )}
-
-          <div className="investment-summary-grid">
-            {activeLoanTypes.map((loanType) => {
-              const series = investData[loanType.id];
-              if (!series) return null;
-              const finalPoint = series[series.length - 1];
-              const positive = finalPoint.result > 0;
-
-              return (
-                <div
-                  key={loanType.id}
-                  className="investment-summary"
-                  style={{ "--loan-color": loanType.color }}
-                >
-                  <div className="investment-summary__title">
-                    {loanType.label} · {investYears} år
-                  </div>
-                  <div className="investment-summary__row text-blue">
-                    <span>Likviditet</span>
-                    <span className="mono">
-                      +{fmt(finalPoint.cumulativeFreed)}
-                    </span>
-                  </div>
-                  <div className="investment-summary__row">
-                    <span>Afkast</span>
-                    <span className="mono text-orange">
-                      +{fmt(finalPoint.afkast)}
-                    </span>
-                  </div>
-                  <div className="investment-summary__row">
-                    <span>Ekstra rente+bidrag</span>
-                    <span className="mono text-red">
-                      −{fmt(finalPoint.extraCost)}
-                    </span>
-                  </div>
-                  <div className="separator" />
-                  <div className={`investment-summary__result ${positive ? "is-positive" : "is-negative"}`}>
-                    <span>
-                      Netto
-                    </span>
-                    <span className="mono">
-                      {positive ? "+" : ""}
-                      {fmt(finalPoint.result)}
-                    </span>
-                  </div>
                 </div>
-              );
-            })}
+                <ChartLegend
+                  className="chart-legend--bottom-spaced"
+                  hiddenKeys={hiddenInvKeys}
+                  onToggle={toggleInvKey}
+                  items={[
+                    {
+                      key: "afkast",
+                      color: C.orange,
+                      label: showNet ? "Afkast (efter lagerbeskatning)" : "Afkast (før skat)",
+                    },
+                    { key: "extraCost", color: C.red, label: "Ekstra rente+bidrag (kum.)" },
+                    {
+                      key: "result",
+                      color: C.green,
+                      label: "Netto",
+                    },
+                    { key: "cumulativeFreed", color: C.blue, label: "Akkumuleret likviditet" },
+                  ]}
+                />
+              </>
+            )}
+
+            <div className="summary-grid inset-panel">
+              {activeLoanTypes.map((loanType) => {
+                const series = investData[loanType.id];
+                if (!series) return null;
+                const finalPoint = series[series.length - 1];
+                const netResult = finalPoint.result ?? finalPoint.nettoAfkast;
+                const positive = netResult > 0;
+
+                return (
+                  <SummaryCard
+                    key={loanType.id}
+                    title={`${loanType.label} · ${investYears} år`}
+                    tone={loanType.color}
+                  >
+                    <DataRow
+                      label="Likviditet"
+                      value={`+${fmt(finalPoint.cumulativeFreed)}`}
+                      variant="compact"
+                      tone={C.blue}
+                    />
+                    <DataRow
+                      label="Afkast"
+                      value={`+${fmt(finalPoint.afkast)}`}
+                      variant="compact"
+                      tone={C.orange}
+                    />
+                    <DataRow
+                      label="Ekstra rente+bidrag"
+                      value={`−${fmt(finalPoint.extraCost)}`}
+                      variant="compact"
+                      tone={C.red}
+                    />
+                    <DataRow
+                      label="Netto"
+                      value={`${positive ? "+" : ""}${fmt(netResult)}`}
+                      variant="total"
+                      tone={positive ? C.green : C.red}
+                    />
+                  </SummaryCard>
+                );
+              })}
+            </div>
           </div>
 
           <div className="chart-explanation">
