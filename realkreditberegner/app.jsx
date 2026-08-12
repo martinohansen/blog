@@ -26,6 +26,7 @@ const {
   buildEcbMsciChartData,
   breakdown,
   getLoanBandForLtv,
+  isInterestOnlyEligible,
 } = window.RealkreditCalculations;
 
 function roundDownToStep(value, step) {
@@ -665,20 +666,25 @@ function App() {
   const hasValidInputs = homePrice > 0 && loanAmount >= 0;
   const currentLtv = hasValidInputs ? (loanAmount / homePrice) * 100 : null;
   const currentBand = getLoanBandForLtv(currentLtv ?? 0);
+  const investmentAvailable =
+    currentLtv !== null && isInterestOnlyEligible(currentLtv);
 
   const investData = useMemo(
-    () =>
-      buildInvestmentData(
+    () => {
+      if (!investmentAvailable) return {};
+
+      return buildInvestmentData(
         activeLoanTypes,
         loanAmount,
         investReturn,
         investYears,
         taxHousehold,
         investOwners,
-        currentLtv ?? 60,
+        currentLtv,
         showNet,
-      ),
-    [activeTypeKey, loanAmount, investReturn, investYears, taxHousehold, investOwners, currentLtv, showNet],
+      );
+    },
+    [activeTypeKey, loanAmount, investReturn, investYears, taxHousehold, investOwners, currentLtv, showNet, investmentAvailable],
   );
 
   const investChartType = activeLoanTypes[0]?.id;
@@ -982,7 +988,7 @@ function App() {
           <div className="section-content">
             <SectionHeader
               title="Investér vs. afdrag"
-              controls={(
+              controls={investmentAvailable ? (
                 <div className="investment-controls">
                 {showNet && (
                   <>
@@ -1016,13 +1022,15 @@ function App() {
                   </button>
                 </div>
                 </div>
-              )}
+              ) : null}
             />
-            <p className="body-copy">
-              Udgangspunkt: {currentLtv === null ? "60%" : fmtPct2(currentLtv)} belåning med {fmt(loanAmount)} kr. lån. Pengene er de samme i begge scenarier — enten som egenkapital
-              i boligen (afdrag) eller som indskud i en portefølje (investering).
-            </p>
-            <div className="key-list">
+            {investmentAvailable ? (
+              <>
+                <p className="body-copy">
+                  Udgangspunkt: {fmtPct2(currentLtv)} belåning med {fmt(loanAmount)} kr. lån. Pengene er de samme i begge scenarier — enten som egenkapital
+                  i boligen (afdrag) eller som indskud i en portefølje (investering).
+                </p>
+                <div className="key-list">
               <div className="key-item" style={{ "--key-color": C.orange }}>
                 <span className="key-item__marker" />
                 <strong className="key-item__label">Afkast</strong>
@@ -1046,13 +1054,22 @@ function App() {
                 <span className="key-item__marker" />
                 <strong className="key-item__label">Likviditet</strong>
                 <span className="key-item__description">
-                  — månedlig frie midler når afdrag udgår af dit budget
+                  — porteføljens værdi: indbetalinger plus investeringsafkast
                 </span>
               </div>
-            </div>
+                </div>
+              </>
+            ) : (
+              <p className="body-copy">
+                Dette lån giver først adgang til afdragsfrihed ved højst 60 % belåning.
+                Der er derfor ingen lavere ydelse at investere nu.
+              </p>
+            )}
           </div>
 
-          <div className="investment-analysis">
+          {investmentAvailable && (
+            <>
+              <div className="investment-analysis">
             <div className="range-grid">
               <RangeControl
                 label="Forventet afkast"
@@ -1165,10 +1182,10 @@ function App() {
                         }}
                       />
                     )}
-                    {!hiddenInvKeys.has("cumulativeFreed") && (
+                    {!hiddenInvKeys.has("portfolio") && (
                       <Area
                         type="monotone"
-                        dataKey="cumulativeFreed"
+                        dataKey="portfolio"
                         stroke={C.blue}
                         fill="url(#gLiq)"
                         strokeWidth={2}
@@ -1201,7 +1218,7 @@ function App() {
                       color: C.green,
                       label: "Netto",
                     },
-                    { key: "cumulativeFreed", color: C.blue, label: "Akkumuleret likviditet" },
+                    { key: "portfolio", color: C.blue, label: "Likviditet" },
                   ]}
                 />
               </>
@@ -1223,7 +1240,7 @@ function App() {
                   >
                     <DataRow
                       label="Likviditet"
-                      value={`+${fmt(finalPoint.cumulativeFreed)}`}
+                      value={`+${fmt(finalPoint.portfolio)}`}
                       variant="compact"
                       tone={C.blue}
                     />
@@ -1249,24 +1266,26 @@ function App() {
                 );
               })}
             </div>
-          </div>
+              </div>
 
-          <div className="chart-explanation">
+              <div className="chart-explanation">
             <strong>Sådan læses grafen:</strong> Hovedstolen
             (indskud vs. egenkapital) holdes ude — den er ens i begge scenarier. "Afkast" er ren
             merværdi fra investering {showNet ? "efter lagerbeskatning" : "før skat"}. "Ekstra rente+bidrag" er den
             akkumulerede meromkostning ved at holde konstant gæld i stedet for at afdrage.
-            "Akkumuleret likviditet" er den samlede kontantstrøm frigjort af at droppe afdraget.
+            "Likviditet" er porteføljens aktuelle værdi og inkluderer både indbetalinger og afkast.
             Når den grønne linje er over nul, tjener du på at investere. Resultatet er
             {showNet ? " efter lagerbeskatning og rentefradrag." : " før skat og uden rentefradrag."}
-          </div>
-          <div className="chart-disclaimer">
+              </div>
+              <div className="chart-disclaimer">
             {showNet
               ? `Lagerbeskatning: 27% op til ${fmt(79400 * investOwners)} kr., 42% derover. `
               : "Lagerbeskatning og rentefradrag er ikke medregnet. "}
             Ved afdrag falder den vægtede bidragssats løbende, efterhånden som LTV falder.
             Inkluderet i beregningen.
-          </div>
+              </div>
+            </>
+          )}
         </section>
 
         <EcbMsciChart />
@@ -1290,6 +1309,7 @@ function App() {
             <strong>Investering:</strong> Netto medregner
             lagerbeskatning på 27%/42%. Brutto er før skat og uden rentefradrag. Afdragsscenariet
             inkl. faldende rente+bidrag og løbende lavere vægtet bidragssats, når LTV falder.
+            Sammenligningen vises kun ved højst 60 % belåning.
           </p>
           <p>
             <strong>Skat:</strong> Netto bruger 33,7% fradragsværdi

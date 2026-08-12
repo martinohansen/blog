@@ -34,6 +34,11 @@
     { band: "40-60", from: 40, to: 60 },
     { band: "60-80", from: 60, to: 80 },
   ];
+  const MAX_INTEREST_ONLY_LTV = 60;
+
+  function isInterestOnlyEligible(ltv) {
+    return Number.isFinite(ltv) && ltv <= MAX_INTEREST_ONLY_LTV;
+  }
 
   function getBidrag(loanTypeId, band, isInterestOnly) {
     return (
@@ -210,6 +215,10 @@
     ltv = 60,
     showNet = true,
   ) {
+    if (!isInterestOnlyEligible(ltv)) {
+      return [];
+    }
+
     const propertyValue = loanAmount / (ltv / 100);
     const annuity = annuityYearly(loanAmount, rate);
     const bidragPctAfdragsfri = getEffectiveBidragPct(loanTypeId, ltv, true);
@@ -218,7 +227,6 @@
     let principalA = loanAmount;
     let cumulativeCostA = 0;
     let cumulativeCostB = 0;
-    let cumulativeFreed = 0;
     let portfolio = 0;
     let totalInvested = 0;
 
@@ -231,7 +239,7 @@
         nettoAfkast: 0,
         invested: 0,
         equityBuilt: 0,
-        cumulativeFreed: 0,
+        portfolio: 0,
       },
     ];
 
@@ -259,7 +267,6 @@
 
       const monthlyFreed = Math.max(0, (costA + afdragA - costB) / 12);
       const yearlyFreed = Math.max(0, costA + afdragA - costB);
-      cumulativeFreed += yearlyFreed;
       for (let month = 0; month < 12; month += 1) {
         portfolio += monthlyFreed;
         totalInvested += monthlyFreed;
@@ -296,7 +303,6 @@
         equityBuilt: Math.round(loanAmount - principalA),
         portfolio: Math.round(portfolio),
         freedYearly: Math.round(yearlyFreed),
-        cumulativeFreed: Math.round(portfolio),
       });
     }
 
@@ -313,6 +319,10 @@
     ltv = 60,
     showNet = true,
   ) {
+    if (!isInterestOnlyEligible(ltv)) {
+      return {};
+    }
+
     const data = {};
 
     activeLoanTypes.forEach((loanType) => {
@@ -370,6 +380,7 @@
     annuityYearly,
     breakdown,
     getLoanBandForLtv,
+    isInterestOnlyEligible,
     buildChartData,
     buildMilestoneData,
     getMaxBarValue,

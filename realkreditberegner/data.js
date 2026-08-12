@@ -90,7 +90,7 @@
     extraCost: { label: "Ekstra rente+bidrag", color: "#D4775A" },
     result: { label: "Netto", color: "#059669" },
     nettoAfkast: { label: "Netto", color: "#059669" },
-    cumulativeFreed: { label: "Akkumuleret likviditet", color: "#0071e3" },
+    portfolio: { label: "Likviditet", color: "#0071e3" },
   };
 
   function buildEcbMsciRaw() {
