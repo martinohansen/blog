@@ -35,6 +35,8 @@ function roundDownToStep(value, step) {
 
 const HOME_PRICE_STEP = 100000;
 const LOAN_AMOUNT_STEP = 100000;
+const SHOULD_ANIMATE_CHARTS =
+  !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
 const C = {
   card: "var(--color-surface)",
@@ -411,13 +413,13 @@ function EcbMsciChart() {
             <Tooltip content={<EcbMsciTip avgLabel={avgLabel} />} />
             <ReferenceLine y={0} stroke={C.text4} strokeWidth={1} />
             {!hiddenEcbKeys.has("msci") && (
-              <Line type="monotone" dataKey="msci" stroke={C.green} strokeWidth={2} dot={false} name="MSCI World (kv.)" />
+              <Line type="monotone" dataKey="msci" stroke={C.green} strokeWidth={2} dot={false} name="MSCI World (kv.)" isAnimationActive={SHOULD_ANIMATE_CHARTS} />
             )}
             {!hiddenEcbKeys.has("avg") && (
-              <Area type="monotone" dataKey="avg" stroke={C.orange} fill="url(#gAvg)" strokeWidth={2} dot={false} name={avgLabel} />
+              <Area type="monotone" dataKey="avg" stroke={C.orange} fill="url(#gAvg)" strokeWidth={2} dot={false} name={avgLabel} isAnimationActive={SHOULD_ANIMATE_CHARTS} />
             )}
             {!hiddenEcbKeys.has("ecb") && (
-              <Area type="stepAfter" dataKey="ecb" stroke={C.blue} fill="url(#gEcb)" strokeWidth={2.5} dot={false} name="ECB MRO-rente" />
+              <Area type="stepAfter" dataKey="ecb" stroke={C.blue} fill="url(#gEcb)" strokeWidth={2.5} dot={false} name="ECB MRO-rente" isAnimationActive={SHOULD_ANIMATE_CHARTS} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -849,6 +851,7 @@ function App() {
                       <Area
                         type="linear"
                         dataKey={`${loanType.id}${cSuffix}`}
+                        isAnimationActive={SHOULD_ANIMATE_CHARTS}
                         stroke={loanType.color}
                         fill={`url(#g-${loanType.id})`}
                         strokeWidth={2}
@@ -1154,12 +1157,13 @@ function App() {
                     <Tooltip content={<InvTip showNet={showNet} />} />
                     <ReferenceLine y={0} stroke={C.text4} strokeWidth={1} />
                     {!hiddenInvKeys.has("afkast") && (
-                      <Area type="monotone" dataKey="afkast" stroke={C.orange} fill="url(#gAfk)" strokeWidth={2} dot={false} />
+                      <Area type="monotone" dataKey="afkast" stroke={C.orange} fill="url(#gAfk)" strokeWidth={2} dot={false} isAnimationActive={SHOULD_ANIMATE_CHARTS} />
                     )}
                     {!hiddenInvKeys.has("extraCost") && (
                       <Line
                         type="monotone"
                         dataKey="extraCost"
+                        isAnimationActive={SHOULD_ANIMATE_CHARTS}
                         stroke={C.red}
                         strokeWidth={2}
                         strokeDasharray="6 3"
@@ -1170,6 +1174,7 @@ function App() {
                       <Area
                         type="monotone"
                         dataKey="result"
+                        isAnimationActive={SHOULD_ANIMATE_CHARTS}
                         stroke={C.green}
                         fill="url(#gNet)"
                         strokeWidth={2}
@@ -1186,6 +1191,7 @@ function App() {
                       <Area
                         type="monotone"
                         dataKey="portfolio"
+                        isAnimationActive={SHOULD_ANIMATE_CHARTS}
                         stroke={C.blue}
                         fill="url(#gLiq)"
                         strokeWidth={2}
