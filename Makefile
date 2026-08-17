@@ -25,12 +25,14 @@ realkreditberegner/app.js: \
 
 build-realkredit-index: \
 	realkreditberegner/index.template.html \
-	realkreditberegner/app.js \
-	scripts/render-versioned-html.mjs
-	node scripts/render-versioned-html.mjs \
-		realkreditberegner/index.template.html \
-		realkreditberegner/index.html \
-		$(ASSET_VERSION)
+	realkreditberegner/app.js
+	@test -n "$(ASSET_VERSION)" || { echo "ASSET_VERSION is required" >&2; exit 1; }
+	@output="realkreditberegner/index.html"; \
+		temporary="$$output.tmp"; \
+		trap 'rm -f "$$temporary"' 0 1 2 15; \
+		sed 's/__ASSET_VERSION__/$(ASSET_VERSION)/g' $< > "$$temporary"; \
+		mv "$$temporary" "$$output"; \
+		trap - 0 1 2 15
 
 dev:
 	./dev.sh
