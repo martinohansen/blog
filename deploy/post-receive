@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+branch=main
+asset_version=$(git rev-list --abbrev-commit -1 "$branch")
+
+git \
+  --work-tree=/var/www/heymartin.net \
+  --git-dir=/srv/git/www.git \
+  checkout -f "$branch"
+
+make \
+  -C /var/www/heymartin.net \
+  build \
+  ASSET_VERSION="$asset_version"
