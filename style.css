@@ -435,14 +435,9 @@ article figcaption {
 }
 
 @media (max-width: 479px) {
-  .nav-avatar img {
-    width: 64px;
-    height: 64px;
-  }
-
   article figure,
   article > img {
-    max-width: 64%;
+    max-width: 88%;
   }
 
   article > img {
