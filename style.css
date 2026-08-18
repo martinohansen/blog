@@ -224,6 +224,13 @@ article pre code {
   padding: 0;
 }
 
+article img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.5rem 0;
+}
+
 .back-link {
   display: inline-block;
   margin-top: 3rem;
