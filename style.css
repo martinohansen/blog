@@ -9,6 +9,17 @@
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --border: #e5e5e0;
+  --code-bg: #f1f1ed;
+  --code-border: #dfdfd8;
+  --code-comment: #72726b;
+  --code-keyword: #76509b;
+  --code-name: #236b8e;
+  --code-number: #a45120;
+  --code-string: #3b7149;
+  --footnote-fg: #686862;
+  --footnote-link: #4b6f9f;
+  --footnote-link-hover: #315d96;
+  --footnote-target: #f1f1ed;
   --max-width: 640px;
   --nav-active-underline: #d4611a;
   --nav-hover-underline: #d4611a;
@@ -187,6 +198,73 @@ article li {
   line-height: 1.75;
 }
 
+article h2 {
+  margin: 2.75rem 0 0.75rem;
+  color: var(--fg);
+  font-size: 1.3rem;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  text-transform: none;
+}
+
+article h3 {
+  margin: 2.25rem 0 0.65rem;
+  color: var(--fg);
+  font-size: 1.1rem;
+  line-height: 1.35;
+}
+
+article :is(h2, h3, h4, h5, h6) {
+  position: relative;
+  scroll-margin-top: 1.5rem;
+}
+
+.heading-anchor {
+  display: inline-block;
+  position: absolute;
+  top: 0;
+  right: 100%;
+  margin-right: 0.2em;
+  color: var(--muted);
+  font-family: "SF Mono", ui-monospace, monospace;
+  font-size: 1em;
+  font-weight: 700;
+  line-height: 1.3;
+  text-decoration: none;
+  transition:
+    color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.heading-anchor:hover,
+.heading-anchor:focus-visible {
+  color: var(--accent);
+}
+
+.heading-anchor:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .heading-anchor {
+    opacity: 0;
+  }
+
+  article :is(h2, h3, h4, h5, h6):hover .heading-anchor,
+  article :is(h2, h3, h4, h5, h6):focus-within .heading-anchor {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heading-anchor {
+    transition: none;
+  }
+}
+
 article ul,
 article ol {
   padding-left: 1.4rem;
@@ -203,14 +281,15 @@ article blockquote {
 
 article code {
   font-size: 0.875em;
-  background: var(--border);
+  background: var(--code-bg);
   padding: 0.1em 0.35em;
   border-radius: 3px;
   font-family: "SF Mono", ui-monospace, monospace;
 }
 
 article pre {
-  background: var(--border);
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
   padding: 1rem;
   border-radius: 6px;
   overflow-x: auto;
@@ -222,6 +301,112 @@ article pre {
 article pre code {
   background: none;
   padding: 0;
+}
+
+/* Pandoc syntax tokens */
+
+article code span.al,
+article code span.er,
+article code span.wa {
+  color: #a33a36;
+}
+
+article code span.an,
+article code span.co,
+article code span.cv,
+article code span.do,
+article code span.in {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+article code span.at,
+article code span.bu,
+article code span.ex,
+article code span.fu {
+  color: var(--code-name);
+}
+
+article code span.cf,
+article code span.dt,
+article code span.im,
+article code span.kw,
+article code span.pp {
+  color: var(--code-keyword);
+  font-weight: 600;
+}
+
+article code span.bn,
+article code span.cn,
+article code span.dv,
+article code span.fl {
+  color: var(--code-number);
+}
+
+article code span.ch,
+article code span.sc,
+article code span.ss,
+article code span.st,
+article code span.vs {
+  color: var(--code-string);
+}
+
+article code span.op,
+article code span.ot,
+article code span.va {
+  color: #6d4b30;
+}
+
+/* Footnotes */
+
+.footnotes {
+  margin-top: 3.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+  color: var(--footnote-fg);
+}
+
+.footnotes hr {
+  display: none;
+}
+
+.footnotes ol {
+  margin-bottom: 0;
+}
+
+.footnotes li {
+  padding-left: 0.2rem;
+}
+
+.footnotes li::marker {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.footnotes li:target {
+  border-radius: 4px;
+  background: var(--footnote-target);
+  box-shadow: 0 0 0 0.35rem var(--footnote-target);
+}
+
+.footnotes a {
+  color: var(--footnote-link);
+}
+
+.footnotes a:hover {
+  color: var(--footnote-link-hover);
+}
+
+.footnote-ref {
+  margin-left: 0.08em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+
+.footnote-ref:hover,
+.footnote-back:hover {
+  color: var(--accent);
 }
 
 article img {

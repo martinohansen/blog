@@ -32,6 +32,7 @@ while IFS= read -r md; do
     echo "$out"
     pandoc "$md" \
         --template="_templates/post.html" \
+        --lua-filter="_filters/heading-links.lua" \
         --include-in-header="$HEAD" \
         --include-before-body="$NAV" \
         --include-after-body="$FOOTER" \
