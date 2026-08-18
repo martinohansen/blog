@@ -416,6 +416,40 @@ article img {
   margin: 1.5rem 0;
 }
 
+article figure {
+  width: 100%;
+  max-width: 88%;
+  margin: 1.5rem auto;
+}
+
+article figure img {
+  width: 100%;
+  margin: 0;
+}
+
+article figcaption {
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 479px) {
+  .nav-avatar img {
+    width: 64px;
+    height: 64px;
+  }
+
+  article figure,
+  article > img {
+    max-width: 64%;
+  }
+
+  article > img {
+    margin-inline: auto;
+  }
+}
+
 .back-link {
   display: inline-block;
   margin-top: 3rem;
