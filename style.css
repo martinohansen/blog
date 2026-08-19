@@ -145,30 +145,23 @@ p {
 
 /* Post list */
 
-.post-list {
-  list-style: none;
+.post-list ul {
   margin: 0;
-  padding: 0;
+  padding-left: 1.2rem;
+}
+
+.blog-post-list ul {
+  padding-left: 0;
+  list-style: none;
 }
 
 .post-list li {
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--border);
+  padding: 0.25rem 0;
   line-height: 1.45;
-}
-
-.post-list li:first-child {
-  border-top: 1px solid var(--border);
 }
 
 .post-list a {
   font-weight: 500;
-  color: var(--fg);
-  text-decoration: none;
-}
-
-.post-list a:hover {
-  color: var(--accent);
 }
 
 .post-list .excerpt {
@@ -179,6 +172,14 @@ p {
 .post-list .excerpt::before {
   content: "—";
   margin-inline: 0.3em;
+}
+
+.blog-post-list .post-date {
+  margin-right: 0.35em;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* Single post */
