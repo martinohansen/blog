@@ -3,7 +3,7 @@ set -euo pipefail
 
 HEAD="_templates/head.html"
 NAV="_templates/nav.html"
-FOOTER="_templates/footer.html"
+METADATA_FILTER="_filters/page-metadata.lua"
 
 page() {
     local src=$1 out=$2 title=$3 page=$4
@@ -14,9 +14,9 @@ page() {
         --template="_templates/page.html" \
         --metadata title="$title" \
         --metadata page="$page" \
+        --lua-filter="$METADATA_FILTER" \
         --include-in-header="$HEAD" \
         --include-before-body="$NAV" \
-        --include-after-body="$FOOTER" \
         --output="$out"
 }
 
@@ -32,9 +32,9 @@ while IFS= read -r md; do
     echo "$out"
     pandoc "$md" \
         --template="_templates/post.html" \
+        --lua-filter="$METADATA_FILTER" \
         --lua-filter="_filters/heading-links.lua" \
         --include-in-header="$HEAD" \
         --include-before-body="$NAV" \
-        --include-after-body="$FOOTER" \
         --output="$out"
 done < <(find blog -name "*.md")
