@@ -1334,6 +1334,11 @@ function App() {
             >
               Kildekode
             </a>
+            <a
+              href="mailto:dontbeevilpls@gmail.com?subject=Re%3A%20Realkreditberegner"
+            >
+              dontbeevilpls@gmail.com
+            </a>
           </p>
         </footer>
       </div>
