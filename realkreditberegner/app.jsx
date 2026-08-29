@@ -1323,6 +1323,10 @@ function App() {
             Når Netto er valgt, kan du skifte mellem Enlig/Ægtepar for 50.000/100.000 kr.-grænsen.
             Afdrag er ikke fradragsberettiget.
           </p>
+          <p>
+            <strong>Ansvarsfraskrivelse:</strong> Resultatet er et overslag
+            og er ikke finansiel rådgivning.
+          </p>
           <p className="source-link">
             <a
               href="https://www.buymeacoffee.com/martinlikesfilter"

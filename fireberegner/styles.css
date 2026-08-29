@@ -1728,7 +1728,7 @@ td:last-child {
 }
 
 .key-figures,
-.disclaimer {
+.calculator-notes {
   grid-column: 1 / -1;
 }
 
@@ -1778,28 +1778,31 @@ td:last-child {
   text-align: right;
 }
 
-.disclaimer {
+.calculator-notes {
   color: var(--muted);
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-line);
   margin: calc(var(--space-1) * -1) var(--space-1) 0;
 }
 
-.disclaimer .source-link {
+.calculator-notes strong {
+  color: var(--muted);
+}
+
+.source-link {
+  margin-top: var(--space-3);
+}
+
+.source-link a {
   color: inherit;
-  margin-left: var(--space-1);
   text-underline-offset: 3px;
 }
 
-.disclaimer-links {
-  display: block;
+.source-link a + a {
+  margin-left: var(--space-3);
 }
 
-.disclaimer-links .source-link:first-child {
-  margin-left: 0;
-}
-
-.disclaimer .source-link:hover {
+.source-link a:hover {
   color: var(--ink);
 }
 
