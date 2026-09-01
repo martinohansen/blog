@@ -2,6 +2,7 @@
 title: "AT-LP120-USB to Sonos"
 subtitle: Stream FLAC from turntable to Sonos
 date: August 18, 2026
+place: Copenhagen
 ---
 
 The only speaker setup I have is [Sonos](https://www.sonos.com/), so I naturally
