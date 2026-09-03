@@ -25,6 +25,10 @@ const planInputs = {
   freeFundsInventoryShare: 0.25,
   returnRate: 0.07,
   inflationRate: 0.021,
+  defensiveReturnRate: 0.04,
+  returnStrategy: "riskTent",
+  returnDeclineYears: 7,
+  returnRecoveryYears: 14,
   withdrawalAfterTax: true,
   contributionsFollowInflation: false,
   redirectPensionContributionsToFreeFunds: true,
@@ -71,6 +75,25 @@ delete missingInput.inflationRate;
 assertInvalid(
   encodedPayload({ calculator: "fire", inputs: missingInput }),
   /ikke alle FIRE-input/,
+);
+const partialStrategy = { ...planInputs };
+delete partialStrategy.defensiveReturnRate;
+assertInvalid(
+  encodedPayload({ calculator: "fire", inputs: partialStrategy }),
+  /ikke alle FIRE-input/,
+);
+const partialTiming = { ...planInputs };
+delete partialTiming.returnRecoveryYears;
+assertInvalid(
+  encodedPayload({ calculator: "fire", inputs: partialTiming }),
+  /ikke alle FIRE-input/,
+);
+assertInvalid(
+  encodedPayload({
+    calculator: "fire",
+    inputs: { ...planInputs, returnStrategy: "ukendt" },
+  }),
+  /ugyldige FIRE-input/,
 );
 assertInvalid(
   encodedPayload({

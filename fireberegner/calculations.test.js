@@ -4,6 +4,8 @@ const {
   optimizeAnnualContributions,
   CONTRIBUTION_LIMITS,
   FREE_FUNDS_TAXATION,
+  RETURN_STRATEGY,
+  strategyReturnRate,
 } = require("./calculations.js");
 
 const asOfDate = new Date(2026, 7, 4);
@@ -85,6 +87,199 @@ const standardInputs = {
   inflationRate: 0.02,
   withdrawalAfterTax: false,
 };
+
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.declining, 10, 20),
+  0.07,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.declining, 15, 20),
+  0.05,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.declining, 20, 20),
+  0.03,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.declining, 40, 20),
+  0.03,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 30, 20),
+  0.03 + (0.07 - 0.03) * (10 / 15),
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 40, 20),
+  0.07,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.declining, 19, 20, 0, 20),
+  0.07,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.declining, 20, 20, 0, 20),
+  0.03,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 20, 20, 10, 0),
+  0.03,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 21, 20, 10, 0),
+  0.07,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 18, 20, 4, 6),
+  0.05,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 23, 20, 4, 6),
+  0.05,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 26, 20, 4, 6),
+  0.07,
+  1e-12,
+);
+assertClose(
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.declining, 19, 20, 1, 20),
+  0.07,
+  1e-12,
+);
+assert.ok(
+  Number.isFinite(
+    strategyReturnRate(
+      0.07,
+      0.03,
+      RETURN_STRATEGY.riskTent,
+      0,
+      20,
+      1000000,
+      1000000,
+    ),
+  ),
+);
+
+const implicitFixedReturn = calculateFire(standardInputs, asOfDate, {
+  includeBridgeCapacity: false,
+});
+const explicitFixedReturn = calculateFire(
+  {
+    ...standardInputs,
+    returnStrategy: RETURN_STRATEGY.none,
+    defensiveReturnRate: 0.04,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.deepEqual(explicitFixedReturn, implicitFixedReturn);
+
+assert.throws(
+  () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        returnStrategy: RETURN_STRATEGY.declining,
+        defensiveReturnRate: -0.001,
+      },
+      asOfDate,
+    ),
+  /defensive afkast skal være mellem 0 % og det forventede afkast/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        returnStrategy: RETURN_STRATEGY.riskTent,
+        defensiveReturnRate: standardInputs.returnRate + 0.001,
+      },
+      asOfDate,
+    ),
+  /defensive afkast skal være mellem 0 % og det forventede afkast/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      { ...standardInputs, returnStrategy: "ukendt" },
+      asOfDate,
+    ),
+  /gyldig afkaststrategi/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        returnStrategy: RETURN_STRATEGY.declining,
+        defensiveReturnRate: 0.04,
+        returnDeclineYears: -1,
+      },
+      asOfDate,
+    ),
+  /Nedtrapningsperioden skal være 0 eller flere hele år/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        returnStrategy: RETURN_STRATEGY.declining,
+        defensiveReturnRate: 0.04,
+        returnDeclineYears: 1.5,
+      },
+      asOfDate,
+    ),
+  /Nedtrapningsperioden skal være 0 eller flere hele år/,
+);
+assert.throws(
+  () =>
+    calculateFire(
+      {
+        ...standardInputs,
+        returnStrategy: RETURN_STRATEGY.riskTent,
+        defensiveReturnRate: 0.04,
+        returnRecoveryYears: Number.NaN,
+      },
+      asOfDate,
+    ),
+  /Genoptrapningsperioden skal være 0 eller flere hele år/,
+);
+assert.doesNotThrow(() =>
+  calculateFire(
+    {
+      ...standardInputs,
+      returnStrategy: RETURN_STRATEGY.declining,
+      defensiveReturnRate: 0.04,
+      returnRecoveryYears: -1,
+    },
+    asOfDate,
+    { includeBridgeCapacity: false },
+  ),
+);
+assert.doesNotThrow(() =>
+  calculateFire(
+    {
+      ...standardInputs,
+      returnStrategy: RETURN_STRATEGY.declining,
+      defensiveReturnRate: standardInputs.returnRate,
+    },
+    asOfDate,
+    { includeBridgeCapacity: false },
+  ),
+);
 
 const result = calculateFire(
   {
@@ -2563,6 +2758,186 @@ assertClose(
   combinedRateOptimization.recommended.annualNetCost,
 );
 
+const variableStrategyInputs = {
+  currentAge: 40,
+  retirementAge: 50,
+  payoutYears: 20,
+  desiredAnnualWithdrawal: 200000,
+  ratePensionBalance: 2000000,
+  lifeAnnuityBalance: 0,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 500000,
+  freeFundsCostBasis: 500000,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualLifeAnnuityContribution: 0,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 100000,
+  pensionTax: 0.153,
+  pensionWithdrawalTax: 0.37,
+  askTax: 0.17,
+  returnRate: 0.07,
+  defensiveReturnRate: 0.03,
+  returnStrategy: RETURN_STRATEGY.riskTent,
+  returnDeclineYears: 10,
+  returnRecoveryYears: 20,
+  inflationRate: 0.02,
+  withdrawalAfterTax: false,
+};
+const fireWithinTenYears = calculateFire(variableStrategyInputs, asOfDate, {
+  includeBridgeCapacity: false,
+});
+assert.equal(fireWithinTenYears.fireRow.age, 48);
+assert.deepEqual(fireWithinTenYears.returnAnchors, {
+  freeFunds: 48,
+  pension: 50,
+});
+assertClose(
+  fireWithinTenYears.realPensionReturn,
+  (1 + 0.07 * (1 - variableStrategyInputs.pensionTax)) / 1.02 - 1,
+  1e-12,
+);
+assertClose(
+  fireWithinTenYears.defensiveRealPensionReturn,
+  (1 + 0.03 * (1 - variableStrategyInputs.pensionTax)) / 1.02 - 1,
+  1e-12,
+);
+assert.ok(
+  fireWithinTenYears.planRows.some((row) => row.withdrawal > 0),
+);
+assert.equal(fireWithinTenYears.isFullyFunded, true);
+const fireStartProfileRow = fireWithinTenYears.planRows.find(
+  (row) => row.age === fireWithinTenYears.fireRow.age,
+);
+assertClose(fireStartProfileRow.freeFundsReturnRate, 0.03, 1e-12);
+assertClose(
+  fireStartProfileRow.pensionReturnRate,
+  strategyReturnRate(0.07, 0.03, RETURN_STRATEGY.riskTent, 8, 10, 10, 20),
+  1e-12,
+);
+const fireStartPensionBalance =
+  fireStartProfileRow.ratePension +
+  fireStartProfileRow.lifeAnnuity +
+  fireStartProfileRow.ageSavings;
+const fireStartFreeBalance =
+  fireStartProfileRow.freeFunds + fireStartProfileRow.ask;
+assertClose(
+  fireStartProfileRow.averageReturnRate,
+  (fireStartPensionBalance * fireStartProfileRow.pensionReturnRate +
+    fireStartFreeBalance * fireStartProfileRow.freeFundsReturnRate) /
+    fireStartProfileRow.totalBalance,
+  1e-12,
+);
+assert.ok(
+  fireWithinTenYears.planRows
+    .slice(0, -1)
+    .every(
+      (row) =>
+        Number.isFinite(row.pensionReturnRate) &&
+        Number.isFinite(row.freeFundsReturnRate),
+    ),
+);
+assert.equal(fireWithinTenYears.finalRow.pensionReturnRate, null);
+assert.equal(fireWithinTenYears.finalRow.freeFundsReturnRate, null);
+assert.equal(fireWithinTenYears.finalRow.averageReturnRate, null);
+
+const customReturnPeriods = calculateFire(
+  {
+    ...variableStrategyInputs,
+    returnDeclineYears: 4,
+    returnRecoveryYears: 6,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.equal(customReturnPeriods.returnDeclineYears, 4);
+assert.equal(customReturnPeriods.returnRecoveryYears, 6);
+assert.equal(
+  customReturnPeriods.returnAnchors.freeFunds,
+  customReturnPeriods.fireRow?.age ?? variableStrategyInputs.retirementAge,
+);
+
+const noFireBeforeRetirement = calculateFire(
+  {
+    ...variableStrategyInputs,
+    freeFundsBalance: 0,
+    freeFundsCostBasis: 0,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.equal(noFireBeforeRetirement.fireRow.age, 50);
+assert.deepEqual(noFireBeforeRetirement.returnAnchors, {
+  freeFunds: 50,
+  pension: 50,
+});
+
+const fireNow = calculateFire(
+  {
+    ...variableStrategyInputs,
+    desiredAnnualWithdrawal: 100000,
+    ratePensionBalance: 5000000,
+    freeFundsBalance: 5000000,
+    freeFundsCostBasis: 5000000,
+    annualFreeFundsContribution: 0,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assert.equal(fireNow.fireRow.age, 40);
+assert.deepEqual(fireNow.returnAnchors, { freeFunds: 40, pension: 50 });
+
+const decliningReturn = calculateFire(
+  {
+    ...variableStrategyInputs,
+    returnStrategy: RETURN_STRATEGY.declining,
+    freeFundsInventoryShare: 0.5,
+    withdrawalAfterTax: true,
+  },
+  asOfDate,
+  { includeBridgeCapacity: false },
+);
+assertFiniteResult(decliningReturn);
+assert.equal(decliningReturn.returnStrategy, RETURN_STRATEGY.declining);
+assert.ok(decliningReturn.requiredAtRetirement > 0);
+assert.ok(decliningReturn.totalPensionWithdrawalTax > 0);
+assert.ok(decliningReturn.totalFreeFundsTax >= 0);
+
+for (const strategy of [
+  RETURN_STRATEGY.declining,
+  RETURN_STRATEGY.riskTent,
+]) {
+  const lockedOptimization = optimizeAnnualContributions(
+    {
+      ...variableStrategyInputs,
+      returnStrategy: strategy,
+      returnDeclineYears: 4,
+      returnRecoveryYears: 6,
+      optimizationLocks: {
+        annualRatePensionContribution: true,
+        annualLifeAnnuityContribution: true,
+        annualAgeSavingsContribution: true,
+        annualFreeFundsContribution: true,
+      },
+    },
+    asOfDate,
+  );
+  assert.equal(
+    lockedOptimization.current.fireAge,
+    calculateFire(
+      {
+        ...variableStrategyInputs,
+        returnStrategy: strategy,
+        returnDeclineYears: 4,
+        returnRecoveryYears: 6,
+      },
+      asOfDate,
+      { includeBridgeCapacity: false },
+    ).fireRow.age,
+  );
+  assert.ok(lockedOptimization.recommended);
+}
+
 let randomState = 0x51f15e;
 function random() {
   randomState = (1664525 * randomState + 1013904223) >>> 0;
@@ -2573,7 +2948,10 @@ function randomBetween(minimum, maximum) {
   return minimum + random() * (maximum - minimum);
 }
 
-for (let scenario = 0; scenario < 2000; scenario += 1) {
+const randomizedScenarioCount = Number(
+  process.env.FIRE_RANDOM_SCENARIOS ?? 2000,
+);
+for (let scenario = 0; scenario < randomizedScenarioCount; scenario += 1) {
   const currentAge = Math.floor(randomBetween(18, 71));
   const retirementAge = currentAge + Math.floor(randomBetween(1, 51));
   const ratePensionBalance = randomBetween(0, 5000000);

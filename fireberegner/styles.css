@@ -476,6 +476,38 @@ legend,
   --field-columns: 3;
 }
 
+.return-strategy-note {
+  background: var(--green-soft);
+  border-left: 3px solid var(--green);
+  border-radius: var(--radius-control);
+  color: var(--green-dark);
+  display: grid;
+  font-size: var(--text-data-sm-size);
+  gap: var(--space-1);
+  grid-column: 1 / -1;
+  line-height: var(--text-data-sm-line);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+}
+
+.return-strategy-note a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
+.return-strategy-note a:hover {
+  color: var(--green);
+}
+
+.return-strategy-note a:focus-visible {
+  outline: 3px solid rgba(22, 75, 57, 0.2);
+  outline-offset: 2px;
+}
+
+.projection-return {
+  white-space: nowrap;
+}
+
 .field {
   display: grid;
   gap: var(--space-2);
@@ -1100,6 +1132,10 @@ legend,
   padding: var(--space-3) 0;
 }
 
+#returns-section {
+  border-bottom: 1px solid var(--line);
+}
+
 .assumptions summary,
 .projection-card summary,
 .key-figures summary {
@@ -1399,11 +1435,6 @@ legend,
   stroke-linejoin: round;
   stroke-width: 2;
   width: 32px;
-}
-
-.phase-icon-pig circle {
-  fill: currentColor;
-  stroke: none;
 }
 
 .phase b {

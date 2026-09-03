@@ -14,6 +14,15 @@
     "#free-funds-cost-basis-field",
   );
   const freeFundsCostBasisInput = form.elements.freeFundsCostBasis;
+  const defensiveReturnField = document.querySelector(
+    "#defensive-return-field",
+  );
+  const returnDeclineYearsField = document.querySelector(
+    "#return-decline-years-field",
+  );
+  const returnRecoveryYearsField = document.querySelector(
+    "#return-recovery-years-field",
+  );
   const ageSavingsRedirectMessage = document.querySelector(
     "#age-savings-redirect-message",
   );
@@ -288,6 +297,10 @@
       freeFundsInventoryShare: readNumber("freeFundsInventoryShare", 100),
       returnRate: readNumber("returnRate", 100),
       inflationRate: readNumber("inflationRate", 100),
+      defensiveReturnRate: readNumber("defensiveReturnRate", 100),
+      returnStrategy: form.elements.returnStrategy.value,
+      returnDeclineYears: readNumber("returnDeclineYears"),
+      returnRecoveryYears: readNumber("returnRecoveryYears"),
       withdrawalAfterTax: form.elements.withdrawalAfterTax.checked,
       contributionsFollowInflation:
         form.elements.contributionsFollowInflation.checked,
@@ -310,6 +323,7 @@
     "freeFundsInventoryShare",
     "returnRate",
     "inflationRate",
+    "defensiveReturnRate",
   ]);
 
   function setPlanCodeStatus(message) {
@@ -426,6 +440,7 @@
     renderPensionRedirectState();
     renderWithdrawalTaxState();
     renderFreeFundsTaxation();
+    renderReturnStrategyState();
     update();
   }
 
@@ -499,6 +514,38 @@
       : "Følger ikke inflationen";
   }
 
+  function renderReturnStrategyState() {
+    const strategy = form.elements.returnStrategy.value;
+    const usesVariableReturn = strategy !== "none";
+    const usesRecovery = strategy === "riskTent";
+
+    function setFieldEnabled(field, input, enabled) {
+      field.classList.toggle("field-disabled", !enabled);
+      field.setAttribute("aria-disabled", String(!enabled));
+      input.disabled = !enabled;
+      field.querySelectorAll(".amount-step-button").forEach((button) => {
+        button.disabled = !enabled;
+      });
+    }
+
+    setFieldEnabled(
+      defensiveReturnField,
+      form.elements.defensiveReturnRate,
+      usesVariableReturn,
+    );
+    setFieldEnabled(
+      returnDeclineYearsField,
+      form.elements.returnDeclineYears,
+      usesVariableReturn,
+    );
+    setFieldEnabled(
+      returnRecoveryYearsField,
+      form.elements.returnRecoveryYears,
+      usesRecovery,
+    );
+    form.elements.defensiveReturnRate.max = form.elements.returnRate.value;
+  }
+
   function renderPensionRedirectState() {
     pensionRedirectState.textContent = form.elements
       .redirectPensionContributionsToFreeFunds.checked
@@ -509,7 +556,7 @@
   function renderProjectionTableState() {
     setText(
       "projection-note",
-      "Datoerne er årlige beregningstidspunkter fra dagens dato. Før skat viser den samlede hævning fra formuen. Efter skat viser beløbet efter beregnet skat. Lagerskat viser skatten af årets positive afkast på den lagerbeskattede andel af frie midler og er trukket fra formuen frem mod næste dato. Effektiv skat viser skatten på årets samlede udbetaling som procent af udbetalingen før skat. Lagerskat indgår ikke i denne procentsats.",
+      "Datoerne er årlige beregningstidspunkter fra dagens dato. Afkast viser det formuevægtede gennemsnit af det forventede afkast på tværs af alle viste midler før skat og inflation frem mod næste dato. Før skat viser den samlede hævning fra formuen. Efter skat viser beløbet efter beregnet skat. Lagerskat viser skatten af årets positive afkast på den lagerbeskattede andel af frie midler og er trukket fra formuen frem mod næste dato. Effektiv skat viser skatten på årets samlede udbetaling som procent af udbetalingen før skat. Lagerskat indgår ikke i denne procentsats.",
     );
   }
 
@@ -793,12 +840,16 @@
     const effectiveTax = row.withdrawal
       ? percent.format(row.effectiveWithdrawalTaxRate)
       : "—";
+    const returnRate = Number.isFinite(row.averageReturnRate)
+      ? percent.format(row.averageReturnRate)
+      : "—";
 
     return `
       <tr data-phase="${row.phase}">
         <td>${dateFormat.format(row.date)}</td>
         <td>${ages.format(row.age)}</td>
         <td>${row.phase}</td>
+        <td class="projection-return">${returnRate}</td>
         <td>${currency.format(row.ratePension)}</td>
         <td>${currency.format(row.lifeAnnuity)}</td>
         <td>${currency.format(row.ageSavings)}</td>
@@ -1212,14 +1263,30 @@
     renderChart(calculation, inputs);
 
     setText("current-age", `${calculation.currentAge} år`);
+    const realReturn = (growthReturn, defensiveReturn) =>
+      calculation.returnStrategy === "none"
+        ? percent.format(growthReturn)
+        : `${percent.format(defensiveReturn)} – ${percent.format(growthReturn)}`;
     setText(
       "real-pension-return",
-      percent.format(calculation.realPensionReturn),
+      realReturn(
+        calculation.realPensionReturn,
+        calculation.defensiveRealPensionReturn,
+      ),
     );
-    setText("real-ask-return", percent.format(calculation.realAskReturn));
+    setText(
+      "real-ask-return",
+      realReturn(
+        calculation.realAskReturn,
+        calculation.defensiveRealAskReturn,
+      ),
+    );
     setText(
       "real-free-return",
-      percent.format(calculation.realFreeFundsReturn),
+      realReturn(
+        calculation.realFreeFundsReturn,
+        calculation.defensiveRealFreeFundsReturn,
+      ),
     );
     setText(
       "total-free-funds-tax",
@@ -1378,6 +1445,12 @@
     if (event.target.name === "freeFundsInventoryShare") {
       renderFreeFundsTaxation();
     }
+    if (
+      event.target === form.elements.returnStrategy ||
+      event.target === form.elements.returnRate
+    ) {
+      renderReturnStrategyState();
+    }
     update(event);
   });
   optimizeButton.addEventListener("click", runContributionOptimization);
@@ -1421,6 +1494,7 @@
   renderPensionRedirectState();
   renderWithdrawalTaxState();
   renderFreeFundsTaxation();
+  renderReturnStrategyState();
 
   update();
 })();

@@ -31,13 +31,21 @@
     "freeFundsInventoryShare",
     "returnRate",
     "inflationRate",
+    "defensiveReturnRate",
+    "returnDeclineYears",
+    "returnRecoveryYears",
   ]);
+  const STRING_FIELDS = Object.freeze(["returnStrategy"]);
   const BOOLEAN_FIELDS = Object.freeze([
     "withdrawalAfterTax",
     "contributionsFollowInflation",
     "redirectPensionContributionsToFreeFunds",
   ]);
-  const INPUT_FIELDS = Object.freeze([...NUMBER_FIELDS, ...BOOLEAN_FIELDS]);
+  const INPUT_FIELDS = Object.freeze([
+    ...NUMBER_FIELDS,
+    ...STRING_FIELDS,
+    ...BOOLEAN_FIELDS,
+  ]);
 
   function invalidFormat() {
     return new Error("Koden har et ugyldigt format.");
@@ -133,17 +141,23 @@
     }
 
     const invalidNumber = NUMBER_FIELDS.some(
-      (field) => typeof inputs[field] !== "number" || !Number.isFinite(inputs[field]),
+      (field) =>
+        typeof inputs[field] !== "number" || !Number.isFinite(inputs[field]),
     );
     const invalidBoolean = BOOLEAN_FIELDS.some(
       (field) => typeof inputs[field] !== "boolean",
     );
+    const invalidStrategy = !["none", "declining", "riskTent"].includes(
+      inputs.returnStrategy,
+    );
 
-    if (invalidNumber || invalidBoolean) {
+    if (invalidNumber || invalidBoolean || invalidStrategy) {
       throw new Error("Koden indeholder ugyldige FIRE-input.");
     }
 
-    return Object.fromEntries(INPUT_FIELDS.map((field) => [field, inputs[field]]));
+    return Object.fromEntries(
+      INPUT_FIELDS.map((field) => [field, inputs[field]]),
+    );
   }
 
   function encodePlan(inputs) {
