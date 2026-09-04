@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const {
   calculateFire,
+  createAnnualContributionOptimizationSession,
   optimizeAnnualContributions,
   CONTRIBUTION_LIMITS,
   FREE_FUNDS_TAXATION,
@@ -1965,6 +1966,78 @@ const optimizationInputs = {
   annualFreeFundsContribution: 50000,
   ratePensionContributionTaxRelief: 0.37,
 };
+
+function optimizeInPartitions(inputs, calculationDate, partitionCount) {
+  const sessions = Array.from({ length: partitionCount }, () =>
+    createAnnualContributionOptimizationSession(inputs, calculationDate),
+  );
+  const fullBudgetResults = sessions.map((session, partitionIndex) =>
+    session.evaluateFullBudgetPartition(partitionIndex, partitionCount),
+  );
+  const finiteFireTimes = fullBudgetResults
+    .map((result) => result.best?.fireTime)
+    .filter((fireTime) => Number.isFinite(fireTime));
+  const results =
+    finiteFireTimes.length === 0
+      ? fullBudgetResults
+      : sessions.map((session, partitionIndex) =>
+          session.evaluateCheapestPartition(
+            Math.min(...finiteFireTimes),
+            partitionIndex,
+            partitionCount,
+          ),
+        );
+
+  return sessions[0].finalize(
+    results.map((result) => result.best).filter(Boolean),
+    results.reduce(
+      (total, result) => total + result.evaluatedCandidates,
+      0,
+    ),
+  );
+}
+
+const shortParallelOptimizationInputs = {
+  ...optimizationInputs,
+  currentAge: 69,
+  retirementAge: 70,
+  payoutYears: 10,
+  desiredAnnualWithdrawal: 100000,
+  optimizationLocks: {
+    annualRatePensionContribution: true,
+    annualLifeAnnuityContribution: true,
+  },
+};
+const shortSynchronousOptimization = optimizeAnnualContributions(
+  shortParallelOptimizationInputs,
+  asOfDate,
+);
+const shortParallelOptimization = optimizeInPartitions(
+  shortParallelOptimizationInputs,
+  asOfDate,
+  4,
+);
+assert.equal(
+  shortParallelOptimization.status,
+  shortSynchronousOptimization.status,
+);
+assert.deepEqual(
+  shortParallelOptimization.current,
+  shortSynchronousOptimization.current,
+);
+assert.deepEqual(
+  shortParallelOptimization.recommended,
+  shortSynchronousOptimization.recommended,
+);
+assert.throws(
+  () =>
+    createAnnualContributionOptimizationSession(
+      shortParallelOptimizationInputs,
+      asOfDate,
+    ).evaluateFullBudgetPartition(4, 4),
+  /partition er ugyldig/,
+);
+
 function netContributionBudget(contributions, taxRelief) {
   const deductibleRatePensionContribution = Math.min(
     contributions.annualRatePensionContribution,

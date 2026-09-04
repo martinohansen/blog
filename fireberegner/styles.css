@@ -1040,6 +1040,22 @@ legend,
   background: var(--blue);
 }
 
+.optimization-row dt .optimization-info-icon {
+  align-items: center;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  color: var(--muted);
+  display: inline-flex;
+  flex: 0 0 13px;
+  font-size: var(--text-info-icon-size);
+  font-style: normal;
+  height: 13px;
+  justify-content: center;
+  vertical-align: 0.1em;
+  width: 13px;
+}
+
 .optimization-row-tax dt,
 .optimization-row-reserve dt {
   color: var(--muted);

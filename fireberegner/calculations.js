@@ -780,9 +780,9 @@
       assumedFireYear = null,
       freeReturnAnchorYear = null,
       candidateOnly = false,
+      calculationCache = null,
     } = {},
   ) {
-    assertInputs(inputs);
     const asOfDate = normalizeDate(calculationDate);
     const yearsToRetirement = inputs.retirementAge - inputs.currentAge;
     const finalYear = yearsToRetirement + inputs.payoutYears;
@@ -829,6 +829,23 @@
           ? FREE_FUNDS_TAXATION.realization
           : FREE_FUNDS_TAXATION.mixed;
     const usesInventoryTax = inventoryShare > 0;
+    let anchorCache = calculationCache?.anchorCaches.get(
+      effectiveFreeReturnAnchorYear,
+    );
+    if (!anchorCache) {
+      anchorCache = {
+        realReturnSeries: new Map(),
+        presentValueFactors: new Map(),
+        compoundGrowth: new Map(),
+      };
+      calculationCache?.anchorCaches.set(
+        effectiveFreeReturnAnchorYear,
+        anchorCache,
+      );
+    }
+    const realReturnSeriesCache = anchorCache.realReturnSeries;
+    const presentValueFactorCache = anchorCache.presentValueFactors;
+    const compoundGrowthCache = anchorCache.compoundGrowth;
 
     function pensionNominalReturn(year) {
       return strategyReturnRate(
@@ -984,7 +1001,13 @@
     }
 
     function realReturnSeriesFor(index, startYear, periods) {
-      return Array.from({ length: periods }, (_value, period) => {
+      const key = `${index}:${startYear}:${periods}`;
+      const cached = realReturnSeriesCache.get(key);
+      if (cached) {
+        return cached;
+      }
+
+      const series = Array.from({ length: periods }, (_value, period) => {
         const year = startYear + period;
         if (index <= AGE_SAVINGS) {
           return realPensionReturnFor(pensionNominalReturn(year));
@@ -994,16 +1017,37 @@
         }
         return grossRealFreeFundsReturnFor(freeNominalReturn(year));
       });
+      realReturnSeriesCache.set(key, series);
+      return series;
+    }
+
+    function presentValueFactorFor(index, startYear, periods) {
+      const key = `${index}:${startYear}:${periods}`;
+      if (presentValueFactorCache.has(key)) {
+        return presentValueFactorCache.get(key);
+      }
+
+      const factor = presentValueFactor(
+        realReturnSeriesFor(index, startYear, periods),
+      );
+      presentValueFactorCache.set(key, factor);
+      return factor;
     }
 
     function pensionGrowthFactor(startYear, periods) {
-      if (selectedReturnStrategy === RETURN_STRATEGY.none) {
-        return Math.pow(1 + realPensionReturn, periods);
+      const key = `${startYear}:${periods}`;
+      if (compoundGrowthCache.has(key)) {
+        return compoundGrowthCache.get(key);
       }
 
-      return compoundGrowth(
-        realReturnSeriesFor(RATE_PENSION, startYear, periods),
-      );
+      const factor =
+        selectedReturnStrategy === RETURN_STRATEGY.none
+          ? Math.pow(1 + realPensionReturn, periods)
+          : compoundGrowth(
+              realReturnSeriesFor(RATE_PENSION, startYear, periods),
+            );
+      compoundGrowthCache.set(key, factor);
+      return factor;
     }
 
     function capacitiesForBalances(balances, startYear, periods) {
@@ -1011,10 +1055,13 @@
         if (index === FREE_FUNDS_INVENTORY) {
           return inventoryAnnualCapacity(balance, startYear, periods);
         }
-        return annualCapacity(
-          balance,
-          realReturnSeriesFor(index, startYear, periods),
-        );
+        if (balance <= 0 || periods <= 0) {
+          return 0;
+        }
+        const factor = presentValueFactorFor(index, startYear, periods);
+        const capacity = factor > 0 ? balance / factor : 0;
+        assertFinite(capacity);
+        return capacity;
       });
     }
 
@@ -1162,7 +1209,7 @@
       }
 
       const totalPension = ratePension + lifeAnnuity + ageSavings;
-      const payoutRates = realReturnSeriesFor(
+      const payoutFactor = presentValueFactorFor(
         RATE_PENSION,
         yearsToRetirement,
         inputs.payoutYears,
@@ -1171,20 +1218,36 @@
         if (inputs.withdrawalAfterTax) {
           return null;
         }
-        return desiredWithdrawal * presentValueFactor(payoutRates);
+        return desiredWithdrawal * payoutFactor;
       }
 
-      const payoutFactor = presentValueFactor(payoutRates);
       if (!inputs.withdrawalAfterTax) {
         return desiredWithdrawal * payoutFactor;
       }
 
+      const payoutRates = realReturnSeriesFor(
+        RATE_PENSION,
+        yearsToRetirement,
+        inputs.payoutYears,
+      );
       const rateShare = ratePension / totalPension;
       const lifeAnnuityShare = lifeAnnuity / totalPension;
       const initialTaxFreeAllowance = annualTaxFreeRatePensionAllowance(
         nonDeductibleBasis,
         inputs.payoutYears,
       );
+      if (initialTaxFreeAllowance <= CALCULATION_TOLERANCE) {
+        const taxableShare = rateShare + lifeAnnuityShare;
+        const netFraction = 1 - pensionWithdrawalTax * taxableShare;
+        if (netFraction <= CALCULATION_TOLERANCE) {
+          return null;
+        }
+
+        const target = (desiredWithdrawal / netFraction) * payoutFactor;
+        assertFinite(target);
+        return target;
+      }
+
       let target = 0;
       let discountFactor = 1;
 
@@ -1209,55 +1272,6 @@
 
       assertFinite(target);
       return target;
-    }
-
-    function netPensionAnnualCapacity(
-      ratePension,
-      lifeAnnuity,
-      ageSavings,
-      nonDeductibleBasis,
-    ) {
-      const totalPension = ratePension + lifeAnnuity + ageSavings;
-      const payoutFactor = presentValueFactor(
-        realReturnSeriesFor(
-          RATE_PENSION,
-          yearsToRetirement,
-          inputs.payoutYears,
-        ),
-      );
-      if (totalPension <= 0 || payoutFactor <= 0) {
-        return 0;
-      }
-
-      const grossCapacity = totalPension / payoutFactor;
-      if (!inputs.withdrawalAfterTax) {
-        return grossCapacity;
-      }
-
-      let affordable = 0;
-      let unaffordable = grossCapacity;
-      for (let iteration = 0; iteration < 60; iteration += 1) {
-        if (unaffordable - affordable <= MONEY_TOLERANCE) {
-          break;
-        }
-
-        const candidate = (affordable + unaffordable) / 2;
-        const target = pensionTargetForMix(
-          ratePension,
-          lifeAnnuity,
-          ageSavings,
-          nonDeductibleBasis,
-          candidate,
-        );
-        if (target !== null && target <= totalPension + MONEY_TOLERANCE) {
-          affordable = candidate;
-        } else {
-          unaffordable = candidate;
-        }
-      }
-
-      assertFinite(affordable);
-      return affordable;
     }
 
     function simulateDrawdown(
@@ -1511,12 +1525,10 @@
       return affordable;
     }
 
-    function evaluateMilestone(
+    function pensionMilestoneStatus(
       year,
       balances,
-      freeFundsCostBasis,
       ratePensionNonDeductibleBasis,
-      checkFireReadiness = true,
     ) {
       const bridgeYears = yearsToRetirement - year;
       const pensionGrowth = pensionGrowthFactor(year, bridgeYears);
@@ -1530,25 +1542,37 @@
       const ratePensionNonDeductibleBasisAtRetirement =
         ratePensionNonDeductibleBasis /
         Math.pow(1 + inputs.inflationRate, bridgeYears);
-      const pensionNetAnnualCapacity = netPensionAnnualCapacity(
-        ratePensionAtRetirement,
-        lifeAnnuityAtRetirement,
-        ageSavingsAtRetirement,
-        ratePensionNonDeductibleBasisAtRetirement,
-      );
-      const coastFinanced =
-        pensionNetAnnualCapacity + MONEY_TOLERANCE >=
-        inputs.desiredAnnualWithdrawal;
       const pensionTargetAtRetirement = pensionTargetForMix(
         ratePensionAtRetirement,
         lifeAnnuityAtRetirement,
         ageSavingsAtRetirement,
         ratePensionNonDeductibleBasisAtRetirement,
       );
+      const coastFinanced =
+        pensionTargetAtRetirement !== null &&
+        pensionTargetAtRetirement <= pensionAtRetirement + MONEY_TOLERANCE;
       const pensionTarget =
         pensionTargetAtRetirement === null
           ? null
           : pensionTargetAtRetirement / pensionGrowth;
+
+      assertFinite(pensionAtRetirement, pensionTarget ?? 0);
+      return { bridgeYears, pensionTarget, coastFinanced };
+    }
+
+    function evaluateMilestone(
+      year,
+      balances,
+      freeFundsCostBasis,
+      ratePensionNonDeductibleBasis,
+      checkFireReadiness = true,
+    ) {
+      const { bridgeYears, pensionTarget, coastFinanced } =
+        pensionMilestoneStatus(
+          year,
+          balances,
+          ratePensionNonDeductibleBasis,
+        );
       const drawdown = checkFireReadiness
         ? simulateDrawdown(
             year,
@@ -1559,11 +1583,6 @@
           )
         : null;
 
-      assertFinite(
-        pensionAtRetirement,
-        pensionNetAnnualCapacity,
-        pensionTarget ?? 0,
-      );
       return {
         age: inputs.currentAge + year,
         date: annualDate(asOfDate, year),
@@ -1604,28 +1623,56 @@
     let drawdownStartContribution = 0;
 
     for (let year = 0; year <= yearsToRetirement; year += 1) {
+      if (candidateOnly) {
+        const { coastFinanced } = pensionMilestoneStatus(
+          year,
+          balances,
+          ratePensionNonDeductibleBasis,
+        );
+        if (!pensionCoastRow && coastFinanced) {
+          pensionCoastRow = true;
+          pensionStopRow = true;
+          pensionContributionsActive = false;
+        }
+
+        if (year === assumedFireYear) {
+          const fireReady = simulateDrawdown(
+            year,
+            balances,
+            freeFundsCostBasis,
+            ratePensionNonDeductibleBasis,
+            { shouldRecord: false },
+          ).isFullyFunded;
+          return {
+            fireRow: fireReady
+              ? { age: inputs.currentAge + year }
+              : null,
+          };
+        }
+      }
+
       const checkFireReadiness =
         assumedFireYear === null || year === assumedFireYear;
-      const milestone = evaluateMilestone(
-        year,
-        balances,
-        freeFundsCostBasis,
-        ratePensionNonDeductibleBasis,
-        checkFireReadiness,
-      );
-      milestoneRows.push(milestone);
+      const milestone = candidateOnly
+        ? null
+        : evaluateMilestone(
+            year,
+            balances,
+            freeFundsCostBasis,
+            ratePensionNonDeductibleBasis,
+            checkFireReadiness,
+          );
+      if (milestone) {
+        milestoneRows.push(milestone);
+      }
 
-      if (!pensionCoastRow && milestone.coastFinanced) {
+      if (milestone && !pensionCoastRow && milestone.coastFinanced) {
         pensionCoastRow = milestone;
         pensionStopRow = pensionStopRow || milestone;
         pensionContributionsActive = false;
       }
 
-      if (candidateOnly && year === assumedFireYear) {
-        return { fireRow: milestone.fireReady ? milestone : null };
-      }
-
-      if (milestone.fireReady) {
+      if (milestone?.fireReady) {
         if (includeBridgeCapacity) {
           milestone.possibleBridgeWithdrawal = sustainableBridgeWithdrawal(
             year,
@@ -1654,21 +1701,23 @@
         break;
       }
 
-      accumulationRows.push(
-        createRow(
-          inputs.currentAge + year,
-          annualDate(asOfDate, year),
-          balances,
-          freeFundsCostBasis,
-          ratePensionNonDeductibleBasis,
-          {
-            phase: "Opsparing",
-            pensionReturnRate: pensionNominalReturn(year),
-            freeFundsReturnRate: freeNominalReturn(year),
-            contribution: contributionAtCheckpoint,
-          },
-        ),
-      );
+      if (!candidateOnly) {
+        accumulationRows.push(
+          createRow(
+            inputs.currentAge + year,
+            annualDate(asOfDate, year),
+            balances,
+            freeFundsCostBasis,
+            ratePensionNonDeductibleBasis,
+            {
+              phase: "Opsparing",
+              pensionReturnRate: pensionNominalReturn(year),
+              freeFundsReturnRate: freeNominalReturn(year),
+              contribution: contributionAtCheckpoint,
+            },
+          ),
+        );
+      }
 
       const nextYear = year + 1;
       const shouldCalculatePensionContributions =
@@ -1732,8 +1781,10 @@
         contributions,
         year,
       );
-      accumulationRows[accumulationRows.length - 1].annualFreeFundsTax =
-        growth.freeFundsTax;
+      if (!candidateOnly) {
+        accumulationRows[accumulationRows.length - 1].annualFreeFundsTax =
+          growth.freeFundsTax;
+      }
       balances = growth.balances;
       accumulationFreeFundsTax += growth.freeFundsTax;
       accumulationFreeFundsTaxableGain += growth.freeFundsTaxableGain;
@@ -1950,42 +2001,48 @@
   function calculateFire(
     inputs,
     calculationDate = new Date(),
-    { includeBridgeCapacity = true } = {},
+    { includeBridgeCapacity = true, calculationCache = null } = {},
   ) {
     assertInputs(inputs);
 
     if (returnStrategy(inputs) === RETURN_STRATEGY.none) {
       return calculateFireForAnchor(inputs, calculationDate, {
         includeBridgeCapacity,
+        calculationCache,
       });
     }
 
     const yearsToRetirement = inputs.retirementAge - inputs.currentAge;
-    let fireYear = null;
+    let latestUnfundedYear = -1;
+    let earliestFundedYear = yearsToRetirement + 1;
 
-    for (
-      let candidateYear = 0;
-      candidateYear <= yearsToRetirement;
-      candidateYear += 1
-    ) {
+    while (earliestFundedYear - latestUnfundedYear > 1) {
+      const candidateYear = Math.floor(
+        (latestUnfundedYear + earliestFundedYear) / 2,
+      );
       const candidate = calculateFireForAnchor(inputs, calculationDate, {
         includeBridgeCapacity: false,
         assumedFireYear: candidateYear,
         freeReturnAnchorYear: candidateYear,
         candidateOnly: true,
+        calculationCache,
       });
 
       if (candidate.fireRow?.age === inputs.currentAge + candidateYear) {
-        fireYear = candidateYear;
-        break;
+        earliestFundedYear = candidateYear;
+      } else {
+        latestUnfundedYear = candidateYear;
       }
     }
 
+    const fireYear =
+      earliestFundedYear <= yearsToRetirement ? earliestFundedYear : null;
     const freeReturnAnchorYear = fireYear ?? yearsToRetirement;
     return calculateFireForAnchor(inputs, calculationDate, {
       includeBridgeCapacity,
       assumedFireYear: freeReturnAnchorYear,
       freeReturnAnchorYear,
+      calculationCache,
     });
   }
 
@@ -2039,18 +2096,13 @@
   }
 
   function compareEvaluations(first, second) {
-    const firstFireTime = first.calculation.fireRow
-      ? first.calculation.fireRow.date.getTime()
-      : Number.POSITIVE_INFINITY;
-    const secondFireTime = second.calculation.fireRow
-      ? second.calculation.fireRow.date.getTime()
-      : Number.POSITIVE_INFINITY;
+    const firstFireTime = evaluationFireTime(first);
+    const secondFireTime = evaluationFireTime(second);
 
     return (
       firstFireTime - secondFireTime ||
       first.annualNetCost - second.annualNetCost ||
-      second.calculation.finalReserveAfterTax -
-        first.calculation.finalReserveAfterTax ||
+      evaluationFinalReserve(second) - evaluationFinalReserve(first) ||
       first.distance - second.distance ||
       second.candidate.annualFreeFundsContribution -
         first.candidate.annualFreeFundsContribution ||
@@ -2058,6 +2110,66 @@
         candidateKey(second.candidate),
       )
     );
+  }
+
+  function evaluationFireTime(evaluation) {
+    if ("fireTime" in evaluation) {
+      return evaluation.fireTime ?? Number.POSITIVE_INFINITY;
+    }
+
+    return evaluation.calculation.fireRow
+      ? evaluation.calculation.fireRow.date.getTime()
+      : Number.POSITIVE_INFINITY;
+  }
+
+  function evaluationFinalReserve(evaluation) {
+    return "finalReserveAfterTax" in evaluation
+      ? evaluation.finalReserveAfterTax
+      : evaluation.calculation.finalReserveAfterTax;
+  }
+
+  function serializeEvaluation(evaluation) {
+    if (!evaluation) {
+      return null;
+    }
+
+    return {
+      candidate: evaluation.candidate,
+      annualNetCost: evaluation.annualNetCost,
+      distance: evaluation.distance,
+      fireTime: Number.isFinite(evaluationFireTime(evaluation))
+        ? evaluationFireTime(evaluation)
+        : null,
+      finalReserveAfterTax: evaluationFinalReserve(evaluation),
+      snapshot:
+        evaluation.snapshot ??
+        contributionSnapshot(evaluation.candidate, evaluation.calculation),
+    };
+  }
+
+  function contributionCombinationKey(combination) {
+    return [
+      combination.ratePension,
+      combination.lifeAnnuity,
+      combination.ageSavings,
+    ]
+      .map((value) => value.toFixed(4))
+      .join(":");
+  }
+
+  function contributionCombinationPartition(
+    combination,
+    partitionCount,
+  ) {
+    const key = contributionCombinationKey(combination);
+    let hash = 2166136261;
+
+    for (let index = 0; index < key.length; index += 1) {
+      hash ^= key.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+
+    return (hash >>> 0) % partitionCount;
   }
 
   function contributionCandidates(maximum, current) {
@@ -2077,9 +2189,14 @@
     return [...candidates].sort((first, second) => first - second);
   }
 
-  function optimizeAnnualContributions(inputs, calculationDate = new Date()) {
+  function createAnnualContributionOptimizationSession(
+    inputs,
+    calculationDate = new Date(),
+  ) {
+    const calculationCache = { anchorCaches: new Map() };
     const currentCalculation = calculateFire(inputs, calculationDate, {
       includeBridgeCapacity: false,
+      calculationCache,
     });
     const currentContributions = {
       annualRatePensionContribution: inputs.annualRatePensionContribution,
@@ -2215,7 +2332,7 @@
       const calculation = calculateFire(
         { ...inputs, ...candidate },
         calculationDate,
-        { includeBridgeCapacity: false },
+        { includeBridgeCapacity: false, calculationCache },
       );
       const evaluation = {
         candidate,
@@ -2311,8 +2428,6 @@
       );
     }
 
-    let bestFullBudgetEvaluation = null;
-    let evaluatedCandidates = 0;
     const evaluationsByCandidateKey = new Map();
     const contributionCombinations = [
       {
@@ -2333,33 +2448,22 @@
 
       const evaluation = evaluate(candidate);
       evaluationsByCandidateKey.set(key, evaluation);
-      evaluatedCandidates += 1;
       return evaluation;
     }
 
-    function considerFullBudgetCandidate(candidate) {
+    function considerFullBudgetCandidate(candidate, bestEvaluation) {
       const evaluation = evaluateCandidate(candidate);
       if (!evaluation) {
-        return;
+        return bestEvaluation;
       }
       if (
-        !bestFullBudgetEvaluation ||
-        compareEvaluations(
-          evaluation,
-          bestFullBudgetEvaluation,
-        ) < 0
+        !bestEvaluation ||
+        compareEvaluations(evaluation, bestEvaluation) < 0
       ) {
-        bestFullBudgetEvaluation = evaluation;
+        return evaluation;
       }
+      return bestEvaluation;
     }
-
-    considerFullBudgetCandidate(
-      completeFullBudgetCandidate(
-        currentContributions.annualRatePensionContribution,
-        currentContributions.annualLifeAnnuityContribution,
-        currentContributions.annualAgeSavingsContribution,
-      ),
-    );
 
     [...totalPensionCandidates]
       .sort((first, second) => first - second)
@@ -2374,12 +2478,6 @@
             ageSavings: ageSavingsContribution,
           };
           contributionCombinations.push(combination);
-          const candidate = completeFullBudgetCandidate(
-            pensionSplit.annualRatePensionContribution,
-            pensionSplit.annualLifeAnnuityContribution,
-            ageSavingsContribution,
-          );
-          considerFullBudgetCandidate(candidate);
         });
       });
 
@@ -2477,96 +2575,180 @@
       return bestEvaluation;
     }
 
-    let bestEvaluation = bestFullBudgetEvaluation;
-    const earliestFireTime = bestFullBudgetEvaluation?.calculation.fireRow
-      ? bestFullBudgetEvaluation.calculation.fireRow.date.getTime()
-      : Number.POSITIVE_INFINITY;
+    function partitionCombinations(partitionIndex, partitionCount) {
+      if (
+        !Number.isInteger(partitionIndex) ||
+        !Number.isInteger(partitionCount) ||
+        partitionCount < 1 ||
+        partitionIndex < 0 ||
+        partitionIndex >= partitionCount
+      ) {
+        throw new Error("Optimeringens partition er ugyldig.");
+      }
 
-    if (Number.isFinite(earliestFireTime)) {
-      bestEvaluation = null;
-      contributionCombinations.forEach((combination) => {
-        const evaluation = cheapestEvaluationForFireTime(
-          combination,
-          earliestFireTime,
-          bestEvaluation?.annualNetCost ?? Number.POSITIVE_INFINITY,
-        );
-        if (
-          evaluation &&
-          (!bestEvaluation ||
-            compareEvaluations(
-              evaluation,
-              bestEvaluation,
-            ) < 0)
-        ) {
-          bestEvaluation = evaluation;
-        }
-      });
+      return contributionCombinations.filter(
+        (combination) =>
+          contributionCombinationPartition(combination, partitionCount) ===
+          partitionIndex,
+      );
     }
 
-    let bestCandidate = bestEvaluation?.candidate ?? null;
-    let bestCalculation = bestEvaluation?.calculation ?? null;
-    const bestFireTime = bestCalculation?.fireRow
-      ? bestCalculation.fireRow.date.getTime()
-      : Number.POSITIVE_INFINITY;
+    function evaluateFullBudgetPartition(partitionIndex, partitionCount) {
+      let bestEvaluation = null;
 
-    const currentFireTime = currentCalculation.fireRow
-      ? currentCalculation.fireRow.date.getTime()
-      : Number.POSITIVE_INFINITY;
-    const currentEvaluation = {
-      candidate: currentContributions,
-      calculation: currentCalculation,
-      annualNetCost: contributionNetBudget(
-        currentContributions,
-        ratePensionContributionTaxRelief,
-      ),
-      distance: 0,
-    };
-    let status = "improved";
+      partitionCombinations(partitionIndex, partitionCount).forEach(
+        ({ ratePension, lifeAnnuity, ageSavings }) => {
+          bestEvaluation = considerFullBudgetCandidate(
+            completeFullBudgetCandidate(
+              ratePension,
+              lifeAnnuity,
+              ageSavings,
+            ),
+            bestEvaluation,
+          );
+        },
+      );
 
-    if (!bestCalculation?.fireRow) {
-      status = "unachievable";
-    } else if (!currentUnlockedContributionsAreWithinLimits) {
-      status = "limits-applied";
-    } else if (
-      compareEvaluations(
-        currentEvaluation,
-        bestEvaluation,
-      ) <= 0
+      return {
+        best: serializeEvaluation(bestEvaluation),
+        evaluatedCandidates: evaluationsByCandidateKey.size,
+      };
+    }
+
+    function evaluateCheapestPartition(
+      targetFireTime,
+      partitionIndex,
+      partitionCount,
     ) {
-      status = "current-optimal";
-      bestCandidate = currentContributions;
-      bestCalculation = currentCalculation;
-    } else if (currentFireTime === bestFireTime) {
-      status =
-        bestEvaluation.annualNetCost <
-        currentEvaluation.annualNetCost - MONEY_TOLERANCE
-          ? "lower-cost"
-          : "larger-reserve";
+      let bestEvaluation = null;
+
+      partitionCombinations(partitionIndex, partitionCount).forEach(
+        (combination) => {
+          const evaluation = cheapestEvaluationForFireTime(
+            combination,
+            targetFireTime,
+            bestEvaluation?.annualNetCost ?? Number.POSITIVE_INFINITY,
+          );
+          if (
+            evaluation &&
+            (!bestEvaluation ||
+              compareEvaluations(evaluation, bestEvaluation) < 0)
+          ) {
+            bestEvaluation = evaluation;
+          }
+        },
+      );
+
+      return {
+        best: serializeEvaluation(bestEvaluation),
+        evaluatedCandidates: evaluationsByCandidateKey.size,
+      };
+    }
+
+    function finalize(evaluations, evaluatedCandidates) {
+      const bestEvaluation = evaluations
+        .filter(Boolean)
+        .reduce(
+          (best, evaluation) =>
+            !best || compareEvaluations(evaluation, best) < 0
+              ? evaluation
+              : best,
+          null,
+        );
+      let bestSnapshot = bestEvaluation?.snapshot ?? null;
+      const bestFireTime = evaluationFireTime(bestEvaluation ?? {
+        fireTime: null,
+      });
+
+      const currentFireTime = currentCalculation.fireRow
+        ? currentCalculation.fireRow.date.getTime()
+        : Number.POSITIVE_INFINITY;
+      const currentEvaluation = {
+        candidate: currentContributions,
+        calculation: currentCalculation,
+        annualNetCost: contributionNetBudget(
+          currentContributions,
+          ratePensionContributionTaxRelief,
+        ),
+        distance: 0,
+      };
+      let status = "improved";
+
+      if (!Number.isFinite(bestFireTime)) {
+        status = "unachievable";
+      } else if (!currentUnlockedContributionsAreWithinLimits) {
+        status = "limits-applied";
+      } else if (compareEvaluations(currentEvaluation, bestEvaluation) <= 0) {
+        status = "current-optimal";
+        bestSnapshot = contributionSnapshot(
+          currentContributions,
+          currentCalculation,
+        );
+      } else if (currentFireTime === bestFireTime) {
+        status =
+          bestEvaluation.annualNetCost <
+          currentEvaluation.annualNetCost - MONEY_TOLERANCE
+            ? "lower-cost"
+            : "larger-reserve";
+      }
+
+      return {
+        status,
+        current: contributionSnapshot(
+          currentContributions,
+          currentCalculation,
+        ),
+        recommended: status === "unachievable" ? null : bestSnapshot,
+        annualNetBudget,
+        ratePensionContributionTaxRelief,
+        limits: {
+          ratePension: CONTRIBUTION_LIMITS.ratePension,
+          lifeAnnuity: CONTRIBUTION_LIMITS.lifeAnnuity,
+          ageSavings: selectedAgeSavingsContributionLimit,
+        },
+        precision: CONTRIBUTION_SEARCH_STEP,
+        evaluatedCandidates,
+        searchMethod: "exhaustive-grid",
+        lockedContributions: optimizationLocks,
+      };
     }
 
     return {
-      status,
-      current: contributionSnapshot(currentContributions, currentCalculation),
-      recommended:
-        status === "unachievable"
-          ? null
-          : contributionSnapshot(bestCandidate, bestCalculation),
-      annualNetBudget,
-      ratePensionContributionTaxRelief,
-      limits: {
-        ratePension: CONTRIBUTION_LIMITS.ratePension,
-        lifeAnnuity: CONTRIBUTION_LIMITS.lifeAnnuity,
-        ageSavings: selectedAgeSavingsContributionLimit,
-      },
-      precision: CONTRIBUTION_SEARCH_STEP,
-      evaluatedCandidates,
-      searchMethod: "exhaustive-grid",
-      lockedContributions: optimizationLocks,
+      evaluateFullBudgetPartition,
+      evaluateCheapestPartition,
+      finalize,
     };
+  }
+
+  function optimizeAnnualContributions(inputs, calculationDate = new Date()) {
+    const session = createAnnualContributionOptimizationSession(
+      inputs,
+      calculationDate,
+    );
+    const fullBudget = session.evaluateFullBudgetPartition(0, 1);
+    const earliestFireTime = fullBudget.best?.fireTime;
+
+    if (earliestFireTime === null || earliestFireTime === undefined) {
+      return session.finalize(
+        [fullBudget.best],
+        fullBudget.evaluatedCandidates,
+      );
+    }
+
+    const cheapest = session.evaluateCheapestPartition(
+      earliestFireTime,
+      0,
+      1,
+    );
+    return session.finalize(
+      [cheapest.best],
+      cheapest.evaluatedCandidates,
+    );
   }
 
   return {
     calculateFire,
+    createAnnualContributionOptimizationSession,
     optimizeAnnualContributions,
     CONTRIBUTION_LIMITS,
     FREE_FUNDS_TAXATION,

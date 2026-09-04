@@ -73,6 +73,8 @@
     window.FireCalculations;
   const { encodePlan, decodePlan } = window.FirePlanCode;
   let latestOptimization = null;
+  let activeOptimizationJob = null;
+  let nextOptimizationJobId = 1;
   let planCodeReturnFocus = null;
   const inputLocale =
     document.documentElement.lang || navigator.language || "da-DK";
@@ -420,6 +422,7 @@
   }
 
   function applyPlanInputs(inputs) {
+    cancelActiveOptimization();
     Object.entries(inputs).forEach(([name, value]) => {
       const input = form.elements[name];
 
@@ -461,6 +464,7 @@
   }
 
   function toggleContributionLock(button) {
+    cancelActiveOptimization();
     const locked = button.getAttribute("aria-pressed") !== "true";
     const row = button.closest(".optimization-row");
     const fieldLabel = button.dataset.lockLabel;
@@ -783,25 +787,164 @@
     optimizationNote.textContent = `${objectiveNote} Der blev beregnet ${inputNumber.format(evaluatedCandidates)} gyldige kombinationer i trin på ${currency.format(precision)} inden for din nuværende årlige pris på ${currency.format(annualNetBudget)}${limitNote}${lockNote}`;
   }
 
-  function runContributionOptimization() {
+  function workerRequest(worker, message, expectedType) {
+    return new Promise((resolve, reject) => {
+      function cleanup() {
+        worker.removeEventListener("message", handleMessage);
+        worker.removeEventListener("error", handleError);
+      }
+
+      function handleMessage(event) {
+        if (event.data.jobId !== message.jobId) {
+          return;
+        }
+
+        cleanup();
+        if (event.data.type === "error") {
+          reject(new Error(event.data.message));
+          return;
+        }
+        if (event.data.type !== expectedType) {
+          reject(new Error("Optimeringen returnerede et ugyldigt svar."));
+          return;
+        }
+        resolve(event.data);
+      }
+
+      function handleError() {
+        cleanup();
+        reject(new Error("Optimeringens worker stoppede uventet."));
+      }
+
+      worker.addEventListener("message", handleMessage);
+      worker.addEventListener("error", handleError);
+      worker.postMessage(message);
+    });
+  }
+
+  function cancelActiveOptimization() {
+    activeOptimizationJob?.cancel();
+  }
+
+  async function optimizeAnnualContributionsInWorkers(inputs) {
+    const workerCount = 4;
+    const jobId = nextOptimizationJobId;
+    nextOptimizationJobId += 1;
+    const workers = [];
+    let rejectCancellation;
+    const cancellation = new Promise((_resolve, reject) => {
+      rejectCancellation = reject;
+    });
+    const job = {
+      jobId,
+      cancel() {
+        const error = new Error("Optimeringen blev annulleret.");
+        error.name = "AbortError";
+        rejectCancellation(error);
+      },
+    };
+    activeOptimizationJob = job;
+
+    try {
+      for (let index = 0; index < workerCount; index += 1) {
+        workers.push(new Worker("./optimization-worker.js?v=20260904-1"));
+      }
+
+      const calculationTime = Date.now();
+      const phaseOne = await Promise.race([
+        Promise.all(
+          workers.map((worker, partitionIndex) =>
+            workerRequest(
+              worker,
+              {
+                type: "phase-one",
+                jobId,
+                inputs,
+                calculationTime,
+                partitionIndex,
+                partitionCount: workerCount,
+              },
+              "phase-one-complete",
+            ),
+          ),
+        ),
+        cancellation,
+      ]);
+      const finiteFireTimes = phaseOne
+        .map((result) => result.best?.fireTime)
+        .filter((fireTime) => Number.isFinite(fireTime));
+      let phaseResults = phaseOne;
+
+      if (finiteFireTimes.length > 0) {
+        const targetFireTime = Math.min(...finiteFireTimes);
+        phaseResults = await Promise.race([
+          Promise.all(
+            workers.map((worker) =>
+              workerRequest(
+                worker,
+                { type: "phase-two", jobId, targetFireTime },
+                "phase-two-complete",
+              ),
+            ),
+          ),
+          cancellation,
+        ]);
+      }
+
+      const evaluations = phaseResults
+        .map((result) => result.best)
+        .filter(Boolean);
+      const evaluatedCandidates = phaseResults.reduce(
+        (total, result) => total + result.evaluatedCandidates,
+        0,
+      );
+      const completed = await Promise.race([
+        workerRequest(
+          workers[0],
+          {
+            type: "finalize",
+            jobId,
+            evaluations,
+            evaluatedCandidates,
+          },
+          "complete",
+        ),
+        cancellation,
+      ]);
+      return completed.optimization;
+    } finally {
+      workers.forEach((worker) => worker.terminate());
+      if (activeOptimizationJob === job) {
+        activeOptimizationJob = null;
+      }
+    }
+  }
+
+  async function runContributionOptimization() {
     optimizeButton.disabled = true;
     optimizeButtonLabel.textContent = "Optimerer…";
     optimizationResult.setAttribute("aria-busy", "true");
 
-    window.setTimeout(() => {
-      try {
-        renderOptimization(optimizeAnnualContributions(readInputs()));
-        errorBox.hidden = true;
-      } catch (error) {
+    try {
+      const inputs = readInputs();
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
+      const optimization =
+        typeof Worker === "function"
+          ? await optimizeAnnualContributionsInWorkers(inputs)
+          : optimizeAnnualContributions(inputs);
+      renderOptimization(optimization);
+      errorBox.hidden = true;
+    } catch (error) {
+      if (error.name !== "AbortError") {
         hideOptimizationResult();
         errorBox.textContent = error.message;
         errorBox.hidden = false;
-      } finally {
-        optimizeButton.disabled = false;
-        optimizeButtonLabel.textContent = "Beregn anbefaling";
-        optimizationResult.removeAttribute("aria-busy");
       }
-    }, 0);
+    } finally {
+      optimizeButton.disabled = false;
+      optimizeButtonLabel.textContent = "Beregn anbefaling";
+      optimizationResult.removeAttribute("aria-busy");
+    }
   }
 
   function applyOptimization() {
@@ -1426,6 +1569,7 @@
 
   form.addEventListener("submit", update);
   form.addEventListener("input", (event) => {
+    cancelActiveOptimization();
     setPlanCodeStatus("");
     hideOptimizationResult();
     if (event.target.matches("[data-number-format='integer']")) {
