@@ -1,4 +1,4 @@
-importScripts("./calculations.js?v=20260904-1");
+importScripts("./calculations.js?v=20260904-5");
 
 let activeJobId = null;
 let session = null;
@@ -20,12 +20,14 @@ self.addEventListener("message", (event) => {
       session = FireCalculations.createAnnualContributionOptimizationSession(
         message.inputs,
         new Date(message.calculationTime),
+        message.searchOptions,
       );
       respond(
         "phase-one-complete",
         session.evaluateFullBudgetPartition(
           partitionIndex,
           partitionCount,
+          message.resultLimit,
         ),
       );
       return;
@@ -42,6 +44,7 @@ self.addEventListener("message", (event) => {
           message.targetFireTime,
           partitionIndex,
           partitionCount,
+          message.resultLimit,
         ),
       );
       return;

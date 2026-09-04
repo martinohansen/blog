@@ -3,6 +3,7 @@ const {
   calculateFire,
   createAnnualContributionOptimizationSession,
   optimizeAnnualContributions,
+  optimizeAnnualContributionsAdaptive,
   CONTRIBUTION_LIMITS,
   FREE_FUNDS_TAXATION,
   RETURN_STRATEGY,
@@ -2071,6 +2072,77 @@ const unchangedOptimizationInputs = { ...optimizationInputs };
 const optimizedContributions = optimizeAnnualContributions(
   optimizationInputs,
   asOfDate,
+);
+const adaptiveOptimizedContributions = optimizeAnnualContributionsAdaptive(
+  optimizationInputs,
+  asOfDate,
+);
+
+assert.equal(
+  adaptiveOptimizedContributions.status,
+  optimizedContributions.status,
+);
+assert.deepEqual(
+  adaptiveOptimizedContributions.current,
+  optimizedContributions.current,
+);
+assert.deepEqual(
+  adaptiveOptimizedContributions.recommended,
+  optimizedContributions.recommended,
+);
+assert.equal(
+  adaptiveOptimizedContributions.searchMethod,
+  "adaptive-coarse-to-fine",
+);
+assert.ok(
+  adaptiveOptimizedContributions.evaluatedCandidates <
+    optimizedContributions.evaluatedCandidates,
+);
+
+const providedPlanInputs = {
+  ...standardInputs,
+  currentAge: 32,
+  retirementAge: 70,
+  payoutYears: 20,
+  desiredAnnualWithdrawal: 500000,
+  ratePensionBalance: 750000,
+  ageSavingsBalance: 50000,
+  freeFundsBalance: 300000,
+  freeFundsCostBasis: 270000,
+  askBalance: 200000,
+  annualRatePensionContribution: 68700,
+  annualLifeAnnuityContribution: 62000,
+  annualAgeSavingsContribution: 3000,
+  annualFreeFundsContribution: 51000,
+  ageSavingsContributionLimit: 9900,
+  ratePensionContributionTaxRelief: 0.4,
+  freeFundsInventoryShare: 0,
+  returnRate: 0.085,
+  inflationRate: 0.025,
+  defensiveReturnRate: 0.04,
+  returnDeclineYears: 10,
+  returnRecoveryYears: 15,
+  returnStrategy: RETURN_STRATEGY.riskTent,
+  withdrawalAfterTax: true,
+  contributionsFollowInflation: true,
+  redirectPensionContributionsToFreeFunds: true,
+};
+const exhaustiveProvidedPlan = optimizeAnnualContributions(
+  providedPlanInputs,
+  asOfDate,
+);
+const adaptiveProvidedPlan = optimizeAnnualContributionsAdaptive(
+  providedPlanInputs,
+  asOfDate,
+);
+assert.equal(adaptiveProvidedPlan.status, exhaustiveProvidedPlan.status);
+assert.deepEqual(
+  adaptiveProvidedPlan.recommended,
+  exhaustiveProvidedPlan.recommended,
+);
+assert.ok(
+  adaptiveProvidedPlan.evaluatedCandidates * 5 <
+    exhaustiveProvidedPlan.evaluatedCandidates,
 );
 
 assert.deepEqual(optimizationInputs, unchangedOptimizationInputs);

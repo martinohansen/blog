@@ -2172,13 +2172,17 @@
     return (hash >>> 0) % partitionCount;
   }
 
-  function contributionCandidates(maximum, current) {
+  function contributionCandidates(
+    maximum,
+    current,
+    step = CONTRIBUTION_SEARCH_STEP,
+  ) {
     const candidates = new Set([0, maximum]);
 
     for (
-      let contribution = CONTRIBUTION_SEARCH_STEP;
+      let contribution = step;
       contribution < maximum;
-      contribution += CONTRIBUTION_SEARCH_STEP
+      contribution += step
     ) {
       candidates.add(contribution);
     }
@@ -2192,7 +2196,43 @@
   function createAnnualContributionOptimizationSession(
     inputs,
     calculationDate = new Date(),
+    searchOptions = {},
   ) {
+    const pensionSearchStep =
+      searchOptions.pensionStep ??
+      searchOptions.step ??
+      CONTRIBUTION_SEARCH_STEP;
+    const ageSavingsSearchStep =
+      searchOptions.ageSavingsStep ??
+      searchOptions.step ??
+      CONTRIBUTION_SEARCH_STEP;
+    const freeFundsSearchStep =
+      searchOptions.freeFundsStep ??
+      searchOptions.step ??
+      CONTRIBUTION_SEARCH_STEP;
+    if (
+      [pensionSearchStep, ageSavingsSearchStep, freeFundsSearchStep].some(
+        (step) => !Number.isFinite(step) || step <= 0,
+      )
+    ) {
+      throw new Error("Optimeringens søgetrin skal være større end 0.");
+    }
+    const totalPensionRange = searchOptions.totalPensionRange ?? null;
+    const ageSavingsRange = searchOptions.ageSavingsRange ?? null;
+    const refinementCenters = searchOptions.refinementCenters ?? null;
+    const isInRange = (value, range) =>
+      !range ||
+      (value >= range.minimum - MONEY_TOLERANCE &&
+        value <= range.maximum + MONEY_TOLERANCE);
+    const isNearRefinementCenter = (totalPension, ageSavings) =>
+      !refinementCenters ||
+      refinementCenters.some(
+        (center) =>
+          Math.abs(totalPension - center.totalPension) <=
+            center.radius + MONEY_TOLERANCE &&
+          Math.abs(ageSavings - center.ageSavings) <=
+            center.radius + MONEY_TOLERANCE,
+      );
     const calculationCache = { anchorCaches: new Map() };
     const currentCalculation = calculateFire(inputs, calculationDate, {
       includeBridgeCapacity: false,
@@ -2383,6 +2423,7 @@
       : contributionCandidates(
           CONTRIBUTION_LIMITS.ratePension,
           currentContributions.annualRatePensionContribution,
+          pensionSearchStep,
         );
     const lifeAnnuityCandidates = optimizationLocks
       .annualLifeAnnuityContribution
@@ -2390,6 +2431,7 @@
       : contributionCandidates(
           CONTRIBUTION_LIMITS.lifeAnnuity,
           currentContributions.annualLifeAnnuityContribution,
+          pensionSearchStep,
         );
     const ageSavingsCandidates = optimizationLocks
       .annualAgeSavingsContribution
@@ -2397,6 +2439,9 @@
       : contributionCandidates(
           selectedAgeSavingsContributionLimit,
           currentContributions.annualAgeSavingsContribution,
+          ageSavingsSearchStep,
+        ).filter((contribution) =>
+          isInRange(contribution, ageSavingsRange),
         );
     const totalPensionCandidates = new Set();
     if (optimizationLocks.annualRatePensionContribution) {
@@ -2451,27 +2496,24 @@
       return evaluation;
     }
 
-    function considerFullBudgetCandidate(candidate, bestEvaluation) {
-      const evaluation = evaluateCandidate(candidate);
-      if (!evaluation) {
-        return bestEvaluation;
-      }
-      if (
-        !bestEvaluation ||
-        compareEvaluations(evaluation, bestEvaluation) < 0
-      ) {
-        return evaluation;
-      }
-      return bestEvaluation;
-    }
-
     [...totalPensionCandidates]
       .sort((first, second) => first - second)
+      .filter((totalPensionContribution) =>
+        isInRange(totalPensionContribution, totalPensionRange),
+      )
       .forEach((totalPensionContribution) => {
         const pensionSplit = splitPensionContribution(
           totalPensionContribution,
         );
         ageSavingsCandidates.forEach((ageSavingsContribution) => {
+          if (
+            !isNearRefinementCenter(
+              totalPensionContribution,
+              ageSavingsContribution,
+            )
+          ) {
+            return;
+          }
           const combination = {
             ratePension: pensionSplit.annualRatePensionContribution,
             lifeAnnuity: pensionSplit.annualLifeAnnuityContribution,
@@ -2521,7 +2563,7 @@
       const maximumFreeFunds = Math.max(0, annualNetBudget - fixedNetCost);
       let lowerStep = -1;
       let upperStep = Math.ceil(
-        maximumFreeFunds / CONTRIBUTION_SEARCH_STEP,
+        maximumFreeFunds / freeFundsSearchStep,
       );
       let bestEvaluation = null;
 
@@ -2529,7 +2571,7 @@
         const candidateStep = Math.floor((lowerStep + upperStep) / 2);
         const freeFunds = Math.min(
           maximumFreeFunds,
-          candidateStep * CONTRIBUTION_SEARCH_STEP,
+          candidateStep * freeFundsSearchStep,
         );
         const evaluation = evaluateCandidate(
           buildCandidate(
@@ -2554,7 +2596,7 @@
       if (!bestEvaluation) {
         const freeFunds = Math.min(
           maximumFreeFunds,
-          upperStep * CONTRIBUTION_SEARCH_STEP,
+          upperStep * freeFundsSearchStep,
         );
         const evaluation = evaluateCandidate(
           buildCandidate(
@@ -2593,24 +2635,43 @@
       );
     }
 
-    function evaluateFullBudgetPartition(partitionIndex, partitionCount) {
-      let bestEvaluation = null;
+    function retainBestEvaluation(bestEvaluations, evaluation, limit) {
+      if (!evaluation) {
+        return;
+      }
+      bestEvaluations.push(evaluation);
+      bestEvaluations.sort(compareEvaluations);
+      if (bestEvaluations.length > limit) {
+        bestEvaluations.length = limit;
+      }
+    }
+
+    function evaluateFullBudgetPartition(
+      partitionIndex,
+      partitionCount,
+      resultLimit = 1,
+    ) {
+      const bestEvaluations = [];
 
       partitionCombinations(partitionIndex, partitionCount).forEach(
         ({ ratePension, lifeAnnuity, ageSavings }) => {
-          bestEvaluation = considerFullBudgetCandidate(
-            completeFullBudgetCandidate(
-              ratePension,
-              lifeAnnuity,
-              ageSavings,
+          retainBestEvaluation(
+            bestEvaluations,
+            evaluateCandidate(
+              completeFullBudgetCandidate(
+                ratePension,
+                lifeAnnuity,
+                ageSavings,
+              ),
             ),
-            bestEvaluation,
+            resultLimit,
           );
         },
       );
 
       return {
-        best: serializeEvaluation(bestEvaluation),
+        best: serializeEvaluation(bestEvaluations[0]),
+        bestEvaluations: bestEvaluations.map(serializeEvaluation),
         evaluatedCandidates: evaluationsByCandidateKey.size,
       };
     }
@@ -2619,28 +2680,24 @@
       targetFireTime,
       partitionIndex,
       partitionCount,
+      resultLimit = 1,
     ) {
-      let bestEvaluation = null;
+      const bestEvaluations = [];
 
       partitionCombinations(partitionIndex, partitionCount).forEach(
         (combination) => {
           const evaluation = cheapestEvaluationForFireTime(
             combination,
             targetFireTime,
-            bestEvaluation?.annualNetCost ?? Number.POSITIVE_INFINITY,
+            bestEvaluations[0]?.annualNetCost ?? Number.POSITIVE_INFINITY,
           );
-          if (
-            evaluation &&
-            (!bestEvaluation ||
-              compareEvaluations(evaluation, bestEvaluation) < 0)
-          ) {
-            bestEvaluation = evaluation;
-          }
+          retainBestEvaluation(bestEvaluations, evaluation, resultLimit);
         },
       );
 
       return {
-        best: serializeEvaluation(bestEvaluation),
+        best: serializeEvaluation(bestEvaluations[0]),
+        bestEvaluations: bestEvaluations.map(serializeEvaluation),
         evaluatedCandidates: evaluationsByCandidateKey.size,
       };
     }
@@ -2706,7 +2763,11 @@
           lifeAnnuity: CONTRIBUTION_LIMITS.lifeAnnuity,
           ageSavings: selectedAgeSavingsContributionLimit,
         },
-        precision: CONTRIBUTION_SEARCH_STEP,
+        precision: Math.min(
+          pensionSearchStep,
+          ageSavingsSearchStep,
+          freeFundsSearchStep,
+        ),
         evaluatedCandidates,
         searchMethod: "exhaustive-grid",
         lockedContributions: optimizationLocks,
@@ -2720,11 +2781,7 @@
     };
   }
 
-  function optimizeAnnualContributions(inputs, calculationDate = new Date()) {
-    const session = createAnnualContributionOptimizationSession(
-      inputs,
-      calculationDate,
-    );
+  function completeAnnualContributionOptimization(session) {
     const fullBudget = session.evaluateFullBudgetPartition(0, 1);
     const earliestFireTime = fullBudget.best?.fireTime;
 
@@ -2746,10 +2803,79 @@
     );
   }
 
+  function optimizeAnnualContributions(inputs, calculationDate = new Date()) {
+    return completeAnnualContributionOptimization(
+      createAnnualContributionOptimizationSession(inputs, calculationDate),
+    );
+  }
+
+  function optimizeAnnualContributionsAdaptive(
+    inputs,
+    calculationDate = new Date(),
+  ) {
+    const coarsePensionStep = 10000;
+    const coarseAgeSavingsStep = 2000;
+    const coarseFreeFundsStep = 10000;
+    const refinementRadius = 5000;
+    const refinementBeamWidth = 8;
+    const coarseSession = createAnnualContributionOptimizationSession(
+      inputs,
+      calculationDate,
+      {
+        pensionStep: coarsePensionStep,
+        ageSavingsStep: coarseAgeSavingsStep,
+        freeFundsStep: coarseFreeFundsStep,
+      },
+    );
+    const coarseFullBudget = coarseSession.evaluateFullBudgetPartition(
+      0,
+      1,
+      refinementBeamWidth,
+    );
+    const targetFireTime = coarseFullBudget.best?.fireTime;
+    if (targetFireTime === null || targetFireTime === undefined) {
+      const coarse = coarseSession.finalize(
+        [coarseFullBudget.best],
+        coarseFullBudget.evaluatedCandidates,
+      );
+      coarse.searchMethod = "adaptive-coarse-to-fine";
+      return coarse;
+    }
+    const coarseCheapest = coarseSession.evaluateCheapestPartition(
+      targetFireTime,
+      0,
+      1,
+      refinementBeamWidth,
+    );
+    const refinementCenters = [
+      ...coarseFullBudget.bestEvaluations,
+      ...coarseCheapest.bestEvaluations,
+    ].map(
+      ({ candidate }) => ({
+        totalPension:
+          candidate.annualRatePensionContribution +
+          candidate.annualLifeAnnuityContribution,
+        ageSavings: candidate.annualAgeSavingsContribution,
+        radius: refinementRadius,
+      }),
+    );
+    const fine = completeAnnualContributionOptimization(
+      createAnnualContributionOptimizationSession(inputs, calculationDate, {
+        step: CONTRIBUTION_SEARCH_STEP,
+        refinementCenters,
+      }),
+    );
+
+    fine.evaluatedCandidates += coarseCheapest.evaluatedCandidates;
+    fine.searchMethod = "adaptive-coarse-to-fine";
+    return fine;
+  }
+
   return {
     calculateFire,
     createAnnualContributionOptimizationSession,
     optimizeAnnualContributions,
+    optimizeAnnualContributionsAdaptive,
     CONTRIBUTION_LIMITS,
     FREE_FUNDS_TAXATION,
     RETURN_STRATEGY,

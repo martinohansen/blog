@@ -826,6 +826,40 @@
     activeOptimizationJob?.cancel();
   }
 
+  function serializedCandidateKey(candidate) {
+    return [
+      candidate.annualRatePensionContribution,
+      candidate.annualLifeAnnuityContribution,
+      candidate.annualAgeSavingsContribution,
+      candidate.annualFreeFundsContribution,
+    ]
+      .map((value) => value.toFixed(4))
+      .join(":");
+  }
+
+  function compareSerializedEvaluations(first, second) {
+    return (
+      (first.fireTime ?? Number.POSITIVE_INFINITY) -
+        (second.fireTime ?? Number.POSITIVE_INFINITY) ||
+      first.annualNetCost - second.annualNetCost ||
+      second.finalReserveAfterTax - first.finalReserveAfterTax ||
+      first.distance - second.distance ||
+      second.candidate.annualFreeFundsContribution -
+        first.candidate.annualFreeFundsContribution ||
+      serializedCandidateKey(first.candidate).localeCompare(
+        serializedCandidateKey(second.candidate),
+      )
+    );
+  }
+
+  function bestSerializedEvaluations(results, limit) {
+    return results
+      .flatMap((result) => result.bestEvaluations ?? [result.best])
+      .filter(Boolean)
+      .sort(compareSerializedEvaluations)
+      .slice(0, limit);
+  }
+
   async function optimizeAnnualContributionsInWorkers(inputs) {
     const workerCount = 4;
     const jobId = nextOptimizationJobId;
@@ -847,57 +881,109 @@
 
     try {
       for (let index = 0; index < workerCount; index += 1) {
-        workers.push(new Worker("./optimization-worker.js?v=20260904-1"));
+        workers.push(new Worker("./optimization-worker.js?v=20260904-5"));
       }
 
       const calculationTime = Date.now();
-      const phaseOne = await Promise.race([
-        Promise.all(
-          workers.map((worker, partitionIndex) =>
-            workerRequest(
-              worker,
-              {
-                type: "phase-one",
-                jobId,
-                inputs,
-                calculationTime,
-                partitionIndex,
-                partitionCount: workerCount,
-              },
-              "phase-one-complete",
-            ),
-          ),
-        ),
-        cancellation,
-      ]);
-      const finiteFireTimes = phaseOne
-        .map((result) => result.best?.fireTime)
-        .filter((fireTime) => Number.isFinite(fireTime));
-      let phaseResults = phaseOne;
-
-      if (finiteFireTimes.length > 0) {
-        const targetFireTime = Math.min(...finiteFireTimes);
-        phaseResults = await Promise.race([
+      async function runSearch(searchOptions, resultLimit = 1) {
+        const phaseOne = await Promise.race([
           Promise.all(
-            workers.map((worker) =>
+            workers.map((worker, partitionIndex) =>
               workerRequest(
                 worker,
-                { type: "phase-two", jobId, targetFireTime },
-                "phase-two-complete",
+                {
+                  type: "phase-one",
+                  jobId,
+                  inputs,
+                  calculationTime,
+                  searchOptions,
+                  resultLimit,
+                  partitionIndex,
+                  partitionCount: workerCount,
+                },
+                "phase-one-complete",
               ),
             ),
           ),
           cancellation,
         ]);
+        const finiteFireTimes = phaseOne
+          .map((result) => result.best?.fireTime)
+          .filter((fireTime) => Number.isFinite(fireTime));
+        const targetFireTime =
+          finiteFireTimes.length > 0 ? Math.min(...finiteFireTimes) : null;
+        let phaseResults = phaseOne;
+
+        if (targetFireTime !== null) {
+          phaseResults = await Promise.race([
+            Promise.all(
+              workers.map((worker) =>
+                workerRequest(
+                  worker,
+                  {
+                    type: "phase-two",
+                    jobId,
+                    targetFireTime,
+                    resultLimit,
+                  },
+                  "phase-two-complete",
+                ),
+              ),
+            ),
+            cancellation,
+          ]);
+        }
+
+        return {
+          phaseOne,
+          phaseResults,
+          targetFireTime,
+          evaluatedCandidates: phaseResults.reduce(
+            (total, result) => total + result.evaluatedCandidates,
+            0,
+          ),
+        };
       }
 
-      const evaluations = phaseResults
+      const refinementBeamWidth = 8;
+      const coarse = await runSearch(
+        {
+          pensionStep: 10000,
+          ageSavingsStep: 2000,
+          freeFundsStep: 10000,
+        },
+        refinementBeamWidth,
+      );
+      let selectedSearch = coarse;
+      let evaluatedCandidates = coarse.evaluatedCandidates;
+
+      if (coarse.targetFireTime !== null) {
+        const refinementCenters = [
+          ...bestSerializedEvaluations(
+            coarse.phaseOne,
+            refinementBeamWidth,
+          ),
+          ...bestSerializedEvaluations(
+            coarse.phaseResults,
+            refinementBeamWidth,
+          ),
+        ].map(({ candidate }) => ({
+          totalPension:
+            candidate.annualRatePensionContribution +
+            candidate.annualLifeAnnuityContribution,
+          ageSavings: candidate.annualAgeSavingsContribution,
+          radius: 5000,
+        }));
+        selectedSearch = await runSearch({
+          step: 1000,
+          refinementCenters,
+        });
+        evaluatedCandidates += selectedSearch.evaluatedCandidates;
+      }
+
+      const evaluations = selectedSearch.phaseResults
         .map((result) => result.best)
         .filter(Boolean);
-      const evaluatedCandidates = phaseResults.reduce(
-        (total, result) => total + result.evaluatedCandidates,
-        0,
-      );
       const completed = await Promise.race([
         workerRequest(
           workers[0],
@@ -911,6 +997,7 @@
         ),
         cancellation,
       ]);
+      completed.optimization.searchMethod = "adaptive-coarse-to-fine";
       return completed.optimization;
     } finally {
       workers.forEach((worker) => worker.terminate());
