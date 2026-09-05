@@ -25,6 +25,7 @@ const planInputs = {
   freeFundsInventoryShare: 0.25,
   returnRate: 0.07,
   inflationRate: 0.021,
+  lifeAnnuityPayoutRate: 0.025,
   defensiveReturnRate: 0.04,
   returnStrategy: "riskTent",
   returnDeclineYears: 7,
@@ -52,6 +53,13 @@ assert.match(code, /^[A-Za-z0-9_-]+$/);
 assert.equal(code.includes("="), false);
 assert.deepEqual(decodePlan(code), planInputs);
 assert.deepEqual(decodePlan(`  ${code}\n`), planInputs);
+const legacyInputs = { ...planInputs };
+delete legacyInputs.lifeAnnuityPayoutRate;
+assert.equal(
+  decodePlan(encodedPayload({ calculator: "fire", inputs: legacyInputs }))
+    .lifeAnnuityPayoutRate,
+  0.0322,
+);
 
 const decodedPayload = JSON.parse(Buffer.from(code, "base64url").toString("utf8"));
 assert.deepEqual(Object.keys(decodedPayload).sort(), ["calculator", "inputs"]);

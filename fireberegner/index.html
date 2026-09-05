@@ -186,7 +186,12 @@
                       required
                   /></label>
                   <label class="field"
-                    ><span>Livrente</span
+                    ><span
+                      >Livrentedepot
+                      <i
+                        title="Ved pensionsstart beregnes første års livrente ud fra depotet, udbetalingsrenten og Finanstilsynets levetidsdata. Pengene forbliver investeret, og udbetalingen reguleres årligt efter afkast efter PAL-skat."
+                        >i</i
+                      ></span
                     ><input
                       name="lifeAnnuityBalance"
                       type="text"
@@ -273,7 +278,7 @@
                     ><span
                       >Livrente
                       <i
-                        title="Din årlige indbetaling til privat livrente. Optimeringen kan ændre beløbet og bruger opfyldningsfradraget på 63.200 kr. i 2026."
+                        title="Din årlige indbetaling til privat livrente. Optimeringen kan ændre beløbet og værdisætter det gennem den forventede livsvarige udbetaling. Opfyldningsfradraget er 63.200 kr. i 2026."
                         >i</i
                       ></span
                     ><input
@@ -807,6 +812,13 @@
                     ></label
                   >
                   <label class="field"
+                    ><span>Livrentens udbetalingsrente
+                      <i title="Bestemmer livrentens første udbetaling. Standard: Nordnets udbetalingsrente på 3,22 % i 2026. Satsen holdes konstant i prognosen. Udbetalingen reguleres årligt efter investeringsafkast efter PAL-skat og vises i dagens kroner.">i</i></span
+                    ><span class="input-suffix"
+                      ><input name="lifeAnnuityPayoutRate" type="number" min="-99" step="0.01" value="3.22" required /><b>%</b></span
+                    ></label
+                  >
+                  <label class="field"
                     ><span>Forventet inflation</span
                     ><span class="input-suffix"
                       ><input
@@ -1031,11 +1043,12 @@
                       <th>Fase</th>
                       <th>Afkast</th>
                       <th>Ratepension</th>
-                      <th>Livrente</th>
+                      <th>Livrentedepot</th>
+                      <th>Livrenteudb.</th>
                       <th>Aldersopsparing</th>
                       <th>Frie midler</th>
                       <th>Aktiesparekonto</th>
-                      <th>Samlet formue</th>
+                      <th>Samlet depotværdi</th>
                       <th>Indbetaling</th>
                       <th>Brutto-udb.</th>
                       <th>Netto-udb.</th>
@@ -1052,8 +1065,13 @@
                 Afkast viser det formuevægtede gennemsnit af det forventede
                 afkast på tværs af alle viste midler før skat og inflation frem
                 mod næste dato.
-                Brutto-udb. viser den samlede hævning fra formuen. Netto-udb.
-                viser beløbet efter beregnet skat. Lagerskat viser skatten af
+                Livrentedepot viser også efter pensionsstart den beregnede
+                værdi bag de fremtidige udbetalinger. Samlet depotværdi
+                inkluderer livrenten; den frie slutreserve gør ikke.
+                Livrenteudb. viser den beregnede livsvarige indkomst efter
+                pensionsstart. Brutto-udb. viser den samlede hævning og
+                livrenteindkomst. Netto-udb. viser beløbet efter beregnet skat.
+                Lagerskat viser skatten af
                 årets positive afkast på den lagerbeskattede andel af frie
                 midler og er trukket fra formuen frem mod næste dato. Effektiv
                 skat viser skatten på årets samlede udbetaling som procent af
@@ -1104,6 +1122,22 @@
               <div>
                 <dt>Valgt loft for aldersopsparing</dt>
                 <dd id="age-savings-contribution-limit"></dd>
+              </div>
+              <div>
+                <dt>Livrentedepot ved pensionsstart</dt>
+                <dd id="life-annuity-balance-at-retirement"></dd>
+              </div>
+              <div>
+                <dt>Livrente første år før skat</dt>
+                <dd id="life-annuity-annual-income"></dd>
+              </div>
+              <div>
+                <dt>Livrentens forventede omregningssats</dt>
+                <dd id="life-annuity-conversion-rate"></dd>
+              </div>
+              <div>
+                <dt>Forventet levealder ved pensionsstart</dt>
+                <dd id="life-annuity-expected-age"></dd>
               </div>
               <div>
                 <dt>Nødvendig pensionsformue med planens fordeling</dt>
@@ -1193,16 +1227,42 @@
               fremførte tab.
             </p>
             <p>
-              <strong>Pension og ASK:</strong> ASK beskattes kun af fremtidige
-              afkast fra den indtastede startværdi. Beregningen medregner ikke
-              allerede optjent ASK-skat. Udbetalinger fra ratepension og
-              livrente beskattes med den indtastede effektive sats. Den
-              indtastede skattebesparelse anvendes på ratepensionsindbetalinger
-              op til 2026-rateloftet og på hele den indtastede
-              livrenteindbetaling op til opfyldningsfradraget på 63.200 kr.
-              Private livrenteindbetalinger over opfyldningsfradraget kan have
-              andre fradragsforløb. Livrenten fordeles over den valgte
-              udbetalingsperiode som en forenkling.
+              <strong>Ratepension:</strong> Udbetalinger beskattes med den
+              indtastede effektive sats. Den indtastede skattebesparelse
+              anvendes på indbetalinger op til 2026-rateloftet. Indbetalinger
+              over loftet medregnes uden fradrag.
+            </p>
+            <p>
+              <strong>Livrente:</strong> Udbetalinger beskattes med den
+              indtastede effektive sats. Skattebesparelsen anvendes på hele den
+              indtastede indbetaling op til opfyldningsfradraget på 63.200 kr.
+              Private indbetalinger over opfyldningsfradraget kan have andre
+              fradragsforløb. Livrentedepotet omregnes ved pensionsstart til en
+              forventet livsvarig udbetaling. Beregningen bruger en
+              50/50-unisexbestand,
+              <a
+                href="https://www.finanstilsynet.dk/finansielle-temaer/forsikring-og-pension/levetidsmodel"
+                >Finanstilsynets levetidsbenchmark for 2024</a
+              >, de forventede levetidsforbedringer og den valgte
+              udbetalingsrente. Standardrenten er 3,22 % fra
+              <a href="https://www.nordnet.dk/academy/hvordan-fastsaettes-udbetalingerne-pa-din-livsvarige-pension">Nordnets beregningsgrundlag for 2026</a>.
+              Udbetalingen reguleres årligt efter afkast efter PAL-skat i forhold
+              til udbetalingsrenten og omregnes til dagens kroner. Modellen
+              forudsætter uændret levetidsgrundlag og risikodeling blandt de
+              forsikrede. Det er en tilnærmelse, ikke et tilbud fra Nordnet.
+              Den medregner ikke udbetalingsgaranti,
+              ægtefællepension eller særskilte omkostninger.
+            </p>
+            <p>
+              <strong>Aldersopsparing:</strong> Indbetalinger giver ikke en
+              beregnet skattebesparelse. Afkast beskattes med den indtastede
+              PAL-sats. Udbetalinger er skattefri.
+            </p>
+            <p>
+              <strong>Aktiesparekonto:</strong> Afkast beskattes med den
+              indtastede ASK-sats. Beregningen beskatter kun fremtidige afkast
+              fra den indtastede startværdi og medregner ikke allerede optjent
+              ASK-skat.
             </p>
             <p>
               <strong>Optimering:</strong> Optimeringen bruger højst
@@ -1212,8 +1272,10 @@
               på ratepension over loftet medregnes til fuld nettoudgift og som
               hovedstol uden fradrag. Optimeringens slutreserve værdisætter
               aldersopsparing, ASK og lagerbeskattede frie midler til den viste
-              saldo. Ratepension og livrente reduceres med den indtastede skat
-              på pensionsudbetaling. For realisationsbeskattede frie midler
+              saldo. Ratepension reduceres med den indtastede skat på
+              pensionsudbetaling. Livrentedepotet indgår ikke i slutreserven,
+              efter det er konverteret til livsvarig indkomst. For
+              realisationsbeskattede frie midler
               antages den resterende gevinst realiseret på én gang efter
               2026-satserne.
             </p>
@@ -1331,8 +1393,9 @@
       </div>
     </dialog>
 
-    <script src="./calculations.js?v=20260904-5"></script>
-    <script src="./plan-code.js"></script>
-    <script src="./app.js?v=20260904-5"></script>
+    <script src="./life-annuity.js?v=20260905-2"></script>
+    <script src="./calculations.js?v=20260905-3"></script>
+    <script src="./plan-code.js?v=20260905-1"></script>
+    <script src="./app.js?v=20260905-3"></script>
   </body>
 </html>

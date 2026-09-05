@@ -299,6 +299,7 @@
       freeFundsInventoryShare: readNumber("freeFundsInventoryShare", 100),
       returnRate: readNumber("returnRate", 100),
       inflationRate: readNumber("inflationRate", 100),
+      lifeAnnuityPayoutRate: readNumber("lifeAnnuityPayoutRate", 100),
       defensiveReturnRate: readNumber("defensiveReturnRate", 100),
       returnStrategy: form.elements.returnStrategy.value,
       returnDeclineYears: readNumber("returnDeclineYears"),
@@ -325,6 +326,7 @@
     "freeFundsInventoryShare",
     "returnRate",
     "inflationRate",
+    "lifeAnnuityPayoutRate",
     "defensiveReturnRate",
   ]);
 
@@ -560,7 +562,7 @@
   function renderProjectionTableState() {
     setText(
       "projection-note",
-      "Datoerne er årlige beregningstidspunkter fra dagens dato. Afkast viser det formuevægtede gennemsnit af det forventede afkast på tværs af alle viste midler før skat og inflation frem mod næste dato. Før skat viser den samlede hævning fra formuen. Efter skat viser beløbet efter beregnet skat. Lagerskat viser skatten af årets positive afkast på den lagerbeskattede andel af frie midler og er trukket fra formuen frem mod næste dato. Effektiv skat viser skatten på årets samlede udbetaling som procent af udbetalingen før skat. Lagerskat indgår ikke i denne procentsats.",
+      "Datoerne er årlige beregningstidspunkter fra dagens dato. Afkast viser det formuevægtede gennemsnit af det forventede afkast på tværs af alle viste depoter før skat og inflation frem mod næste dato. Livrentedepot viser også efter pensionsstart den beregnede værdi bag de fremtidige udbetalinger. Samlet depotværdi inkluderer livrenten; den frie slutreserve gør ikke. Brutto-udbetaling viser hævninger og livrente før skat. Netto-udbetaling viser beløbet efter beregnet skat. Lagerskat viser skatten af årets positive afkast på den lagerbeskattede andel af frie midler og er trukket fra formuen frem mod næste dato. Effektiv skat viser skatten på årets samlede udbetaling som procent af udbetalingen før skat. Lagerskat indgår ikke i denne procentsats.",
     );
   }
 
@@ -881,7 +883,7 @@
 
     try {
       for (let index = 0; index < workerCount; index += 1) {
-        workers.push(new Worker("./optimization-worker.js?v=20260904-5"));
+        workers.push(new Worker("./optimization-worker.js?v=20260905-3"));
       }
 
       const calculationTime = Date.now();
@@ -1081,11 +1083,12 @@
         <td>${row.phase}</td>
         <td class="projection-return">${returnRate}</td>
         <td>${currency.format(row.ratePension)}</td>
-        <td>${currency.format(row.lifeAnnuity)}</td>
+        <td>${currency.format(row.lifeAnnuityDepotValue)}</td>
+        <td>${row.lifeAnnuityWithdrawal ? currency.format(row.lifeAnnuityWithdrawal) : "—"}</td>
         <td>${currency.format(row.ageSavings)}</td>
         <td>${currency.format(row.freeFunds)}</td>
         <td>${currency.format(row.ask)}</td>
-        <td>${currency.format(row.totalBalance)}</td>
+        <td>${currency.format(row.totalDepotValue)}</td>
         <td>${row.contribution ? currency.format(row.contribution) : "—"}</td>
         <td>${row.withdrawal ? currency.format(row.withdrawal) : "—"}</td>
         <td>${row.withdrawal ? currency.format(row.netWithdrawal) : "—"}</td>
@@ -1537,6 +1540,22 @@
     setText(
       "age-savings-contribution-limit",
       currency.format(calculation.ageSavingsContributionLimit),
+    );
+    setText(
+      "life-annuity-balance-at-retirement",
+      currency.format(calculation.lifeAnnuityBalanceAtRetirement),
+    );
+    setText(
+      "life-annuity-annual-income",
+      currency.format(calculation.lifeAnnuityAnnualIncome),
+    );
+    setText(
+      "life-annuity-conversion-rate",
+      percent.format(calculation.lifeAnnuityConversionRate),
+    );
+    setText(
+      "life-annuity-expected-age",
+      `${years.format(calculation.lifeAnnuityExpectedAgeAtDeath)} år`,
     );
     setText(
       "required-at-retirement",

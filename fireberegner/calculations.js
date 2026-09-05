@@ -1,12 +1,20 @@
 (function (root, factory) {
-  const api = factory();
+  const lifeAnnuityCalculations =
+    typeof module === "object" && module.exports
+      ? require("./life-annuity.js")
+      : root.LifeAnnuityCalculations;
+  const api = factory(lifeAnnuityCalculations);
 
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }
 
   root.FireCalculations = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function () {
+})(typeof globalThis !== "undefined" ? globalThis : this, function (
+  lifeAnnuityCalculations,
+) {
+  const { calculateLifeAnnuityMetrics } =
+    lifeAnnuityCalculations;
   const MONEY_TOLERANCE = 0.01;
   const CALCULATION_TOLERANCE = 1e-7;
   const SHARE_INCOME_THRESHOLD = 79400;
@@ -554,6 +562,7 @@
       freeFundsReturnRate: null,
       ratePension: balances[RATE_PENSION],
       lifeAnnuity: balances[LIFE_ANNUITY],
+      lifeAnnuityDepotValue: balances[LIFE_ANNUITY],
       ageSavings: balances[AGE_SAVINGS],
       freeFunds:
         balances[FREE_FUNDS_REALIZATION] + balances[FREE_FUNDS_INVENTORY],
@@ -582,16 +591,18 @@
       ...values,
     };
 
+    row.totalDepotValue = row.totalBalance +
+      row.lifeAnnuityDepotValue - row.lifeAnnuity;
     const pensionBalance =
-      row.ratePension + row.lifeAnnuity + row.ageSavings;
+      row.ratePension + row.lifeAnnuityDepotValue + row.ageSavings;
     const freeBalance = row.freeFunds + row.ask;
     row.averageReturnRate =
-      row.totalBalance > 0 &&
+      row.totalDepotValue > 0 &&
       Number.isFinite(row.pensionReturnRate) &&
       Number.isFinite(row.freeFundsReturnRate)
         ? (pensionBalance * row.pensionReturnRate +
             freeBalance * row.freeFundsReturnRate) /
-          row.totalBalance
+          row.totalDepotValue
         : null;
 
     Object.values(row)
@@ -770,6 +781,10 @@
     if (!Number.isFinite(inputs.inflationRate) || inputs.inflationRate <= -1) {
       throw new Error("Inflationen skal være større end -100 %.");
     }
+    const payoutRate = inputs.lifeAnnuityPayoutRate ?? 0.0322;
+    if (!Number.isFinite(payoutRate) || payoutRate <= -1) {
+      throw new Error("Livrentens udbetalingsrente skal være større end -100 %.");
+    }
   }
 
   function calculateFireForAnchor(
@@ -906,6 +921,68 @@
     const defensiveGrossRealFreeFundsReturn = grossRealFreeFundsReturnFor(
       selectedDefensiveReturnRate,
     );
+    const lifeAnnuityPayoutRate = inputs.lifeAnnuityPayoutRate ?? 0.0322;
+    let lifeAnnuityMetrics = calculationCache?.lifeAnnuityMetrics;
+    if (!lifeAnnuityMetrics) {
+      lifeAnnuityMetrics = calculateLifeAnnuityMetrics({
+        retirementAge: inputs.retirementAge,
+        retirementYear: retirementDate.getFullYear(),
+        discountRates: [lifeAnnuityPayoutRate],
+      });
+      if (calculationCache) {
+        calculationCache.lifeAnnuityMetrics = lifeAnnuityMetrics;
+      }
+    }
+
+    function annualLifeAnnuityIncome(balanceAtRetirement) {
+      const income = balanceAtRetirement * lifeAnnuityMetrics.conversionRate;
+      assertFinite(income);
+      return income;
+    }
+
+    // For a pure life annuity on an unchanged mortality basis, annual reserve
+    // recalculation (including survivor credits) reduces to this ratio.
+    // The annuity factor discounts NOMINAL payments. Deflate each subsequent
+    // payment separately; using a real discount rate would promise indexation.
+    let lifeAnnuityIncomeFactors = calculationCache?.lifeAnnuityIncomeFactors;
+    if (!lifeAnnuityIncomeFactors) {
+      lifeAnnuityIncomeFactors = [1];
+      for (let period = 1; period < inputs.payoutYears; period += 1) {
+        lifeAnnuityIncomeFactors.push(
+          lifeAnnuityIncomeFactors[period - 1] *
+            (1 + realPensionReturnFor(
+              pensionNominalReturn(yearsToRetirement + period - 1),
+            )) / (1 + lifeAnnuityPayoutRate),
+        );
+      }
+      if (calculationCache) {
+        calculationCache.lifeAnnuityIncomeFactors = lifeAnnuityIncomeFactors;
+      }
+    }
+    const lifeIncomeBounds = calculationCache?.lifeIncomeBounds ?? {
+      minimum: Math.min(...lifeAnnuityIncomeFactors),
+      maximum: Math.max(...lifeAnnuityIncomeFactors),
+      // Discounting the regulated income at its investment return cancels
+      // that return, leaving only the payout rate in the present value.
+      presentValue: presentValueFactor(
+        Array(inputs.payoutYears).fill(lifeAnnuityPayoutRate),
+      ),
+    };
+    if (calculationCache) {
+      calculationCache.lifeIncomeBounds = lifeIncomeBounds;
+    }
+
+    function lifeAnnuityDepotValue(initialIncome, year) {
+      const period = year - yearsToRetirement;
+      // The final row has no payment, but still has an opening reserve.
+      const incomeFactor = lifeAnnuityIncomeFactors[period] ??
+        lifeAnnuityIncomeFactors[period - 1] *
+          (1 + realPensionReturnFor(pensionNominalReturn(year - 1))) /
+          (1 + lifeAnnuityPayoutRate);
+      const factors = lifeAnnuityMetrics.pureLifeAnnuityFactors;
+      const reserveFactor = factors[Math.min(period, factors.length - 1)];
+      return initialIncome * incomeFactor * reserveFactor;
+    }
 
     function inventoryTaxForBalance(
       balance,
@@ -1208,42 +1285,66 @@
         return 0;
       }
 
-      const totalPension = ratePension + lifeAnnuity + ageSavings;
+      const lifeAnnuityIncome = annualLifeAnnuityIncome(lifeAnnuity);
+      const usableLifeAnnuityIncome = inputs.withdrawalAfterTax
+        ? lifeAnnuityIncome * (1 - pensionWithdrawalTax)
+        : lifeAnnuityIncome;
+      const flexiblePension = ratePension + ageSavings;
       const payoutFactor = presentValueFactorFor(
         RATE_PENSION,
         yearsToRetirement,
         inputs.payoutYears,
       );
-      if (totalPension <= CALCULATION_TOLERANCE) {
-        if (inputs.withdrawalAfterTax) {
-          return null;
-        }
-        return desiredWithdrawal * payoutFactor;
-      }
-
-      if (!inputs.withdrawalAfterTax) {
-        return desiredWithdrawal * payoutFactor;
-      }
-
       const payoutRates = realReturnSeriesFor(
         RATE_PENSION,
         yearsToRetirement,
         inputs.payoutYears,
       );
-      const rateShare = ratePension / totalPension;
-      const lifeAnnuityShare = lifeAnnuity / totalPension;
+      const remainingWithdrawalFor = (period) => Math.max(
+        0,
+        desiredWithdrawal - usableLifeAnnuityIncome *
+          lifeAnnuityIncomeFactors[period],
+      );
+      let remainingPresentValue = desiredWithdrawal * payoutFactor;
+      if (usableLifeAnnuityIncome * lifeIncomeBounds.maximum <= desiredWithdrawal) {
+        remainingPresentValue -= usableLifeAnnuityIncome * lifeIncomeBounds.presentValue;
+      } else if (usableLifeAnnuityIncome * lifeIncomeBounds.minimum >= desiredWithdrawal) {
+        remainingPresentValue = 0;
+      } else {
+        remainingPresentValue = 0;
+        let discount = 1;
+        for (let period = 0; period < inputs.payoutYears; period += 1) {
+          remainingPresentValue += remainingWithdrawalFor(period) / discount;
+          discount *= 1 + payoutRates[period];
+        }
+      }
+      if (remainingPresentValue <= MONEY_TOLERANCE) {
+        return lifeAnnuity;
+      }
+      if (flexiblePension <= CALCULATION_TOLERANCE) {
+        if (inputs.withdrawalAfterTax) {
+          return null;
+        }
+        return lifeAnnuity + remainingPresentValue;
+      }
+
+      if (!inputs.withdrawalAfterTax) {
+        return lifeAnnuity + remainingPresentValue;
+      }
+      const rateShare = ratePension / flexiblePension;
       const initialTaxFreeAllowance = annualTaxFreeRatePensionAllowance(
         nonDeductibleBasis,
         inputs.payoutYears,
       );
       if (initialTaxFreeAllowance <= CALCULATION_TOLERANCE) {
-        const taxableShare = rateShare + lifeAnnuityShare;
-        const netFraction = 1 - pensionWithdrawalTax * taxableShare;
+        const netFraction = 1 - pensionWithdrawalTax * rateShare;
         if (netFraction <= CALCULATION_TOLERANCE) {
           return null;
         }
 
-        const target = (desiredWithdrawal / netFraction) * payoutFactor;
+        const target =
+          lifeAnnuity +
+          remainingPresentValue / netFraction;
         assertFinite(target);
         return target;
       }
@@ -1255,9 +1356,9 @@
         const taxFreeAllowance =
           initialTaxFreeAllowance / Math.pow(1 + inputs.inflationRate, period);
         const grossWithdrawal = grossPensionWithdrawalForNetTarget(
-          desiredWithdrawal,
+          remainingWithdrawalFor(period),
           rateShare,
-          lifeAnnuityShare,
+          0,
           pensionWithdrawalTax,
           taxFreeAllowance,
         );
@@ -1270,6 +1371,7 @@
         assertFinite(target, discountFactor);
       }
 
+      target += lifeAnnuity;
       assertFinite(target);
       return target;
     }
@@ -1294,9 +1396,21 @@
       let firstShortfallDate = null;
       let annualFreeFundsTax = 0;
       let annualFreeFundsTaxableGain = 0;
+      let lifeAnnuityConverted = false;
+      let lifeAnnuityBalanceAtRetirement = 0;
+      let lifeAnnuityAnnualIncome = 0;
 
       for (let year = startYear; year < endYear; year += 1) {
         const beforeRetirement = year < yearsToRetirement;
+        if (!beforeRetirement && !lifeAnnuityConverted) {
+          lifeAnnuityConverted = true;
+          lifeAnnuityBalanceAtRetirement = balances[LIFE_ANNUITY];
+          lifeAnnuityAnnualIncome = annualLifeAnnuityIncome(
+            lifeAnnuityBalanceAtRetirement,
+          );
+          balances[LIFE_ANNUITY] = 0;
+        }
+
         const periods = beforeRetirement
           ? yearsToRetirement - year
           : endYear - year;
@@ -1308,17 +1422,58 @@
               ratePensionNonDeductibleBasis,
               remainingPayoutYears,
             );
-        const allocation = inputs.withdrawalAfterTax
+        const lifeAnnuityWithdrawal = beforeRetirement
+          ? 0
+          : lifeAnnuityAnnualIncome *
+            lifeAnnuityIncomeFactors[year - yearsToRetirement];
+        const lifeAnnuityWithdrawalTax =
+          lifeAnnuityWithdrawal * pensionWithdrawalTax;
+        const remainingDesiredWithdrawal = Math.max(
+          0,
+          desiredWithdrawal -
+            (inputs.withdrawalAfterTax
+              ? lifeAnnuityWithdrawal - lifeAnnuityWithdrawalTax
+              : lifeAnnuityWithdrawal),
+        );
+        const allocateCurrentWithdrawal = (withdrawalCapacities) => inputs.withdrawalAfterTax
           ? allocateForNetWithdrawal(
               balances,
-              capacities,
-              desiredWithdrawal,
+              withdrawalCapacities,
+              remainingDesiredWithdrawal,
               beforeRetirement,
               freeFundsCostBasis,
               pensionWithdrawalTax,
               taxFreeRatePensionAllowance,
             )
-          : allocateForPhase(capacities, desiredWithdrawal, beforeRetirement);
+          : allocateForPhase(
+              withdrawalCapacities,
+              remainingDesiredWithdrawal,
+              beforeRetirement,
+            );
+        let allocation = allocateCurrentWithdrawal(capacities);
+        if (!beforeRetirement && lifeAnnuityAnnualIncome > 0) {
+          const delivered = inputs.withdrawalAfterTax
+            ? allocation.total -
+              Math.max(0, allocation.amounts[RATE_PENSION] -
+                taxFreeRatePensionAllowance) * pensionWithdrawalTax -
+              calculateFreeFundsSale(
+                balances[FREE_FUNDS_REALIZATION],
+                freeFundsCostBasis,
+                allocation.amounts[FREE_FUNDS_REALIZATION],
+              ).tax
+            : allocation.total;
+          if (delivered + MONEY_TOLERANCE < remainingDesiredWithdrawal) {
+            // A rising annuity can require larger flexible withdrawals now
+            // and smaller ones later. The level-payment capacity is not a
+            // withdrawal limit for age savings, ASK or free funds. Keep the
+            // rate-pension limit and let the full simulation test solvency.
+            const flexibleCapacities = balances.map((balance, index) =>
+              index === RATE_PENSION ? capacities[index] :
+                index === LIFE_ANNUITY ? 0 : balance,
+            );
+            allocation = allocateCurrentWithdrawal(flexibleCapacities);
+          }
+        }
         const date = annualDate(asOfDate, year);
         const realizationWithdrawal =
           allocation.amounts[FREE_FUNDS_REALIZATION];
@@ -1337,20 +1492,20 @@
           0,
           allocation.amounts[RATE_PENSION] - taxFreeRatePensionWithdrawal,
         );
-        const lifeAnnuityWithdrawal = allocation.amounts[LIFE_ANNUITY];
         const pensionWithdrawalTaxAmount =
-          (taxableRatePensionWithdrawal + lifeAnnuityWithdrawal) *
-          pensionWithdrawalTax;
+          taxableRatePensionWithdrawal * pensionWithdrawalTax +
+          lifeAnnuityWithdrawalTax;
         const totalWithdrawalTax =
           freeFundsSale.tax + pensionWithdrawalTaxAmount;
-        const netWithdrawal = allocation.total - totalWithdrawalTax;
+        const totalWithdrawal = allocation.total + lifeAnnuityWithdrawal;
+        const netWithdrawal = totalWithdrawal - totalWithdrawalTax;
         const effectiveFreeFundsWithdrawalTaxRate =
           freeFundsWithdrawal > 0 ? freeFundsSale.tax / freeFundsWithdrawal : 0;
         const effectiveWithdrawalTaxRate =
-          allocation.total > 0 ? totalWithdrawalTax / allocation.total : 0;
+          totalWithdrawal > 0 ? totalWithdrawalTax / totalWithdrawal : 0;
         const deliveredWithdrawal = inputs.withdrawalAfterTax
           ? netWithdrawal
-          : allocation.total;
+          : totalWithdrawal;
         const shortfall =
           deliveredWithdrawal + MONEY_TOLERANCE < desiredWithdrawal;
 
@@ -1362,14 +1517,14 @@
         if (shouldRecord) {
           const pensionWithdrawal =
             allocation.amounts[RATE_PENSION] +
-            allocation.amounts[LIFE_ANNUITY] +
-            allocation.amounts[AGE_SAVINGS];
+            allocation.amounts[AGE_SAVINGS] +
+            lifeAnnuityWithdrawal;
           const freeWithdrawal =
             allocation.amounts[FREE_FUNDS_REALIZATION] +
             allocation.amounts[FREE_FUNDS_INVENTORY] +
             allocation.amounts[ASK];
           const withdrawalSource =
-            allocation.total <= MONEY_TOLERANCE
+            totalWithdrawal <= MONEY_TOLERANCE
               ? "—"
               : beforeRetirement
                 ? "Frie midler"
@@ -1392,12 +1547,15 @@
                 pensionReturnRate: pensionNominalReturn(year),
                 freeFundsReturnRate: freeNominalReturn(year),
                 contribution: year === startYear ? startingContribution : 0,
-                withdrawal: allocation.total,
+                withdrawal: totalWithdrawal,
                 freeFundsWithdrawal,
                 realizedFreeFundsGain: freeFundsSale.realizedGain,
                 withdrawalTax: freeFundsSale.tax,
                 pensionWithdrawalTax: pensionWithdrawalTaxAmount,
                 lifeAnnuityWithdrawal,
+                lifeAnnuityDepotValue: beforeRetirement
+                  ? balances[LIFE_ANNUITY]
+                  : lifeAnnuityDepotValue(lifeAnnuityAnnualIncome, year),
                 taxFreeRatePensionWithdrawal,
                 taxableRatePensionWithdrawal,
                 totalWithdrawalTax,
@@ -1444,7 +1602,12 @@
             balances,
             freeFundsCostBasis,
             ratePensionNonDeductibleBasis,
-            { phase: "Slut" },
+            {
+              phase: "Slut",
+              lifeAnnuityDepotValue: lifeAnnuityConverted
+                ? lifeAnnuityDepotValue(lifeAnnuityAnnualIncome, endYear)
+                : balances[LIFE_ANNUITY],
+            },
           ),
         );
       }
@@ -1456,6 +1619,8 @@
         finalRatePensionNonDeductibleBasis: ratePensionNonDeductibleBasis,
         annualFreeFundsTax,
         annualFreeFundsTaxableGain,
+        lifeAnnuityAnnualIncome,
+        lifeAnnuityBalanceAtRetirement,
         isFullyFunded,
         firstShortfallDate,
       };
@@ -1587,7 +1752,8 @@
         age: inputs.currentAge + year,
         date: annualDate(asOfDate, year),
         ratePension: balances[RATE_PENSION],
-        lifeAnnuity: balances[LIFE_ANNUITY],
+        lifeAnnuity:
+          year < yearsToRetirement ? balances[LIFE_ANNUITY] : 0,
         ageSavings: balances[AGE_SAVINGS],
         freeFunds:
           balances[FREE_FUNDS_REALIZATION] + balances[FREE_FUNDS_INVENTORY],
@@ -1821,7 +1987,7 @@
       (row) => row.age === inputs.retirementAge,
     );
     const projectedRatePension = retirementOpeningRow?.ratePension ?? 0;
-    const projectedLifeAnnuity = retirementOpeningRow?.lifeAnnuity ?? 0;
+    const projectedLifeAnnuity = drawdown.lifeAnnuityBalanceAtRetirement;
     const projectedAgeSavings = retirementOpeningRow?.ageSavings ?? 0;
     const projectedRatePensionNonDeductibleBasis =
       retirementOpeningRow?.ratePensionNonDeductibleBasis ?? 0;
@@ -1918,6 +2084,11 @@
       effectiveFreeFundsWithdrawalTaxRate,
       totalFreeFundsTaxableGain,
       effectiveFreeFundsTaxRate,
+      drawdown.lifeAnnuityAnnualIncome,
+      drawdown.lifeAnnuityBalanceAtRetirement,
+      lifeAnnuityMetrics.annuityFactor,
+      lifeAnnuityMetrics.conversionRate,
+      lifeAnnuityMetrics.expectedAgeAtDeath,
     );
 
     return {
@@ -1972,6 +2143,15 @@
       annualDeductibleRatePensionContribution,
       annualNonDeductibleRatePensionContribution,
       annualLifeAnnuityContribution,
+      lifeAnnuityAnnualIncome: drawdown.lifeAnnuityAnnualIncome,
+      lifeAnnuityBalanceAtRetirement:
+        drawdown.lifeAnnuityBalanceAtRetirement,
+      lifeAnnuityFactor: lifeAnnuityMetrics.annuityFactor,
+      lifeAnnuityConversionRate: lifeAnnuityMetrics.conversionRate,
+      lifeAnnuityExpectedAgeAtDeath:
+        lifeAnnuityMetrics.expectedAgeAtDeath,
+      lifeAnnuityExpectedRemainingLifetime:
+        lifeAnnuityMetrics.expectedRemainingLifetime,
       lifeAnnuityContributionLimit: CONTRIBUTION_LIMITS.lifeAnnuity,
       lifeAnnuityContributionLimitExceeded,
       ageSavingsContributionLimit: selectedAgeSavingsContributionLimit,
@@ -2376,45 +2556,18 @@
       );
       const evaluation = {
         candidate,
-        calculation,
         annualNetCost: contributionNetBudget(
           candidate,
           ratePensionContributionTaxRelief,
         ),
         distance: contributionDistance(candidate, currentContributions),
+        fireTime: calculation.fireRow
+          ? calculation.fireRow.date.getTime()
+          : null,
+        finalReserveAfterTax: calculation.finalReserveAfterTax,
+        snapshot: contributionSnapshot(candidate, calculation),
       };
       return evaluation;
-    }
-
-    function splitPensionContribution(totalPensionContribution) {
-      if (optimizationLocks.annualRatePensionContribution) {
-        return {
-          annualRatePensionContribution:
-            currentContributions.annualRatePensionContribution,
-          annualLifeAnnuityContribution:
-            totalPensionContribution -
-            currentContributions.annualRatePensionContribution,
-        };
-      }
-      if (optimizationLocks.annualLifeAnnuityContribution) {
-        return {
-          annualRatePensionContribution:
-            totalPensionContribution -
-            currentContributions.annualLifeAnnuityContribution,
-          annualLifeAnnuityContribution:
-            currentContributions.annualLifeAnnuityContribution,
-        };
-      }
-      const annualRatePensionContribution = Math.min(
-        CONTRIBUTION_LIMITS.ratePension,
-        totalPensionContribution,
-      );
-
-      return {
-        annualRatePensionContribution,
-        annualLifeAnnuityContribution:
-          totalPensionContribution - annualRatePensionContribution,
-      };
     }
 
     const ratePensionCandidates = optimizationLocks
@@ -2473,6 +2626,48 @@
       );
     }
 
+    function pensionSplits(totalPensionContribution) {
+      if (optimizationLocks.annualRatePensionContribution) {
+        return [
+          {
+            ratePension: currentContributions.annualRatePensionContribution,
+            lifeAnnuity:
+              totalPensionContribution -
+              currentContributions.annualRatePensionContribution,
+          },
+        ];
+      }
+      if (optimizationLocks.annualLifeAnnuityContribution) {
+        return [
+          {
+            ratePension:
+              totalPensionContribution -
+              currentContributions.annualLifeAnnuityContribution,
+            lifeAnnuity: currentContributions.annualLifeAnnuityContribution,
+          },
+        ];
+      }
+
+      const rateFirst = Math.min(
+        CONTRIBUTION_LIMITS.ratePension,
+        totalPensionContribution,
+      );
+      const lifeFirst = Math.min(
+        CONTRIBUTION_LIMITS.lifeAnnuity,
+        totalPensionContribution,
+      );
+      return [
+        {
+          ratePension: rateFirst,
+          lifeAnnuity: totalPensionContribution - rateFirst,
+        },
+        {
+          ratePension: totalPensionContribution - lifeFirst,
+          lifeAnnuity: lifeFirst,
+        },
+      ];
+    }
+
     const evaluationsByCandidateKey = new Map();
     const contributionCombinations = [
       {
@@ -2502,24 +2697,23 @@
         isInRange(totalPensionContribution, totalPensionRange),
       )
       .forEach((totalPensionContribution) => {
-        const pensionSplit = splitPensionContribution(
-          totalPensionContribution,
-        );
-        ageSavingsCandidates.forEach((ageSavingsContribution) => {
-          if (
-            !isNearRefinementCenter(
-              totalPensionContribution,
-              ageSavingsContribution,
-            )
-          ) {
-            return;
-          }
-          const combination = {
-            ratePension: pensionSplit.annualRatePensionContribution,
-            lifeAnnuity: pensionSplit.annualLifeAnnuityContribution,
-            ageSavings: ageSavingsContribution,
-          };
-          contributionCombinations.push(combination);
+        pensionSplits(totalPensionContribution).forEach((pensionSplit) => {
+          ageSavingsCandidates.forEach((ageSavingsContribution) => {
+            if (
+              !isNearRefinementCenter(
+                totalPensionContribution,
+                ageSavingsContribution,
+              )
+            ) {
+              return;
+            }
+            const combination = {
+              ratePension: pensionSplit.ratePension,
+              lifeAnnuity: pensionSplit.lifeAnnuity,
+              ageSavings: ageSavingsContribution,
+            };
+            contributionCombinations.push(combination);
+          });
         });
       });
 
@@ -2538,8 +2732,7 @@
             currentContributions.annualFreeFundsContribution,
           ),
         );
-        return evaluation?.calculation.fireRow &&
-          evaluation.calculation.fireRow.date.getTime() <= targetFireTime
+        return evaluation && evaluationFireTime(evaluation) <= targetFireTime
           ? evaluation
           : null;
       }
@@ -2582,8 +2775,7 @@
           ),
         );
         const reachesTarget =
-          evaluation?.calculation.fireRow &&
-          evaluation.calculation.fireRow.date.getTime() <= targetFireTime;
+          evaluation && evaluationFireTime(evaluation) <= targetFireTime;
 
         if (reachesTarget) {
           upperStep = candidateStep;
@@ -2607,8 +2799,7 @@
           ),
         );
         if (
-          evaluation?.calculation.fireRow &&
-          evaluation.calculation.fireRow.date.getTime() <= targetFireTime
+          evaluation && evaluationFireTime(evaluation) <= targetFireTime
         ) {
           bestEvaluation = evaluation;
         }

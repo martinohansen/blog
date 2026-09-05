@@ -1840,7 +1840,7 @@ td:last-child {
   margin-top: var(--space-3);
 }
 
-.source-link a {
+.calculator-notes a {
   color: inherit;
   text-underline-offset: 3px;
 }
@@ -1849,7 +1849,7 @@ td:last-child {
   margin-left: var(--space-3);
 }
 
-.source-link a:hover {
+.calculator-notes a:hover {
   color: var(--ink);
 }
 

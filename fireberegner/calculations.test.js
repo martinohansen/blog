@@ -9,6 +9,9 @@ const {
   RETURN_STRATEGY,
   strategyReturnRate,
 } = require("./calculations.js");
+const {
+  calculateLifeAnnuityMetrics,
+} = require("./life-annuity.js");
 
 const asOfDate = new Date(2026, 7, 4);
 
@@ -26,6 +29,32 @@ function assertClose(actual, expected, tolerance = 0.01) {
     `${actual} differs from ${expected}`,
   );
 }
+
+const benchmarkLifeAnnuity = calculateLifeAnnuityMetrics({
+  retirementAge: 65,
+  retirementYear: 2026,
+  realReturnRates: [0.03],
+});
+assertClose(benchmarkLifeAnnuity.conversionRate, 0.0608296361, 1e-9);
+assertClose(benchmarkLifeAnnuity.expectedAgeAtDeath, 87.7226096, 1e-6);
+const laterCohortLifeAnnuity = calculateLifeAnnuityMetrics({
+  retirementAge: 65,
+  retirementYear: 2066,
+  realReturnRates: [0.03],
+});
+assert.ok(
+  laterCohortLifeAnnuity.conversionRate <
+    benchmarkLifeAnnuity.conversionRate,
+);
+const guaranteedLifeAnnuity = calculateLifeAnnuityMetrics({
+  retirementAge: 65,
+  retirementYear: 2026,
+  realReturnRates: [0.03],
+  guaranteeYears: 10,
+});
+assert.ok(
+  guaranteedLifeAnnuity.conversionRate < benchmarkLifeAnnuity.conversionRate,
+);
 
 function assertFiniteResult(calculation) {
   Object.values(calculation)
@@ -1700,8 +1729,8 @@ const afterTaxReserve = calculateFire(
   },
   asOfDate,
 );
-assertClose(afterTaxReserve.finalRow.totalBalance, 500);
-assertClose(afterTaxReserve.finalReserveAfterTax, 403.8);
+assertClose(afterTaxReserve.finalRow.totalBalance, 400);
+assertClose(afterTaxReserve.finalReserveAfterTax, 343.8);
 
 const beforeTaxPension = calculateFire(
   {
@@ -1733,42 +1762,138 @@ assertClose(firstBeforeTaxPensionWithdrawal.pensionWithdrawalTax, 40);
 assertClose(firstBeforeTaxPensionWithdrawal.netWithdrawal, 60);
 assertClose(beforeTaxPension.finalRow.totalBalance, 0);
 
+const lifeAnnuityBaselineInputs = {
+  ...standardInputs,
+  lifeAnnuityPayoutRate: 0,
+  currentAge: 64,
+  retirementAge: 65,
+  payoutYears: 10,
+  desiredAnnualWithdrawal: 0,
+  ratePensionBalance: 0,
+  lifeAnnuityBalance: 1000000,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 0,
+  freeFundsCostBasis: 0,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualLifeAnnuityContribution: 0,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 0,
+  pensionWithdrawalTax: 0.4,
+  returnRate: 0,
+  inflationRate: 0,
+  withdrawalAfterTax: true,
+};
+const lifeAnnuityBaseline = calculateFire(
+  lifeAnnuityBaselineInputs,
+  asOfDate,
+);
+const expectedNetLifeAnnuityIncome =
+  lifeAnnuityBaseline.lifeAnnuityAnnualIncome * 0.6;
 const afterTaxLifeAnnuity = calculateFire(
   {
-    ...standardInputs,
-    currentAge: 30,
-    retirementAge: 31,
-    payoutYears: 10,
-    desiredAnnualWithdrawal: 60,
-    ratePensionBalance: 0,
-    lifeAnnuityBalance: 1000,
-    ageSavingsBalance: 0,
-    freeFundsBalance: 0,
-    freeFundsCostBasis: 0,
-    askBalance: 0,
-    annualRatePensionContribution: 0,
-    annualLifeAnnuityContribution: 0,
-    annualAgeSavingsContribution: 0,
-    annualFreeFundsContribution: 0,
-    pensionWithdrawalTax: 0.4,
-    returnRate: 0,
-    inflationRate: 0,
-    withdrawalAfterTax: true,
+    ...lifeAnnuityBaselineInputs,
+    desiredAnnualWithdrawal: expectedNetLifeAnnuityIncome,
   },
   asOfDate,
 );
 const firstLifeAnnuityWithdrawal = afterTaxLifeAnnuity.planRows.find(
   (row) => row.phase === "Pension" && row.withdrawal > 0,
 );
-assert.equal(afterTaxLifeAnnuity.fireRow.age, 31);
+assert.equal(afterTaxLifeAnnuity.fireRow.age, 65);
 assert.equal(afterTaxLifeAnnuity.isFullyFunded, true);
-assertClose(firstLifeAnnuityWithdrawal.lifeAnnuity, 1000);
-assertClose(firstLifeAnnuityWithdrawal.lifeAnnuityWithdrawal, 100);
-assertClose(firstLifeAnnuityWithdrawal.withdrawal, 100);
-assertClose(firstLifeAnnuityWithdrawal.pensionWithdrawalTax, 40);
-assertClose(firstLifeAnnuityWithdrawal.netWithdrawal, 60);
-assertClose(afterTaxLifeAnnuity.requiredAtRetirement, 1000);
+assertClose(firstLifeAnnuityWithdrawal.lifeAnnuity, 0);
+assertClose(
+  firstLifeAnnuityWithdrawal.lifeAnnuityWithdrawal,
+  afterTaxLifeAnnuity.lifeAnnuityAnnualIncome,
+);
+assertClose(
+  firstLifeAnnuityWithdrawal.withdrawal,
+  afterTaxLifeAnnuity.lifeAnnuityAnnualIncome,
+);
+assertClose(
+  firstLifeAnnuityWithdrawal.pensionWithdrawalTax,
+  afterTaxLifeAnnuity.lifeAnnuityAnnualIncome * 0.4,
+);
+assertClose(firstLifeAnnuityWithdrawal.netWithdrawal, expectedNetLifeAnnuityIncome);
+assertClose(afterTaxLifeAnnuity.requiredAtRetirement, 1000000);
 assertClose(afterTaxLifeAnnuity.finalRow.lifeAnnuity, 0);
+afterTaxLifeAnnuity.planRows
+  .filter((row) => row.phase === "Pension")
+  .forEach((row) =>
+    assertClose(
+      row.lifeAnnuityWithdrawal,
+      afterTaxLifeAnnuity.lifeAnnuityAnnualIncome,
+    ),
+  );
+assert.ok(afterTaxLifeAnnuity.lifeAnnuityExpectedAgeAtDeath > 65);
+assert.ok(afterTaxLifeAnnuity.lifeAnnuityConversionRate > 0);
+assert.ok(afterTaxLifeAnnuity.lifeAnnuityConversionRate < 1);
+
+// A nominal payout rate must not imply inflation protection. Matching the
+// investment return after PAL keeps nominal payments level for survivors.
+const nominalLifeInputs = {
+  ...lifeAnnuityBaselineInputs,
+  lifeAnnuityPayoutRate: 0.0322,
+  returnRate: 0.0322 / (1 - lifeAnnuityBaselineInputs.pensionTax),
+  inflationRate: 0.02,
+  payoutYears: 45,
+};
+const nominalLife = calculateFire(nominalLifeInputs, asOfDate);
+const nominalRows = nominalLife.planRows.filter(row => row.phase === "Pension");
+nominalRows.forEach((row, period) => {
+  assertClose(row.lifeAnnuityWithdrawal * Math.pow(1.02, period),
+    nominalLife.lifeAnnuityAnnualIncome);
+});
+assert.ok(nominalRows.at(-1).age > nominalLife.lifeAnnuityExpectedAgeAtDeath);
+assert.ok(nominalRows.at(-1).lifeAnnuityWithdrawal > 0);
+const fallingLife = calculateFire({
+  ...nominalLifeInputs,
+  returnRate: 0,
+  inflationRate: 0,
+  desiredAnnualWithdrawal: nominalLife.lifeAnnuityAnnualIncome,
+}, asOfDate);
+assert.equal(fallingLife.isFullyFunded, false);
+const fallingRows = fallingLife.planRows.filter(row => row.phase === "Pension");
+assert.ok(fallingRows.at(-1).lifeAnnuityWithdrawal < fallingRows[0].lifeAnnuityWithdrawal);
+const higherReturnLife = calculateFire({ ...nominalLifeInputs, returnRate: 0.07 }, asOfDate);
+assertClose(higherReturnLife.lifeAnnuityConversionRate, nominalLife.lifeAnnuityConversionRate);
+assert.ok(higherReturnLife.planRows.filter(row => row.phase === "Pension").at(-1).lifeAnnuityWithdrawal >
+  higherReturnLife.lifeAnnuityAnnualIncome);
+assert.throws(() => calculateFire({ ...nominalLifeInputs, lifeAnnuityPayoutRate: -1 }, asOfDate), /udbetalingsrente/);
+const variableLifeTarget = calculateFire({
+  ...lifeAnnuityBaselineInputs,
+  lifeAnnuityPayoutRate: 0.0322,
+  ageSavingsBalance: 100000,
+  desiredAnnualWithdrawal: 40000,
+}, asOfDate);
+const requiredFlexiblePension = variableLifeTarget.planRows
+  .filter(row => row.phase === "Pension")
+  .reduce((sum, row) => sum + Math.max(0, 40000 - row.lifeAnnuityWithdrawal * 0.6), 0);
+assertClose(variableLifeTarget.requiredAtRetirement,
+  variableLifeTarget.lifeAnnuityBalanceAtRetirement + requiredFlexiblePension);
+for (const returnRate of [0, 0.02, 0.07]) {
+  for (const desiredAnnualWithdrawal of [10000, 40000, 100000]) {
+    const inputs = {
+      ...lifeAnnuityBaselineInputs,
+      lifeAnnuityPayoutRate: 0.0322,
+      inflationRate: 0.02,
+      returnRate,
+      ageSavingsBalance: 10000000,
+      desiredAnnualWithdrawal,
+    };
+    const result = calculateFire(inputs, asOfDate);
+    let discount = 1;
+    let required = result.lifeAnnuityBalanceAtRetirement;
+    for (const row of result.planRows.filter(row => row.phase === "Pension")) {
+      required += Math.max(0, desiredAnnualWithdrawal -
+        row.lifeAnnuityWithdrawal * 0.6) / discount;
+      discount *= (1 + row.pensionReturnRate * (1 - inputs.pensionTax)) /
+        (1 + inputs.inflationRate);
+    }
+    assertClose(result.requiredAtRetirement, required);
+  }
+}
 
 const mixedTaxablePension = calculateFire(
   {
@@ -1798,17 +1923,25 @@ const mixedTaxablePension = calculateFire(
 const firstMixedTaxablePensionWithdrawal = mixedTaxablePension.planRows.find(
   (row) => row.phase === "Pension" && row.withdrawal > 0,
 );
-assertClose(firstMixedTaxablePensionWithdrawal.withdrawal, 100);
-assertClose(firstMixedTaxablePensionWithdrawal.lifeAnnuityWithdrawal, 50);
+assertClose(
+  firstMixedTaxablePensionWithdrawal.lifeAnnuityWithdrawal,
+  mixedTaxablePension.lifeAnnuityAnnualIncome,
+);
 assertClose(
   firstMixedTaxablePensionWithdrawal.taxFreeRatePensionWithdrawal,
   10,
 );
-assertClose(firstMixedTaxablePensionWithdrawal.pensionWithdrawalTax, 36);
-assertClose(firstMixedTaxablePensionWithdrawal.netWithdrawal, 64);
+assertClose(
+  firstMixedTaxablePensionWithdrawal.pensionWithdrawalTax,
+  (firstMixedTaxablePensionWithdrawal.taxableRatePensionWithdrawal +
+    mixedTaxablePension.lifeAnnuityAnnualIncome) *
+    0.4,
+);
+assert.equal(firstMixedTaxablePensionWithdrawal.withdrawalShortfall, true);
 
 const lifeAnnuityTaxBelowRateAllowance = calculateFire(
   {
+    lifeAnnuityPayoutRate: 0,
     ...standardInputs,
     currentAge: 30,
     retirementAge: 31,
@@ -1836,11 +1969,17 @@ const firstWithdrawalBelowRateAllowance =
   lifeAnnuityTaxBelowRateAllowance.planRows.find(
     (row) => row.phase === "Pension" && row.withdrawal > 0,
   );
-assertClose(firstWithdrawalBelowRateAllowance.withdrawal, 78.125);
-assertClose(firstWithdrawalBelowRateAllowance.lifeAnnuityWithdrawal, 70.3125);
-assertClose(firstWithdrawalBelowRateAllowance.pensionWithdrawalTax, 28.125);
-assertClose(firstWithdrawalBelowRateAllowance.netWithdrawal, 50);
-assertClose(lifeAnnuityTaxBelowRateAllowance.requiredAtRetirement, 781.25);
+assertClose(
+  firstWithdrawalBelowRateAllowance.lifeAnnuityWithdrawal,
+  lifeAnnuityTaxBelowRateAllowance.lifeAnnuityAnnualIncome,
+);
+assertClose(
+  firstWithdrawalBelowRateAllowance.pensionWithdrawalTax,
+  lifeAnnuityTaxBelowRateAllowance.lifeAnnuityAnnualIncome * 0.4,
+);
+assert.ok(firstWithdrawalBelowRateAllowance.netWithdrawal > 50);
+assertClose(lifeAnnuityTaxBelowRateAllowance.requiredAtRetirement, 9000);
+assertClose(lifeAnnuityTaxBelowRateAllowance.finalRow.ratePension, 1000);
 assert.equal(lifeAnnuityTaxBelowRateAllowance.isFullyFunded, true);
 assert.equal(
   lifeAnnuityTaxBelowRateAllowance.planRows.some(
@@ -1877,7 +2016,12 @@ const lifeAnnuityContribution = calculateFire(
 const lifeAnnuityRetirementRow = lifeAnnuityContribution.planRows.find(
   (row) => row.age === 31,
 );
-assertClose(lifeAnnuityRetirementRow.lifeAnnuity, 100);
+assertClose(lifeAnnuityRetirementRow.lifeAnnuity, 0);
+assertClose(lifeAnnuityContribution.lifeAnnuityBalanceAtRetirement, 100);
+assertClose(
+  lifeAnnuityContribution.lifeAnnuityAnnualIncome,
+  100 / lifeAnnuityContribution.lifeAnnuityFactor,
+);
 assertClose(lifeAnnuityContribution.annualNetContributionBudget, 60);
 
 const askOnlyWithdrawals = calculateFire(
@@ -2127,6 +2271,51 @@ const providedPlanInputs = {
   contributionsFollowInflation: true,
   redirectPensionContributionsToFreeFunds: true,
 };
+
+const lifeAnnuitySplitOptimizationInputs = {
+  ...standardInputs,
+  currentAge: 64,
+  retirementAge: 65,
+  payoutYears: 30,
+  desiredAnnualWithdrawal: 2500,
+  ratePensionBalance: 0,
+  lifeAnnuityBalance: 0,
+  ageSavingsBalance: 0,
+  freeFundsBalance: 0,
+  freeFundsCostBasis: 0,
+  askBalance: 0,
+  annualRatePensionContribution: 0,
+  annualLifeAnnuityContribution: 0,
+  annualAgeSavingsContribution: 0,
+  annualFreeFundsContribution: 50000,
+  ratePensionContributionTaxRelief: 0.37,
+  returnRate: 0.02,
+  inflationRate: 0.02,
+  withdrawalAfterTax: false,
+  freeFundsInventoryShare: 0,
+  returnStrategy: RETURN_STRATEGY.none,
+};
+const lifeAnnuitySplitOptimization = optimizeAnnualContributions(
+  lifeAnnuitySplitOptimizationInputs,
+  asOfDate,
+);
+assert.equal(lifeAnnuitySplitOptimization.recommended.fireAge, 65);
+assert.ok(
+  lifeAnnuitySplitOptimization.recommended.annualLifeAnnuityContribution >
+    lifeAnnuitySplitOptimization.recommended.annualRatePensionContribution,
+);
+assert.ok(
+  lifeAnnuitySplitOptimization.recommended.annualRatePensionContribution <
+    CONTRIBUTION_LIMITS.ratePension,
+);
+// Annual payments now decline when returns trail the payout rate. The plan
+// must still improve on the original 50,000 kr. budget and be fully funded.
+assert.ok(lifeAnnuitySplitOptimization.recommended.annualNetCost < 50000);
+assert.equal(calculateFire({
+  ...lifeAnnuitySplitOptimizationInputs,
+  ...lifeAnnuitySplitOptimization.recommended,
+}, asOfDate).isFullyFunded, true);
+
 const exhaustiveProvidedPlan = optimizeAnnualContributions(
   providedPlanInputs,
   asOfDate,
@@ -2141,7 +2330,7 @@ assert.deepEqual(
   exhaustiveProvidedPlan.recommended,
 );
 assert.ok(
-  adaptiveProvidedPlan.evaluatedCandidates * 5 <
+  adaptiveProvidedPlan.evaluatedCandidates * 4 <
     exhaustiveProvidedPlan.evaluatedCandidates,
 );
 

@@ -31,6 +31,7 @@
     "freeFundsInventoryShare",
     "returnRate",
     "inflationRate",
+    "lifeAnnuityPayoutRate",
     "defensiveReturnRate",
     "returnDeclineYears",
     "returnRecoveryYears",
@@ -136,6 +137,12 @@
   }
 
   function validatedInputs(inputs) {
+    if (
+      isPlainObject(inputs) &&
+      !Object.hasOwn(inputs, "lifeAnnuityPayoutRate")
+    ) {
+      inputs = { ...inputs, lifeAnnuityPayoutRate: 0.0322 };
+    }
     if (!hasExactKeys(inputs, INPUT_FIELDS)) {
       throw new Error("Koden indeholder ikke alle FIRE-input.");
     }

@@ -1,4 +1,7 @@
-importScripts("./calculations.js?v=20260904-5");
+importScripts(
+  "./life-annuity.js?v=20260905-2",
+  "./calculations.js?v=20260905-3",
+);
 
 let activeJobId = null;
 let session = null;
