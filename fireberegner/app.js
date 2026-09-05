@@ -1302,8 +1302,7 @@
       })
       .join("");
     chart.innerHTML = `
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="wealth-chart-title wealth-chart-description">
-        <title id="wealth-chart-title">Pension og frie midler fra ${ages.format(minAge)} til ${ages.format(maxAge)} år</title>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Pension og frie midler fra ${ages.format(minAge)} til ${ages.format(maxAge)} år" aria-describedby="wealth-chart-description">
         <desc id="wealth-chart-description">Grafen viser pension og frie midler for hvert år. Hold markøren over grafen for at se beløbene og den samlede formue.</desc>
         <defs>
           <clipPath id="chart-plot-clip">
