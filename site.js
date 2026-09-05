@@ -29,9 +29,10 @@
     if (previousTimer) clearTimeout(previousTimer);
 
     const copied = state === "copied";
-    let label = "Copy code";
-    if (copied) label = "Code copied";
-    if (state === "error") label = "Could not copy code";
+    const subject = button.dataset.copySubject;
+    let label = `Copy ${subject}`;
+    if (copied) label = `${subject === "address" ? "Address" : "Code"} copied`;
+    if (state === "error") label = `Could not copy ${subject}`;
 
     button.classList.toggle("is-copied", copied);
     button.setAttribute("aria-label", label);
@@ -51,8 +52,10 @@
     const button = document.createElement("button");
     button.className = "code-copy-button";
     button.type = "button";
-    button.setAttribute("aria-label", "Copy code");
-    button.title = "Copy code";
+    const subject = code.closest(".node-address") ? "address" : "code";
+    button.dataset.copySubject = subject;
+    button.setAttribute("aria-label", `Copy ${subject}`);
+    button.title = `Copy ${subject}`;
     button.innerHTML = `
       <svg class="copy-icon" viewBox="0 0 18 18" aria-hidden="true">
         <rect x="6.25" y="6.25" width="8.25" height="8.25" rx="1.25"></rect>

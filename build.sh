@@ -24,6 +24,7 @@ page _pages/home.html index.html "Home" home
 page _pages/blog.html blog/index.html "Blog" blog
 page _pages/photos.html photos/index.html "Photos" photos
 page _pages/tools.html tools/index.html "Tools" tools
+page _pages/lightning.html lightning/index.html "Lightning node" lightning
 
 # Posts
 while IFS= read -r md; do
